@@ -1,4 +1,4 @@
-/* Philip T.L.C. Clausen Jan 2017 plan@dtu.dk */
+/* Philip T.L.C. Clausen Jan 2017 s123580@student.dtu.dk */
 
 /*
  Copyright (c) 2017, Philip Clausen, Technical University of Denmark
@@ -3658,11 +3658,11 @@ void save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char 
 	
 	/* open output file */
 	file_len = strlen(outputfilename);
-	outputfilename = realloc(outputfilename, (file_len + 5) * sizeof(char));
+	/*outputfilename = realloc(outputfilename, (file_len + 5) * sizeof(char));
 	if(!outputfilename) {
 		fprintf(stderr, "OOM\n");
 		exit(1);
-	}
+	}*/
 	strcat(outputfilename, ".spa");
 	outputfilename[file_len + 4] = '\0';
 	FILE *sparse_out = fopen(outputfilename, "w");
@@ -5761,33 +5761,10 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	FILE *align_in, *res_out, *frag_out, *alignment_out, *consensus_out, *frag_out_raw, *frag_in_raw, *fragmentIN, *matrix_out, **template_fragments;
 	long unsigned *file_indexes;
 	int line_size = 5000 * sizeof(char);
-	line = malloc(line_size);
-	header = malloc(1024 * sizeof(char));
-	if(!line || !header) {
-		fprintf(stderr, "OOM\n");
-		exit(1);
-	}
-	
-	file_len = strlen(outputfilename);
-	/*outputfilename = realloc(outputfilename, (file_len + 13) * sizeof(char));
-	if(!outputfilename) {
-		fprintf(stderr, "OOM\n");
-		exit(1);
-	}*/
-	
-	outputfilename[file_len] = '\0';
-	outZipped = malloc((strlen("gunzip -c .frag_raw.gz") + file_len) * sizeof(char));
-	if(!outZipped) {
-		fprintf(stderr, "OOM\n");
-		exit(1);
-	}
+	time_t t0, t1;
 	
 	load_DBs_KMA(templatefilename);
-	/*templatefilename = realloc(templatefilename, (strlen(templatefilename) + strlen(".align.b") + 1) * sizeof(char));
-	if(!templatefilename) {
-		fprintf(stderr, "OOM\n");
-		exit(1);
-	}*/
+	
 	strcat(templatefilename, ".align.b");
 	templatefilename[strlen(templatefilename) + strlen(".align.b")] = '\0';
 	align_in = fopen(templatefilename, "rb");
@@ -5795,6 +5772,26 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		fprintf(stderr, "Wrong format of DB, or DB does not exist.\n");
 		exit(-1);
 	}
+	
+	file_len = strlen(outputfilename);
+	
+	outputfilename[file_len] = '\0';
+	outZipped = malloc((strlen("gunzip -c .frag_raw.gz") + file_len + 8) * sizeof(char));
+	if(!outZipped) {
+		fprintf(stderr, "OOM\n");
+		exit(1);
+	}
+	
+	line = malloc(line_size);
+	header = malloc(1024 * sizeof(char));
+	if(!line || !header) {
+		fprintf(stderr, "OOM\n");
+		exit(1);
+	}
+	
+	
+	
+	
 	/* load indexes */
 	file_indexes = malloc(DB_size * sizeof(long unsigned));
 	if(!file_indexes) {
@@ -5807,7 +5804,6 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		file_indexes[i] = file_indexes[i - 1] + template_lengths[i - 1];
 	}
 	
-	time_t t0, t1;
 	aligned.t = malloc(2*(delta + 1) * sizeof(char));
 	aligned.s = malloc(2*(delta + 1) * sizeof(char));
 	aligned.q = malloc(2*(delta + 1) * sizeof(char));
@@ -5882,8 +5878,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		if(print_matrix) {
 			strcat(outputfilename, ".mat.gz");
 			outputfilename[file_len + 7] = '\0';
-			sprintf(outZipped, "gzip -c > %s\n", outputfilename);
-			outputfilename[strpos(outputfilename, "\n")] = '\0';
+			sprintf(outZipped, "gzip -c > %s", outputfilename);
 			matrix_out = popen(outZipped, "w");
 			if(!matrix_out) {
 				fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6192,8 +6187,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 					
 					fragCount++;
 					if(fragCount >= maxFrag) {
-						sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", fileCount);
-						outputfilename[strpos(outputfilename, "\n")] = '\0';
+						sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
 						template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
 						if(!template_fragments[fileCount]) {
 							fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6259,8 +6253,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 					
 					fragCount++;
 					if(fragCount >= maxFrag) {
-						sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", fileCount);
-						outputfilename[strpos(outputfilename, "\n")] = '\0';
+						sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
 						template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
 						if(!template_fragments[fileCount]) {
 							fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6283,17 +6276,18 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			}
 		}
 	}
+	/*
 	free(best_start_pos);
 	free(best_end_pos);
 	free(bestTemplates);
-	pclose(frag_in_raw);
 	free(line);
 	free(qseq);
 	free(qseq_r);
 	free(qseq_int_r);
 	free(header);
-	sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", fileCount);
-	outputfilename[strpos(outputfilename, "\n")] = '\0';
+	*/
+	pclose(frag_in_raw);
+	sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
 	template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
 	if(!template_fragments[fileCount]) {
 		fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6427,8 +6421,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		pclose(matrix_out);
 	}
 	for(i = 0; i < fileCount; i++) {
-		sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", i);
-		outputfilename[strpos(outputfilename, "\n")] = '\0';
+		sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", i);
 		remove(outputfilename);
 		outputfilename[file_len] = '\0';
 	}
@@ -6477,7 +6470,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		exit(1);
 	}*/
 	outputfilename[file_len] = '\0';
-	outZipped = malloc((strlen("gunzip -c .frag_raw.gz") + file_len) * sizeof(char));
+	outZipped = malloc((strlen("gunzip -c .frag_raw.gz") + file_len + 8) * sizeof(char));
 	if(!outZipped) {
 		fprintf(stderr, "OOM\n");
 		exit(1);
@@ -6565,8 +6558,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		if(print_matrix) {
 			strcat(outputfilename, ".mat.gz");
 			outputfilename[file_len + 7] = '\0';
-			sprintf(outZipped, "gzip -c > %s\n", outputfilename);
-			outputfilename[strpos(outputfilename, "\n")] = '\0';
+			sprintf(outZipped, "gzip -c > %s", outputfilename);
 			matrix_out = popen(outZipped, "w");
 			if(!matrix_out) {
 				fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6806,8 +6798,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 				
 				fragCount++;
 				if(fragCount >= maxFrag) {
-					sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", fileCount);
-					outputfilename[strpos(outputfilename, "\n")] = '\0';
+					sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
 					template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
 					if(!template_fragments[fileCount]) {
 						fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6873,8 +6864,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 				
 				fragCount++;
 				if(fragCount >= maxFrag) {
-					sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", fileCount);
-					outputfilename[strpos(outputfilename, "\n")] = '\0';
+					sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
 					template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
 					if(!template_fragments[fileCount]) {
 						fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -6896,18 +6886,16 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			}
 		}
 	}
+	/*
 	free(matched_templates);
-	matched_templates = NULL;
 	free(best_start_pos);
-	best_start_pos = NULL;
 	free(best_end_pos);
-	best_end_pos = NULL;
 	free(bestTemplates);
-	bestTemplates = NULL;
 	free(header);
+	*/
 	pclose(frag_in_raw);
-	sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", fileCount);
-	outputfilename[strpos(outputfilename, "\n")] = '\0';
+	
+	sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
 	template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
 	if(!template_fragments[fileCount]) {
 		fprintf(stderr, "File coruption: %s\n", outputfilename);
@@ -7045,8 +7033,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		pclose(matrix_out);
 	}
 	for(i = 0; i < fileCount; i++) {
-		sprintf(outputfilename, "%s%s%d\n", outputfilename, ".tmp_", i);
-		outputfilename[strpos(outputfilename, "\n")] = '\0';
+		sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", i);
 		remove(outputfilename);
 		outputfilename[file_len] = '\0';
 	}
@@ -7061,7 +7048,7 @@ void helpMessage(int exeStatus) {
 	} else {
 		helpOut = stderr;
 	}
-	fprintf(helpOut, "# KMA mapps raw reads to a template database, using seed and extend.\n");
+	fprintf(helpOut, "# KMA-2.1 mapps raw reads to a template database, for optimal performance it is designed to use 3 threads.\n");
 	fprintf(helpOut, "# Options are:\t\tDesc:\t\t\t\tDefault:\tRequirements:\n");
 	fprintf(helpOut, "#\n");
 	fprintf(helpOut, "#\t-i\t\tInput/query file name\t\tNone\t\tREQUIRED\n");
@@ -7202,7 +7189,7 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-o") == 0) {
 			args++;
 			if(args < argc) {
-				outputfilename = malloc((strlen(argv[args]) + 20) * sizeof(char));
+				outputfilename = malloc((strlen(argv[args]) + 64) * sizeof(char));
 				if(!outputfilename) {
 					fprintf(stderr, "OOM\n");
 					exit(1);
