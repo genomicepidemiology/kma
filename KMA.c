@@ -7111,6 +7111,10 @@ int main(int argc, char *argv[]) {
 	ss = 'q';
 	deCon = 0;
 	mem_mode = 0;
+	M = 1;
+	MM = -2;
+	W1 = -3;
+	U = -1;
 	kmerScan = &save_kmers_HMM;
 	ankerPtr = &ankerAndClean;
 	alignLoadPtr = &alignLoad_fly;
@@ -7328,10 +7332,6 @@ int main(int argc, char *argv[]) {
 	}
 	
 	/* set scoring matrix */
-	M = 1;
-	MM = -2;
-	W1 = -3;
-	U = -1;
 	for(i = 0; i < 4; i++) {
 		for(j = 0; j < 4; j++) {
 			d[i][j] = MM;
