@@ -7074,6 +7074,10 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_ssm\tFalse\n");
 	fprintf(helpOut, "#\t-1t1\t\tSkip HMM\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score score,\n#\t\t\tnormalized to alignment length\t0.0\n");
+	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t1\n");
+	fprintf(helpOut, "#\t-penalty\tPenalty for mismatch\t\t-2\n");
+	fprintf(helpOut, "#\t-gapopen\tPenalty for gap opening\t\t-3\n");
+	fprintf(helpOut, "#\t-gapextend\tPenalty for gap extension\t-1\n");
 	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
 	fprintf(helpOut, "#\n");
 	exit(exeStatus);
@@ -7097,7 +7101,7 @@ int main(int argc, char *argv[]) {
 	contamination = -1;
 	kmersize = 16;
 	evalue = 0.05;
-	delta = 511;
+	delta = 2048;
 	exhaustive = 0;
 	MAX_SIZE = 14 * (long unsigned)(pow(2, 30) + 0.5) / 8; //14 = #GB, 2^30 = GB, 8 = sizeof pointer
 	step1 = 0;
@@ -7123,22 +7127,6 @@ int main(int argc, char *argv[]) {
 	SW = 0;
 	aligner = &KMA;
 	shm = 0;
-	/* set scoring matrix */
-	M = 1;
-	MM = -2;
-	W1 = -3;
-	U = -1;
-	for(i = 0; i < 4; i++) {
-		for(j = 0; j < 4; j++) {
-			d[i][j] = MM;
-		}
-		d[i][i] = M;
-	}
-	for(i = 0; i < 5; i++) {
-		d[4][i] = U;
-		d[i][4] = U;
-	}
-	d[4][4] = 0;
 	
 	/* PARSE COMMAND LINE OPTIONS */
 	args = 1;
@@ -7304,6 +7292,26 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				scoreT = atof(argv[args]);
 			}
+		} else if(strcmp(argv[args], "-reward") == 0) {
+			args++;
+			if(args < argc) {
+				M = atoi(argv[args]);
+			}
+		} else if(strcmp(argv[args], "-penalty") == 0) {
+			args++;
+			if(args < argc) {
+				MM = atoi(argv[args]);
+			}
+		} else if(strcmp(argv[args], "-gapopen") == 0) {
+			args++;
+			if(args < argc) {
+				W1 = atoi(argv[args]);
+			}
+		} else if(strcmp(argv[args], "-gapextend") == 0) {
+			args++;
+			if(args < argc) {
+				U = atoi(argv[args]);
+			}
 		} else if(strcmp(argv[args], "-h") == 0) {
 			helpMessage(0);
 		} else {
@@ -7318,6 +7326,24 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "# Printing help message:\n");
 		helpMessage(-1);
 	}
+	
+	/* set scoring matrix */
+	M = 1;
+	MM = -2;
+	W1 = -3;
+	U = -1;
+	for(i = 0; i < 4; i++) {
+		for(j = 0; j < 4; j++) {
+			d[i][j] = MM;
+		}
+		d[i][i] = M;
+	}
+	for(i = 0; i < 5; i++) {
+		d[4][i] = U;
+		d[i][4] = U;
+	}
+	d[4][4] = 0;
+	
 	
 	if(step1) {
 		t0 = clock();
