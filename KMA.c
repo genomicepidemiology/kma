@@ -2141,7 +2141,7 @@ void print_ankers(int *out_Tem, int *qseq_int, int seqlen, int rc_flag, char *he
 	fwrite(header, header_len, 1, stdout);
 }
 
-int ankerAndClean(int *out_Tem, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
+int ankerAndClean(int *regionTemplates, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
 	
 	int k, l, bestHitsCov, template;
 	double thisCov, bestCov;
@@ -2206,7 +2206,7 @@ int ankerAndClean(int *out_Tem, int *qseq_int, int start, int stop, int HIT, int
 	return HIT;
 }
 
-int ankerAndClean_MEM(int *out_Tem, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
+int ankerAndClean_MEM(int *regionTemplates, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
 	
 	int k, l;
 	unsigned *values;
@@ -2234,7 +2234,12 @@ int ankerAndClean_MEM(int *out_Tem, int *qseq_int, int start, int stop, int HIT,
 	return HIT;
 }
 
-int deConAnkers(int *out_Tem, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
+int ankerAndClean_1t1(int *regionTemplates, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
+	print_ankers(regionTemplates, qseq_int, stop, HIT * bestScore, header, header_len);
+	return 1;
+}
+
+int deConAnkers(int *regionTemplates, int *qseq_int, int start, int stop, int HIT, int bestScore, int start_cut, int end_cut, char *header, int header_len) {
 	
 	int contPos;
 	
@@ -2455,11 +2460,14 @@ void save_kmers(int *qseq_int, int *qseq_int_r, int seqlen, char *header, int he
 				bestTemplates[0]++;
 				bestTemplates[bestTemplates[0]] = (-1) * bestTemplates_r[i];
 			}
-			print_ankers(bestTemplates, qseq_int, seqlen, (-1) * bestScore, header, header_len);
+			deConAnkers(bestTemplates, qseq_int, 0, seqlen, -1, bestScore, 0, 0, header, header_len);
+			//print_ankers(bestTemplates, qseq_int, seqlen, (-1) * bestScore, header, header_len);
 		} else if(bestScore_r > bestScore) {
-			print_ankers(bestTemplates_r, qseq_int_r, seqlen, bestScore_r, header, header_len);
+			deConAnkers(bestTemplates_r, qseq_int_r, 0, seqlen, 1, bestScore, 0, 0, header, header_len);
+			//print_ankers(bestTemplates_r, qseq_int_r, seqlen, bestScore, header, header_len);
 		} else {
-			print_ankers(bestTemplates, qseq_int, seqlen, bestScore, header, header_len);
+			deConAnkers(bestTemplates, qseq_int, 0, seqlen, 1, bestScore, 0, 0, header, header_len);
+			//print_ankers(bestTemplates, qseq_int, seqlen, bestScore, header, header_len);
 		}
 	}
 }
@@ -6031,7 +6039,6 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		if(best_read_score > kmersize) {
 			update_Scores(qseq, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 		}
-		
 	}
 	pclose(inputfile);
 	pclose(frag_out_raw);
@@ -6334,7 +6341,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 				aligned_assem.t = NULL;
 				aligned_assem.s = NULL;
 				aligned_assem.q = NULL;
-				aligned_assem = (*assemblyPtr)(template, template_fragments, fileCount, frag_out, matrix_out, outputfilename, qseq_int, aligned, gap_align);
+				aligned_assem = assemblyPtr(template, template_fragments, fileCount, frag_out, matrix_out, outputfilename, qseq_int, aligned, gap_align);
 				
 				coverScore = aligned_assem.cover;
 				depth = aligned_assem.depth;
@@ -7048,7 +7055,7 @@ void helpMessage(int exeStatus) {
 	} else {
 		helpOut = stderr;
 	}
-	fprintf(helpOut, "# KMA-2.1 mapps raw reads to a template database, for optimal performance it is designed to use 3 threads.\n");
+	fprintf(helpOut, "# KMA-1.0 mapps raw reads to a template database, for optimal performance it is designed to use 3 threads.\n");
 	fprintf(helpOut, "# Options are:\t\tDesc:\t\t\t\tDefault:\tRequirements:\n");
 	fprintf(helpOut, "#\n");
 	fprintf(helpOut, "#\t-i\t\tInput/query file name\t\tNone\t\tREQUIRED\n");
@@ -7213,7 +7220,7 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-t_db") == 0) {
 			args++;
 			if(args < argc) {
-				templatefilename = malloc((strlen(argv[args]) + 20) * sizeof(char));
+				templatefilename = malloc((strlen(argv[args]) + 64) * sizeof(char));
 				if(!templatefilename) {
 					fprintf(stderr, "OOM\n");
 					exit(1);
@@ -7250,6 +7257,7 @@ int main(int argc, char *argv[]) {
 			sparse_run = 1;
 		} else if(strcmp(argv[args], "-1t1") == 0) {
 			kmerScan = &save_kmers;
+			ankerPtr = &ankerAndClean_1t1;
 		} else if(strcmp(argv[args], "-ss") == 0) {
 			args++;
 			if(args < argc) {
