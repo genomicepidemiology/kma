@@ -5203,8 +5203,8 @@ struct assem assemble_KMA(int template, FILE **files, int file_count, FILE *frag
 	
 	/* load reads of this template */
 	file_i = 0;
-	file = files[file_i];
 	while(file_i < file_count) {
+		file = files[file_i];
 		if(file != 0) {
 			fread(&nextTemplate, sizeof(int), 1, file);
 			if(nextTemplate == template) {
@@ -5324,7 +5324,6 @@ struct assem assemble_KMA(int template, FILE **files, int file_count, FILE *frag
 				fclose(file);
 				files[file_i] = 0;
 				file_i++;
-				file = files[file_i];
 			} else if(nextTemplate < template) {
 				fread(&q_len, sizeof(int), 1, file);
 				fseek(file, q_len * sizeof(char) + 3 * sizeof(int), SEEK_CUR);
@@ -5334,7 +5333,6 @@ struct assem assemble_KMA(int template, FILE **files, int file_count, FILE *frag
 				/* Move pointer back */
 				fseek(file, ((-1) * sizeof(int)), SEEK_CUR);
 				file_i++;
-				file = files[file_i];
 			}
 		} else {
 			file_i++;
@@ -5510,9 +5508,8 @@ struct assem assemble_KMA_dense(int template, FILE **files, int file_count, FILE
 	
 	/* load reads of this template */
 	file_i = 0;
-	file = files[file_i];
-	
 	while(file_i < file_count) {
+		file = files[file_i];
 		if(file != 0) {
 			fread(&nextTemplate, sizeof(int), 1, file);
 			
@@ -5581,7 +5578,6 @@ struct assem assemble_KMA_dense(int template, FILE **files, int file_count, FILE
 				fclose(file);
 				files[file_i] = 0;
 				file_i++;
-				file = files[file_i];
 			} else if(nextTemplate < template) {
 				fread(&q_len, sizeof(int), 1, file);
 				fseek(file, q_len * sizeof(char) + 3 * sizeof(int), SEEK_CUR);
@@ -5592,7 +5588,6 @@ struct assem assemble_KMA_dense(int template, FILE **files, int file_count, FILE
 				fseek(file, ((-1) * sizeof(int)), SEEK_CUR);
 				
 				file_i++;
-				file = files[file_i];
 			}
 		} else {
 			file_i++;
@@ -7078,7 +7073,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ID\t\tMinimum ID\t\t\t1.0%%\n");
 	fprintf(helpOut, "#\t-ss\t\tSparse sorting (q,c,d)\t\tq\n");
 	fprintf(helpOut, "#\t-NW\t\tUse Needleman-Wunsch\t\tFalse\n");
-	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_ssm\tFalse\n");
+	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\tFalse\n");
 	fprintf(helpOut, "#\t-1t1\t\tSkip HMM\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score score,\n#\t\t\tnormalized to alignment length\t0.0\n");
 	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t1\n");
