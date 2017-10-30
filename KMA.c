@@ -510,7 +510,7 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 	while((chunk = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
 		increase = chunk - dest->pos;
 		if(increase + header->len > header->size) {
-			header->size <<= 1;
+			header->size = increase + header->len;
 			header->seq = realloc(header->seq, header->size);
 			if(!header->seq) {
 				fprintf(stderr, "OOM\n");
@@ -525,7 +525,7 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 	}
 	increase = chunk - dest->pos;
 	if(increase + header->len > header->size) {
-		header->size <<= 1;
+		header->size = increase + header->len;
 		header->seq = realloc(header->seq, header->size);
 		if(!header->seq) {
 			fprintf(stderr, "OOM\n");
@@ -543,7 +543,7 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 		while((chunk = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
 			increase = chunk - dest->pos;
 			if(increase + seq->len > seq->size) {
-				seq->size <<= 1;
+				seq->size = (increase + seq->len) << 1;
 				seq->seq = realloc(seq->seq, seq->size);
 				if(!seq->seq) {
 					fprintf(stderr, "OOM\n");
@@ -558,7 +558,7 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 		}
 		increase = chunk - dest->pos;
 		if(increase + seq->len > seq->size) {
-			seq->size <<= 1;
+			seq->size = (increase + seq->len) << 1;
 			seq->seq = realloc(seq->seq, seq->size);
 			if(!seq->seq) {
 				fprintf(stderr, "OOM\n");
@@ -597,7 +597,7 @@ int FileBuffgetFsaSeq(struct FileBuff *dest, struct qseqs *seq) {
 		while((chunk = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
 			increase = chunk - dest->pos;
 			if(increase + seq->len > seq->size) {
-				seq->size <<= 1;
+				seq->size = (increase + seq->len) << 1;
 				seq->seq = realloc(seq->seq, seq->size);
 				if(!seq->seq) {
 					fprintf(stderr, "OOM\n");
@@ -612,7 +612,7 @@ int FileBuffgetFsaSeq(struct FileBuff *dest, struct qseqs *seq) {
 		}
 		increase = chunk - dest->pos;
 		if(increase + seq->len > seq->size) {
-			seq->size <<= 1;
+			seq->size = (increase + seq->len) << 1;
 			seq->seq = realloc(seq->seq, seq->size);
 			if(!seq->seq) {
 				fprintf(stderr, "OOM\n");
@@ -640,7 +640,7 @@ int FileBuffgetFq(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq
 	while((chunk = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
 		increase = chunk - dest->pos;
 		if(increase + header->len > header->size) {
-			header->size <<= 1;
+			header->size = increase + header->len;
 			header->seq = realloc(header->seq, header->size);
 			if(!header->seq) {
 				fprintf(stderr, "OOM\n");
@@ -655,7 +655,7 @@ int FileBuffgetFq(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq
 	}
 	increase = chunk - dest->pos;
 	if(increase + header->len > header->size) {
-		header->size <<= 1;
+		header->size = increase + header->len;
 		header->seq = realloc(header->seq, header->size);
 		if(!header->seq) {
 			fprintf(stderr, "OOM\n");
@@ -671,7 +671,7 @@ int FileBuffgetFq(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq
 	while((chunk = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
 		increase = chunk - dest->pos;
 		if(increase + seq->len > seq->size) {
-			seq->size <<= 1;
+			seq->size = (increase + seq->len) << 1;
 			seq->seq = realloc(seq->seq, seq->size);
 			if(!seq->seq) {
 				fprintf(stderr, "OOM\n");
@@ -686,7 +686,7 @@ int FileBuffgetFq(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq
 	}
 	increase = chunk - dest->pos;
 	if(increase + seq->len > seq->size) {
-		seq->size <<= 1;
+		seq->size = (increase + seq->len) << 1;
 		seq->seq = realloc(seq->seq, seq->size);
 		if(!seq->seq) {
 			fprintf(stderr, "OOM\n");
@@ -753,7 +753,7 @@ int FileBuffgetFqSeq(struct FileBuff *dest, struct qseqs *seq, struct qseqs *qua
 	while((chunk = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
 		increase = chunk - dest->pos;
 		if(increase + seq->len > seq->size) {
-			seq->size <<= 1;
+			seq->size = (increase + seq->len) << 1;
 			seq->seq = realloc(seq->seq, seq->size);
 			if(!seq->seq) {
 				fprintf(stderr, "OOM\n");
@@ -768,7 +768,7 @@ int FileBuffgetFqSeq(struct FileBuff *dest, struct qseqs *seq, struct qseqs *qua
 	}
 	increase = chunk - dest->pos;
 	if(increase + seq->len > seq->size) {
-		seq->size <<= 1;
+		seq->size = (increase + seq->len) << 1;
 		seq->seq = realloc(seq->seq, seq->size);
 		if(!seq->seq) {
 			fprintf(stderr, "OOM\n");
@@ -3102,8 +3102,8 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 		fprintf(stderr, "OOM\n");
 		exit(-1);
 	}
-	header = setQseqs(128);
-	qseq = setQseqs(1024);
+	header = setQseqs(1024);
+	qseq = setQseqs(delta);
 	qual = setQseqs(1024);
 	inputfile = setFileBuff(1024 * 1024);
 	
@@ -3251,7 +3251,7 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 		fprintf(stderr, "OOM\n");
 		exit(-1);
 	}
-	qseq = setQseqs(1024);
+	qseq = setQseqs(delta);
 	qual = setQseqs(1024);
 	inputfile = setFileBuff(1024 * 1024);
 	
