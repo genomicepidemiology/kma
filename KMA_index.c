@@ -1022,8 +1022,7 @@ int update_DBs_sparse(char *qseq, int q_len, int *prefix, int prefix_len, int Mi
 		for(i = 0; i < foundKmers->size; i++) {
 			for(node = foundKmers->table[i]; node != 0; node = node_next) {
 				node_next = node->next;
-				value = hashMap_getValue(&templates, node->key);
-				if(value) {
+				if((value = hashMap_getValue(&templates, node->key))) {
 					for(j = 1; j <= value[0]; j++) {
 						Scores[value[j]]++;
 					}
@@ -1035,8 +1034,8 @@ int update_DBs_sparse(char *qseq, int q_len, int *prefix, int prefix_len, int Mi
 		foundKmers->n = 0;
 		
 		/* get best hit */
-		bestT = 0;
-		bestQ = 0;
+		bestT = 0.0;
+		bestQ = 0.0;
 		for(i = 1; i <= bestTemplates[0]; i++) {
 			template = bestTemplates[i];
 			score = 1.0 * Scores[template] / template_ulengths[template];
@@ -1050,7 +1049,9 @@ int update_DBs_sparse(char *qseq, int q_len, int *prefix, int prefix_len, int Mi
 			Scores_tot[template] = 0;
 		}
 		
+		/* discard */
 		if((*homcmp)(bestT > homT, (1.0 * bestQ / len) > homQ)) {
+			//fprintf(stderr, "%f\t%f\n", bestT, (1.0 * bestQ / len));
 			free(qseq_int);
 			return 0;
 		}
@@ -1290,17 +1291,18 @@ void load_DBs_Sparse(const char *filename) {
 	
 	/* allocate DBs */
 	fread(&DB_size, sizeof(int), 1, DB_file);
-	template_lengths = malloc(DB_size * sizeof(int));
-	template_ulengths = malloc(DB_size * sizeof(int));
-	template_names = malloc(DB_size * sizeof(char*));
+	DB_mem = 2 * DB_size;
+	template_lengths = calloc(DB_mem, sizeof(int));
+	template_ulengths = calloc(DB_mem, sizeof(int));
+	template_names = malloc(DB_mem * sizeof(char*));
 	if(!template_lengths || !template_ulengths || !template_names) {
 		fprintf(stderr, "Out of memory\n");
 		exit(1);
 	}
 	
 	/* load lengths */
-	fread(template_lengths, DB_size * sizeof(int), 1, DB_file);
-	fread(template_ulengths, DB_size * sizeof(int), 1, DB_file);
+	fread(template_lengths, sizeof(int), DB_size, DB_file);
+	fread(template_ulengths, sizeof(int), DB_size, DB_file);
 	fclose(DB_file);
 	
 	/* load names */
@@ -1732,7 +1734,7 @@ int main(int argc, char *argv[]) {
 		
 		if(templatefilename != 0) {
 			load_DBs_Sparse(templatefilename);
-			DB_mem = DB_size;
+			DB_mem = 2 * DB_size;
 			for(i = 0; i < DB_size; i++) {
 				fwrite(template_names[i], 256 * sizeof(char), 1, name_out);
 				free(template_names[i]);
@@ -1740,15 +1742,15 @@ int main(int argc, char *argv[]) {
 			}
 			free(template_names);
 			if(homQ < 1 || homT < 1) {
-				Scores = calloc(DB_size, sizeof(int));
-				Scores_tot = calloc(DB_size, sizeof(int));
-				bestTemplates = malloc((DB_size + 1) * sizeof(int));
+				Scores = calloc(DB_mem, sizeof(int));
+				Scores_tot = calloc(DB_mem, sizeof(int));
+				bestTemplates = malloc((DB_mem + 1) * sizeof(int));
 				foundKmers = malloc(sizeof(struct hashMap_index));
 				if(!Scores || !Scores_tot || !bestTemplates || !foundKmers) {
 					fprintf(stderr, "OOM\n");
 					exit(1);
 				}
-				initialize_hashMap_index(foundKmers, 1000000);
+				initialize_hashMap_index(foundKmers, 1024 * 1024);
 			}
 		} else {
 			DB_size = 0;
@@ -1767,11 +1769,11 @@ int main(int argc, char *argv[]) {
 					fprintf(stderr, "OOM\n");
 					exit(1);
 				}
-				initialize_hashMap_index(foundKmers, 1000000);
+				initialize_hashMap_index(foundKmers, 1024 * 1024);
 			}
+			template_lengths[0] = 0;
+			template_ulengths[0] = 0;
 		}
-		template_lengths[0] = 0;
-		template_ulengths[0] = 0;
 		/* Parse inputfiles */
 		fprintf(stderr, "# Updating DBs\n");
 		for(filecounter = 0; filecounter < filecount; filecounter++) {
