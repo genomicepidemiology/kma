@@ -5709,19 +5709,18 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 									pos = assemNext[pos];
 								}
 								
-								/* update consecutive gaps */
 								while(i < aln_len && aligned->t[i] == 5) {
 									assemNext[pos] = nextGap;
-									assemNext[nextGap] = gaps;
-									nextGap++;
 									pos = assemNext[pos];
+									assemNext[pos] = gaps;
+									nextGap++;
 									for(j = 0; j < 5; j++) {
 										assembly[pos][j] = 0;
 									}
 									assembly[pos][5] = myBias;
 									assembly[pos][aligned->q[i]]++;
 									
-									/* check if realloc is needed */
+									i++;
 									if(nextGap == max_asmlen) {
 										max_asmlen += t_len;
 										assembly = realloc(assembly, max_asmlen * 6 * sizeof(short unsigned));
@@ -5732,7 +5731,6 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 										}
 									}
 									asm_len++;
-									i++;
 								}
 								pos = assemNext[pos];
 							}
@@ -5817,8 +5815,8 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 				bestBaseScore = 0;
 				bestNuc = 4;
 				for(j = 0; j < 5; j++) {
-					if(bestScore < assembly[pos][j]) {
-						bestScore = assembly[pos][j];
+					if(bestBaseScore < assembly[pos][j]) {
+						bestBaseScore = assembly[pos][j];
 						bestNuc = j;
 					}
 				}
@@ -6008,7 +6006,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 		aligned_assem->t[i] = bases[aligned_assem->t[i]];
 		
 		/* call query */
-		bestNuc = '-';
+		bestNuc = 5;
 		bestScore = 0;
 		depthUpdate = 0;
 		for(j = 0; j < 6; j++) {
@@ -6026,8 +6024,8 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 				bestBaseScore = 0;
 				bestNuc = 4;
 				for(j = 0; j < 5; j++) {
-					if(bestScore < assembly[i][j]) {
-						bestScore = assembly[i][j];
+					if(bestBaseScore < assembly[i][j]) {
+						bestBaseScore = assembly[i][j];
 						bestNuc = j;
 					}
 				}
@@ -7284,7 +7282,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
 			p_value  = p_chisqr(q_value);
 			
-			if((p_value <= evalue && score > expected) || 1.0 * read_score / t_len > scoreT) {
+			if((p_value <= evalue && score > expected) || ((1.0 * read_score / t_len) > scoreT)) {
 				/* load DB */
 				templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], 0, 0);
 				
