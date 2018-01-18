@@ -2336,7 +2336,8 @@ int updateDBs_sparse(struct compDNA *qseq) {
 			if(rc) {
 				rcComp(qseq);
 			}
-			
+			template_slengths[DB_size] = 0;
+			template_ulengths[DB_size] = 0;
 			/* set last extender */
 			last = -kmersize;
 			extend = 0;
