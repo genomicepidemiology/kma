@@ -1227,41 +1227,41 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, char *qseq, in
 	long unsigned key;
 	
 	if(prefix_len) {
-	for(rc = 0; rc < 2; rc++) {
-		
-		if(rc) {
-			strrc(qseq, seqlen);
-		}
-		
-		i = 0;
-		while(i < seqlen) {
-			end = charpos(qseq, 4, i, seqlen);
-			if(end == -1) {
-				end = seqlen;
-			}
-			if(i < end - kmersize - prefix_len) {
-				key = makeKmer(qseq, i, prefix_len - 1);
-				i += (prefix_len - 1);
-				end -= kmersize;
-			} else {
-				i = end + 1;
+		for(rc = 0; rc < 2; rc++) {
+			
+			if(rc) {
+				strrc(qseq, seqlen);
 			}
 			
-			while(i < end) {
-				key = ((key << 2) | qseq[i]) & mask;
-				i++;
-				if(key == prefix) {
-					Kmers[n] = makeKmer(qseq, i, kmersize);
-					n++;
-					if(n == max) {
-						fwrite(Kmers, sizeof(long unsigned), n, stdout);
-						n = 0;
+			i = 0;
+			while(i < seqlen) {
+				end = charpos(qseq, 4, i, seqlen);
+				if(end == -1) {
+					end = seqlen;
+				}
+				if(i < end - kmersize - prefix_len) {
+					key = makeKmer(qseq, i, prefix_len - 1);
+					i += (prefix_len - 1);
+					end -= kmersize;
+				} else {
+					i = end + 1;
+				}
+				
+				while(i < end) {
+					key = ((key << 2) | qseq[i]) & mask;
+					i++;
+					if(key == prefix) {
+						Kmers[n] = makeKmer(qseq, i, kmersize);
+						n++;
+						if(n == max) {
+							fwrite(Kmers, sizeof(long unsigned), n, stdout);
+							n = 0;
+						}
 					}
 				}
+				i = end + kmersize + 1;
 			}
-			i = end + kmersize + 1;
 		}
-	}
 	} else {
 		for(rc = 0; rc < 2; rc++) {
 			if(rc) {
@@ -1288,7 +1288,6 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, char *qseq, in
 				i = end + kmersize + 1;
 			}
 		}
-		
 	}
 	return n;
 }
@@ -2777,7 +2776,7 @@ void save_kmers(struct compDNA *qseq, struct compDNA *qseq_r, char *header, int 
 	for(i = 1; i <= qseq->N[0] && !HIT; i++) {
 		end = qseq->N[i] - kmersize + 1;
 		for(;j < end && !HIT; j += kmersize) {
-			if(hashMap_getGlobal(getKmer(qseq->seq, j))) {
+			if(hashMap_get(getKmer(qseq->seq, j))) {
 				HIT = 1;
 			}
 		}
@@ -2795,7 +2794,7 @@ void save_kmers(struct compDNA *qseq, struct compDNA *qseq_r, char *header, int 
 		for(i = 1; i <= qseq->N[0]; i++) {
 			end = qseq->N[i] - kmersize + 1;
 			for(;j < end; j++) {
-				if((values = hashMap_getGlobal(getKmer(qseq->seq, j)))) {
+				if((values = hashMap_get(getKmer(qseq->seq, j)))) {
 					if(values == last) {
 						reps++;
 					} else {
@@ -2865,7 +2864,7 @@ void save_kmers(struct compDNA *qseq, struct compDNA *qseq_r, char *header, int 
 	for(i = 1; i <= qseq_r->N[0] && !HIT; i++) {
 		end = qseq_r->N[i] - kmersize + 1;
 		for(;j < end && !HIT; j += kmersize) {
-			if(hashMap_getGlobal(getKmer(qseq_r->seq, j))) {
+			if(hashMap_get(getKmer(qseq_r->seq, j))) {
 				HIT = 1;
 			}
 		}
@@ -2883,7 +2882,7 @@ void save_kmers(struct compDNA *qseq, struct compDNA *qseq_r, char *header, int 
 		for(i = 1; i <= qseq_r->N[0]; i++) {
 			end = qseq_r->N[i] - kmersize + 1;
 			for(;j < end; j++) {
-				if((values = hashMap_getGlobal(getKmer(qseq_r->seq, j)))) {
+				if((values = hashMap_get(getKmer(qseq_r->seq, j)))) {
 					if(values == last) {
 						reps++;
 					} else {
@@ -7410,7 +7409,6 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-t_db\t\tTemplate DB\t\t\tNone\t\tREQUIRED\n");
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t16\n");
 	fprintf(helpOut, "#\t-e\t\tevalue\t\t\t\t0.05\n");
-	fprintf(helpOut, "#\t-delta\t\tAlign in pieces of delta\t511\n");
 	fprintf(helpOut, "#\t-mem_mode\tUse kmers to choose best\n#\t\t\ttemplate, and save memory\tFalse\n");
 	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
 	fprintf(helpOut, "#\t-deCon\t\tRemove contamination\t\tFalse\n");

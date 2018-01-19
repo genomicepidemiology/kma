@@ -1069,6 +1069,33 @@ int megaMap_addKMA(long unsigned key, int value, int extend) {
 	return 0;
 }
 
+int megaMap_addKMA_sparse(long unsigned key, int value, int extend) {
+	
+	int *values;
+	
+	values = templates->values[key];
+	
+	if(values == 0) { 
+		values = malloc(2 * sizeof(int));
+		values[0] = 1;
+		values[1] = value;
+		templates->values[key] = values;
+		templates->n++;
+		template_ulengths[value]++;
+	} else if(values[values[0]] != value) {
+		values[0]++;
+		values = realloc(values, (values[0] + 1) * sizeof(int));
+		if(!values) {
+			OOM();
+		}
+		values[values[0]] = value;
+		templates->values[key] = values;
+		template_ulengths[value]++;
+	}
+	
+	return 0;
+}
+
 int * megaMap_getValue(long unsigned key) {
 	
 	return templates->values[key];
@@ -1324,7 +1351,8 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		templates->size <<= 1;
 		if((templates->size - 1) == mask) {
 			hashMap2megaMap(table);
-			return megaMap_addKMA(key, value, extend);
+			hashMap_add = &megaMap_addKMA_sparse;
+			return megaMap_addKMA_sparse(key, value, extend);
 		}
 		
 		/* reallocate */
@@ -2331,16 +2359,16 @@ int updateDBs_sparse(struct compDNA *qseq) {
 	
 	/* test homology and length */
 	if(QualCheck(qseq)) {
+		template_slengths[DB_size] = 0;
+		template_ulengths[DB_size] = 0;
 		for(rc = 0; rc < 2; rc++) {
 			/* revers complement */
 			if(rc) {
 				rcComp(qseq);
 			}
-			template_slengths[DB_size] = 0;
-			template_ulengths[DB_size] = 0;
 			/* set last extender */
 			last = -kmersize;
-			extend = 0;
+			extend = kmersize;
 			
 			/* iterate seq */
 			qseq->N[0]++;
@@ -2351,7 +2379,7 @@ int updateDBs_sparse(struct compDNA *qseq) {
 				for(;j < end; j++) {
 					if(getPrefix(qseq->seq, j) == prefix) {
 						/* add kmer */
-						extend = kmersize - (j - last) ? kmersize : (j - last);
+						extend = kmersize < (j - last) ? kmersize : (j - last);
 						last = hashMap_add(getKmer(qseq->seq, j + prefix_len), DB_size, extend) ? j : -kmersize;
 						template_slengths[DB_size]++;
 					}
@@ -3771,7 +3799,11 @@ int main(int argc, char *argv[]) {
 		deConNode_ptr = &deConNode;
 	}
 	if(megaDB) {
-		hashMap_add = &megaMap_addKMA;
+		if(prefix_len) {
+			hashMap_add = &megaMap_addKMA_sparse;
+		} else {
+			hashMap_add = &megaMap_addKMA;
+		}
 		hashMap_get = &megaMap_getValue;
 		addCont = &megaMap_addCont;
 	}
