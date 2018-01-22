@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <errno.h>
 #define getNuc(Comp,pos)((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
+#define SetNuc(seq, nuc, pos)(seq[pos >> 5] |= (nuc << (62-((pos & 31) << 1))))
 
 /*
 	STRUCTURES
@@ -156,6 +157,8 @@ int (*QualCheck)(struct compDNA *);
 void (*updateAnnotsPtr)(struct compDNA *, FILE *, FILE *);
 int (*hashMap_add)(long unsigned, int, int);
 int * (*hashMap_get)(long unsigned);
+long unsigned (*getKmerP)(long unsigned *, unsigned);
+unsigned (*addKmer)(long unsigned, int);
 
 /*
 	FUNCTIONS
@@ -405,6 +408,29 @@ long unsigned getKmer(long unsigned *compressor, unsigned pos) {
 	return (iPos <= shifter) ? ((compressor[cPos] << iPos) >> shifter) : (((compressor[cPos] << iPos) | (compressor[cPos + 1] >> (64-iPos))) >> shifter);
 }
 
+long unsigned getK(long unsigned *compressor, unsigned pos) {
+	return pos;
+}
+
+unsigned addKmerC(long unsigned key, int extend) {
+	
+	int i, pos;
+	
+	pos = templates->seq_n - kmersize + extend;
+	key <<= ((kmersize - extend) << 1);
+	for(i = kmersize - extend; i < kmersize; i++) {
+		key <<= 2;
+		SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
+		templates->seq_n++;
+	}
+	
+	return pos;
+}
+
+unsigned addK(long unsigned key, int extend) {
+	return key;
+}
+
 long unsigned getKmerIndex(long unsigned *compressor, unsigned pos) {
 	
 	unsigned cPos, iPos;
@@ -433,8 +459,6 @@ void setNuc(long unsigned *seq, long unsigned nuc, unsigned pos) {
 	//seq[cPos] |= (nuc << (62-iPos));
 	seq[pos >> 5] |= (nuc << (62 - ((pos & 31) << 1)));
 }
-
-#define SetNuc(seq, nuc, pos)(seq[pos >> 5] |= (nuc << (62-((pos & 31) << 1))))
 
 long unsigned binRev(long unsigned num) {
 	
@@ -806,6 +830,10 @@ struct hashMap * hashMap_load(char *filename) {
 	/* load content */
 	fread(&src->kmersize, sizeof(unsigned), 1, infile);
 	kmersize = src->kmersize;
+	if(kmersize <= 16) {
+		getKmerP = &getK;
+		addKmer = &addK;
+	}
 	fread(&src->size, sizeof(long unsigned), 1, infile);
 	fread(&src->n, sizeof(unsigned), 1, infile);
 	fread(&src->seq_n, sizeof(unsigned), 1, infile);
@@ -865,7 +893,7 @@ struct hashMap * hashMap_load(char *filename) {
 			/* push node */
 			node->key = pos[0];
 			node->values = pos[1];
-			index = getKmer(src->seq, node->key) & src->size;
+			index = getKmerP(src->seq, node->key) & src->size;
 			node->next = src->table[index];
 			src->table[index] = node;
 		}
@@ -1112,13 +1140,13 @@ int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
 	pos = dest->exist[kpos];
 	
 	if(pos != dest->null_index) {
-		kmer = getKmer(dest->seq, dest->key_index[pos]);
+		kmer = getKmerP(dest->seq, dest->key_index[pos]);
 		while(key != kmer) {
 			pos++;
 			if(kpos != (kmer & dest->size)) {
 				return 0;
 			}
-			kmer = getKmer(dest->seq, dest->key_index[pos]);
+			kmer = getKmerP(dest->seq, dest->key_index[pos]);
 		}
 		values = templates->values[dest->value_index[pos]];
 		if(values[values[0]] != value) {
@@ -1181,7 +1209,7 @@ void hashMap2megaMap(struct hashTable *table) {
 		next = node->next;
 		
 		/* move values */
-		templates->values[getKmer(templates->seq, node->key)] = templates->values[node->values];
+		templates->values[getKmerP(templates->seq, node->key)] = templates->values[node->values];
 		templates->values[node->values] = 0;
 		
 		/* clean */
@@ -1208,7 +1236,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 	index = key & templates->size;
 	/* check if key exists */
 	for(node = templates->table[index]; node != 0; node = node->next) {
-		if(key == getKmer(templates->seq, node->key)) {
+		if(key == getKmerP(templates->seq, node->key)) {
 			values = templates->values[node->values];
 			if(values[*values] != value) {
 				values[0]++;
@@ -1254,7 +1282,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 		
 		for(node = table; node != 0; node = next) {
 			next = node->next;
-			i = getKmer(templates->seq, node->key) & templates->size;
+			i = getKmerP(templates->seq, node->key) & templates->size;
 			node->next = templates->table[i];
 			templates->table[i] = node;
 		}
@@ -1279,7 +1307,8 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 		OOM();
 	}
 	/* key */
-	if(extend) {
+	node->key = addKmer(key, extend);
+	/*if(extend) {
 		node->key = templates->seq_n - kmersize + 1;
 		SetNuc(templates->seq, (key & 3), templates->seq_n);
 		templates->seq_n++;
@@ -1290,7 +1319,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 			SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
 			templates->seq_n++;
 		}
-	}
+	}*/
 	
 	/* value */
 	node->values = templates->n;
@@ -1317,7 +1346,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 	
 	/* check if key exists */
 	for(node = templates->table[index]; node != 0; node = node->next) {
-		if(key == getKmer(templates->seq, node->key)) {
+		if(key == getKmerP(templates->seq, node->key)) {
 			values = templates->values[node->values];
 			if(values[*values] != value) {
 				values[0]++;
@@ -1365,7 +1394,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		
 		for(node = table; node != 0; node = next) {
 			next = node->next;
-			i = getKmer(templates->seq, node->key) & templates->size;
+			i = getKmerP(templates->seq, node->key) & templates->size;
 			node->next = templates->table[i];
 			templates->table[i] = node;
 		}
@@ -1391,13 +1420,14 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		OOM();
 	}
 	/* key */
-	node->key = templates->seq_n - kmersize + extend;
+	node->key = addKmer(key, extend);
+	/*node->key = templates->seq_n - kmersize + extend;
 	key <<= ((kmersize - extend) << 1);
 	for(i = kmersize - extend; i < kmersize; i++) {
 		key <<= 2;
 		SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
 		templates->seq_n++;
-	}
+	}*/
 	
 	/* value */
 	node->values = templates->n;
@@ -1421,7 +1451,7 @@ int * hashMap_getValue(long unsigned key) {
 	struct hashTable *node;
 	
 	for(node = templates->table[key & templates->size]; node != 0; node = node->next) {
-		if(key == getKmer(templates->seq, node->key)) {
+		if(key == getKmerP(templates->seq, node->key)) {
 			return templates->values[node->values];
 		}
 	}
@@ -1664,6 +1694,11 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 	
 	/* load sizes */
 	fread(&dest->kmersize, sizeof(unsigned), 1, file);
+	if(dest->kmersize <= 16) {
+		getKmerP = &getK;
+		addKmer = &addK;
+	}
+	
 	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
 	fread(&dest->prefix, sizeof(long unsigned), 1, file);
 	fread(&dest->size, sizeof(long unsigned), 1, file);
@@ -2084,11 +2119,11 @@ int updateDBs(struct compDNA *qseq) {
 	
 	/* iterate sequence */
 	for(i = 1, j = 0; i <= qseq->N[0]; i++) {
-		extend = 0;
+		extend = kmersize;
 		end = qseq->N[i] - kmersize + 1;
 		for(;j < end; j++) {
 			/* update hashMap */
-			extend = hashMap_add(getKmer(qseq->seq, j), DB_size, extend);
+			extend = hashMap_add(getKmer(qseq->seq, j), DB_size, extend) ? 1 : kmersize;
 		}
 		j = qseq->N[i] + 1;
 	}
@@ -2450,20 +2485,21 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	finalDB->null_index = null_index;
 	
 	/* mv table to finalDB */
-	fprintf(stderr, "# Initial cp of DB.\n");
+	fprintf(stderr, "# Initialize cp of DB.\n");
 	for(i = 0; i < finalDB->size; i++) {
 		finalDB->exist[i] = null_index;
 	}
+	fprintf(stderr, "# Initial cp of DB.\n");
 	node = table;
 	finalDB->size--;
 	t_index = 0;
 	while(node != 0) {
 		/* get index */
-		index = getKmer(finalDB->seq, node->key) & finalDB->size;
+		index = getKmerP(finalDB->seq, node->key) & finalDB->size;
 		finalDB->exist[index] = t_index;
 		
 		/* mv chain */
-		while(node != 0 && (getKmer(finalDB->seq, node->key) & finalDB->size) == index) {
+		while(node != 0 && (getKmerP(finalDB->seq, node->key) & finalDB->size) == index) {
 			next = node->next;
 			
 			/* cp index */
@@ -2526,8 +2562,8 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	
 	/* add terminating key */
 	i = 0;
-	j = getKmer(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
-	while(j == (getKmer(templates->seq, i) & finalDB->size)) {
+	j = getKmerP(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
+	while(j == (getKmerP(templates->seq, i) & finalDB->size)) {
 		i++;
 	}
 	finalDB->key_index[finalDB->n] = i;
@@ -2600,20 +2636,21 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	finalDB->null_index = null_index;
 	
 	/* mv table to finalDB */
-	fprintf(stderr, "# Initial cp of DB.\n");
+	fprintf(stderr, "# Initialize cp of DB.\n");
 	for(i = 0; i < finalDB->size; i++) {
 		finalDB->exist[i] = null_index;
 	}
+	fprintf(stderr, "# Initial cp of DB.\n");
 	node = table;
 	finalDB->size--;
 	t_index = 0;
 	while(node != 0) {
 		/* get index */
-		index = getKmer(finalDB->seq, node->key) & finalDB->size;
+		index = getKmerP(finalDB->seq, node->key) & finalDB->size;
 		finalDB->exist[index] = t_index;
 		
 		/* mv chain */
-		while(node != 0 && (getKmer(finalDB->seq, node->key) & finalDB->size) == index) {
+		while(node != 0 && (getKmerP(finalDB->seq, node->key) & finalDB->size) == index) {
 			next = node->next;
 			
 			/* cp index */
@@ -2676,8 +2713,8 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	
 	/* add terminating key */
 	i = 0;
-	j = getKmer(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
-	while(j == (getKmer(templates->seq, i) & finalDB->size)) {
+	j = getKmerP(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
+	while(j == (getKmerP(templates->seq, i) & finalDB->size)) {
 		i++;
 	}
 	finalDB->key_index[finalDB->n] = i;
@@ -3391,6 +3428,8 @@ int main(int argc, char *argv[]) {
 	homQ = 1;
 	homT = 1;
 	homcmp = &homcmp_or;
+	getKmerP = &getKmer;
+	addKmer = &addKmerC;
 	template_ulengths = 0;
 	template_slengths = 0;
 	DB_size = 1;
@@ -3806,6 +3845,10 @@ int main(int argc, char *argv[]) {
 		}
 		hashMap_get = &megaMap_getValue;
 		addCont = &megaMap_addCont;
+	}
+	if(kmersize <= 16) {
+		getKmerP = &getK;
+		addKmer = &addK;
 	}
 	
 	/* set homology check */

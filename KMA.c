@@ -183,6 +183,7 @@ struct hashMap_index * (*alignLoadPtr)(FILE*, FILE*, int, long unsigned, long un
 int * (*hashMap_get)(long unsigned);
 void (*kmerScan)(struct compDNA*, struct compDNA*, char*, int);
 void (*printFsa_ptr)(struct qseqs *, struct qseqs *, struct compDNA *);
+long unsigned (*getKmerP)(long unsigned *, unsigned);
 
 /*
  FUNCTIONS
@@ -196,6 +197,10 @@ long unsigned getKmer(long unsigned *compressor, unsigned pos) {
 	iPos = (pos & 31) << 1;
 	
 	return (iPos <= shifter) ? ((compressor[cPos] << iPos) >> shifter) : (((compressor[cPos] << iPos) | (compressor[cPos + 1] >> (64-iPos))) >> shifter);
+}
+
+long unsigned getK(long unsigned *compressor, unsigned pos) {
+	return pos;
 }
 
 long unsigned makeKmer(const char *qseq, unsigned pos, unsigned size) {
@@ -1475,7 +1480,7 @@ int * hashMap_getGlobal_old(long unsigned key) {
 	
 	if(pos != templates->null_index) {
 		for(; templates->key_index[pos] != templates->null_index; pos++) {
-			if(key == getKmer(templates->seq, templates->key_index[pos])) {
+			if(key == getKmerP(templates->seq, templates->key_index[pos])) {
 				return templates->values + (templates->value_index[pos]);
 			}
 		}
@@ -1493,14 +1498,14 @@ int * hashMap_getGlobal(long unsigned key) {
 	pos = templates->exist[kpos];
 	
 	if(pos != templates->null_index) {
-		kmer = getKmer(templates->seq, templates->key_index[pos]);
+		kmer = getKmerP(templates->seq, templates->key_index[pos]);
 		while(key != kmer) {
 			//if(kpos != (kmer & templates->size) || pos == templates->n) {
 			if(kpos != (kmer & templates->size)) {
 				return 0;
 			}
 			pos++;
-			kmer = getKmer(templates->seq, templates->key_index[pos]);
+			kmer = getKmerP(templates->seq, templates->key_index[pos]);
 		}
 		return (templates->values + templates->value_index[pos]);
 	}
@@ -1720,6 +1725,9 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 	fread(&dest->seqsize, sizeof(unsigned), 1, file);
 	fread(&dest->v_index, sizeof(unsigned), 1, file);
 	fread(&dest->null_index, sizeof(unsigned), 1, file);
+	if(kmersize <= 16) {
+		getKmerP = &getK;
+	}
 	
 	/* check shared memory, else load */
 	key = ftok(filename, 'e');
@@ -1847,6 +1855,9 @@ void hashMapKMA_load_shm(struct hashMapKMA *dest, FILE *file, const char *filena
 	fread(&dest->seqsize, sizeof(unsigned), 1, file);
 	fread(&dest->v_index, sizeof(unsigned), 1, file);
 	fread(&dest->null_index, sizeof(unsigned), 1, file);
+	if(kmersize <= 16) {
+		getKmerP = &getK;
+	}
 	
 	/* check shared memory */
 	key = ftok(filename, 'e');
@@ -4136,7 +4147,6 @@ void save_kmers_batch(char *templatefilename, char *exePrev, int one2one) {
 	fprintf(stderr, "#\n# Total time used for DB loading: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 	t0 = clock();
 	fprintf(stderr, "# Finding k-mer ankers\n");
-	
 	while(getComp(qseq, inputfile)) {
 		if(qseq->seqlen >= delta) {
 			delta = qseq->seqlen << 1;
@@ -4167,7 +4177,6 @@ void save_kmers_batch(char *templatefilename, char *exePrev, int one2one) {
 			}
 		}
 		fread(header, i, 1, inputfile);
-		
 		kmerScan(qseq, qseq_r, header, i);
 	}
 	fwrite(&(int){0}, sizeof(int), 1, stdout);
@@ -7450,6 +7459,7 @@ int main(int argc, char *argv[]) {
 	
 	/* SET DEFAULTS */
 	assemblyPtr = &assemble_KMA;
+	getKmerP = &getKmer;
 	minPhred = 30;
 	fiveClip = 0;
 	sparse_run = 0;
