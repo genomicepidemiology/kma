@@ -184,12 +184,22 @@ int * (*hashMap_get)(long unsigned);
 void (*kmerScan)(struct compDNA*, struct compDNA*, char*, int);
 void (*printFsa_ptr)(struct qseqs *, struct qseqs *, struct compDNA *);
 long unsigned (*getKmerP)(long unsigned *, unsigned);
+int (*cmp)(int, int);
+
 
 /*
  FUNCTIONS
 */
 
 /* BASIC FUNCTIONS */
+int cmp_or(int t, int q) {
+	return (t || q);
+}
+
+int cmp_and(int t, int q) {
+	return (t && q);
+}
+
 long unsigned getKmer(long unsigned *compressor, unsigned pos) {
 	
 	unsigned cPos, iPos;
@@ -1590,7 +1600,11 @@ int * hashMap_getGlobal_disk(long unsigned key) {
 		fseek(templates_offsets->file, templates_offsets->key_index + pos * sizeof(unsigned), SEEK_SET);
 		fread(key_index, sizeof(unsigned), 4, templates_offsets->file);
 		i = 0;
-		kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+		if(kmersize <= 16) {
+			kmer = key_index[i];
+		} else {
+			kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+		}
 		while(key != kmer) {
 			if(kpos != (kmer & templates->size)) {
 				return 0;
@@ -1602,7 +1616,11 @@ int * hashMap_getGlobal_disk(long unsigned key) {
 				fread(key_index, sizeof(unsigned), 4, templates_offsets->file);
 				i = 0;
 			}
-			kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+			if(kmersize <= 16) {
+				kmer = key_index[i];
+			} else {
+				kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+			}
 		}
 		pos = getUnsignedFromFile(templates_offsets->value_index + pos * sizeof(unsigned), templates_offsets->file);
 		fseek(templates_offsets->file, templates_offsets->values + pos * sizeof(unsigned), SEEK_SET);
@@ -1645,7 +1663,11 @@ int * hashMap_getGlobal_semDisk(long unsigned key) {
 		fseek(templates_offsets->file, templates_offsets->key_index + pos * sizeof(unsigned), SEEK_SET);
 		fread(key_index, sizeof(unsigned), 4, templates_offsets->file);
 		i = 0;
-		kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+		if(kmersize <= 16) {
+			kmer = key_index[i];
+		} else {
+			kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+		}
 		while(key != kmer) {
 			if(kpos != (kmer & templates->size)) {
 				return 0;
@@ -1657,7 +1679,11 @@ int * hashMap_getGlobal_semDisk(long unsigned key) {
 				fread(key_index, sizeof(unsigned), 4, templates_offsets->file);
 				i = 0;
 			}
-			kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+			if(kmersize <= 16) {
+				kmer = key_index[i];
+			} else {
+				kmer = getKmerFromFile(templates_offsets->seq, key_index[i], templates_offsets->file);
+			}
 		}
 		pos = getUnsignedFromFile(templates_offsets->value_index + pos * sizeof(unsigned), templates_offsets->file);
 		return templates->values + pos;
@@ -4025,7 +4051,7 @@ void save_kmers_batch(char *templatefilename, char *exePrev, int one2one) {
 		getPrefix(templates, templatefile);
 		fclose(templatefile);
 		templates_offsets = getOffstets(templatefilename);
-		if(!one2one || diskDB & 2) {
+		if(1 || !one2one || diskDB & 2) {
 			if(templates_offsets->key_index == templates_offsets->value_index) {
 				hashMap_get = &megaMap_getGlobal_semDisk;
 			} else {
@@ -6697,7 +6723,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			p_value  = p_chisqr(q_value);
 			
 			
-			if((p_value <= evalue && score > expected) || ((1.0 * read_score / t_len) > scoreT)) {
+			if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
 				/* Do assembly */
 				assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, matrix_out, outputfilename, aligned, gap_align, qseq, header);
 				
@@ -7290,7 +7316,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
 			p_value  = p_chisqr(q_value);
 			
-			if((p_value <= evalue && score > expected) || ((1.0 * read_score / t_len) > scoreT)) {
+			if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
 				/* load DB */
 				templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], 0, 0);
 				
@@ -7434,6 +7460,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-swap\t\tSwap DB to disk\t\t\t0 (lvl)\n");
 	fprintf(helpOut, "#\t-1t1\t\tSkip HMM\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
+	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t0.5\n");
 	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t1\n");
 	fprintf(helpOut, "#\t-penalty\tPenalty for mismatch\t\t-2\n");
@@ -7460,6 +7487,7 @@ int main(int argc, char *argv[]) {
 	/* SET DEFAULTS */
 	assemblyPtr = &assemble_KMA;
 	getKmerP = &getKmer;
+	cmp = &cmp_or;
 	minPhred = 30;
 	fiveClip = 0;
 	sparse_run = 0;
@@ -7678,6 +7706,8 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				U = atoi(argv[args]);
 			}
+		} else if(strcmp(argv[args], "-and") == 0) {
+			cmp = &cmp_and;
 		} else if(strcmp(argv[args], "-boot") == 0) {
 			printFsa_ptr = &bootFsa;
 		} else if(strcmp(argv[args], "-NW") == 0 || strcmp(argv[args], "-SW") == 0) {
