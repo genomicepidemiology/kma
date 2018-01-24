@@ -192,7 +192,7 @@ Output:
 *.mat.gz	Count of each called nucleotide on each position in all mapped 
 			templates, requires that the "-matrix" option is enabled when 
 			mapping. The columns are:
-			Ref. nucleotide, #A, #T, #C, #G, #N, #-.
+			Ref. nucleotide, #A, #C, #G, #T, #N, #-.
 
 
 Questions
