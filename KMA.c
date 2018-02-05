@@ -6400,7 +6400,11 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			/* penalty for non complete mapping */
 			read_score = alnStat.score;
-			read_score += (((start != 0) + (end != template_lengths[abs(template)])) * W1);
+			/* full gene award */
+			if((start == 0) && (end == template_lengths[abs(template)])) {
+				read_score += abs(W1);
+			}
+			//read_score += (((start != 0) + (end != template_lengths[abs(template)])) * W1);
 			
 			/* Get normed score */
 			if(aln_len > 0) {
@@ -6513,19 +6517,19 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 						tmp_template = tmp_tmp_template;
 					}
 					tmp_score = 1.0 * alignment_scores[tmp_template] / template_lengths[tmp_template];
-					if(tmp_score > bestScore) {
-					//if(alignment_scores[tmp_template] > best_read_score) {
+					//if(tmp_score > bestScore) {
+					if(alignment_scores[tmp_template] > best_read_score) {
 						bestTemplate = tmp_tmp_template;
 						best_read_score = alignment_scores[tmp_template];
 						bestScore = tmp_score;
 						bestNum = uniq_alignment_scores[tmp_template];
 						start = tmp_start;
 						end = tmp_end;
-					} else if(tmp_score == bestScore) {
-					//} else if(alignment_scores[tmp_template] == best_read_score) {
+					//} else if(tmp_score == bestScore) {
+					} else if(alignment_scores[tmp_template] == best_read_score) {
 						//if(uniq_alignment_scores[tmp_template] > bestNum) {
-						//if(tmp_score > bestScore) {
-						if(alignment_scores[tmp_template] > best_read_score) {
+						if(tmp_score > bestScore) {
+						//if(alignment_scores[tmp_template] > best_read_score) {
 							bestTemplate = tmp_tmp_template;
 							best_read_score = alignment_scores[tmp_template];
 							bestScore = tmp_score;
@@ -6533,8 +6537,8 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 							start = tmp_start;
 							end = tmp_end;
 						//} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_score > bestScore) {
-						} else if(alignment_scores[tmp_template] == best_read_score) {
-						//} else if(tmp_score == bestScore) {
+						//} else if(alignment_scores[tmp_template] == best_read_score) {
+						} else if(tmp_score == bestScore) {
 							if(uniq_alignment_scores[tmp_template] > bestNum) {
 								bestTemplate = tmp_tmp_template;
 								best_read_score = alignment_scores[tmp_template];
@@ -7265,9 +7269,10 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	free(best_end_pos);
 	free(bestTemplates);
 	/* remove frag_raw */
-	/*strcat(outputfilename, ".frag_raw.b");
+	/* remove frag_raw */
+	strcat(outputfilename, ".frag_raw.b");
 	remove(outputfilename);
-	outputfilename[file_len] = 0;*/
+	outputfilename[file_len] = 0;
 	
 	t1 = clock();
 	fprintf(stderr, "# Total time for sorting and outputting KMA alignment\t%.2f s.\n", difftime(t1, t0) / 1000000);
@@ -7596,7 +7601,7 @@ int main(int argc, char *argv[]) {
 				shm = atoi(argv[args]);
 			} else {
 				args--;
-				shm = 1;
+				shm = 3;
 			}
 		} else if(strcmp(argv[args], "-swap") == 0) {
 			args++;
