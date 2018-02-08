@@ -884,15 +884,19 @@ struct hashMap * hashMap_load(char *filename) {
 			src->values[i][0] = pos[0];
 			fread(src->values[i] + 1, sizeof(unsigned), pos[0], infile);
 		}
+		
 		for(i = 0; i < src->n; i++) {
-			fread(pos, sizeof(unsigned), 2, infile);
+			//fread(pos, sizeof(unsigned), 2, infile);
 			node = malloc(sizeof(struct hashTable));
 			if(!node) {
 				OOM();
 			}
 			/* push node */
-			node->key = pos[0];
-			node->values = pos[1];
+			//fread(&index, sizeof(unsigned), 1, infile);
+			fread(&node->key, sizeof(unsigned), 1, infile);
+			fread(&node->values, sizeof(int), 1, infile);
+			//node->key = pos[0];
+			//node->values = pos[1];
 			index = getKmerP(src->seq, node->key) & src->size;
 			node->next = src->table[index];
 			src->table[index] = node;
@@ -934,6 +938,7 @@ void hashMap_dump(struct hashMap *src, FILE *outfile) {
 		}
 		for(i = 0; i < src->size; i++) {
 			for(node = src->table[i]; node != 0; node = node->next) {
+				//fwrite(&(unsigned){i}, sizeof(unsigned), 1, outfile);
 				fwrite(&node->key, sizeof(unsigned), 1, outfile);
 				fwrite(&node->values, sizeof(int), 1, outfile);
 			}
@@ -941,6 +946,7 @@ void hashMap_dump(struct hashMap *src, FILE *outfile) {
 	}
 	
 	/* masking */
+	
 	src->size--;
 }
 
@@ -1038,8 +1044,8 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 	if(!template_lengths) {
 		OOM();
 	}
+	fread(template_lengths, sizeof(unsigned), DB_size, infile);
 	template_lengths[0] = DB_size << 1;
-	fread(template_lengths + 1, sizeof(unsigned), DB_size, infile);
 	if(prefix_len > 0) {
 		template_slengths = template_lengths;
 		template_lengths = 0;
@@ -1047,8 +1053,8 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 		if(!template_ulengths) {
 			OOM();
 		}
+		fread(template_ulengths, sizeof(unsigned), DB_size, infile);
 		template_ulengths[0] = DB_size << 1;
-		fread(template_ulengths + 1, sizeof(unsigned), DB_size, infile);
 	} else {
 		template_slengths = 0;
 		template_ulengths = 0;
@@ -1058,18 +1064,25 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 	
 	/* cp name, seq and index */
 	strcat(templatefilename, ".name");
+	strcat(outputfilename, ".name");
 	appender = CP(templatefilename, outputfilename);
 	templatefilename[file_len] = 0;
+	outputfilename[out_len] = 0;
 	
 	strcat(templatefilename, ".seq.b");
+	strcat(outputfilename, ".seq.b");
 	appender = CP(templatefilename, outputfilename);
 	templatefilename[file_len] = 0;
+	outputfilename[out_len] = 0;
 	
 	strcat(templatefilename, ".index.b");
+	strcat(outputfilename, ".index.b");
 	appender = CP(templatefilename, outputfilename);
 	templatefilename[file_len] = 0;
+	outputfilename[out_len] = 0;
 	
-	return appender;
+	return 1;
+	//return appender;
 }
 
 int megaMap_addKMA(long unsigned key, int value, int extend) {
@@ -3890,25 +3903,25 @@ int main(int argc, char *argv[]) {
 	
 	/* update DBs */
 	if(filecount != 0) {
-		makeDB(inputfiles, filecount, outputfilename, appender);
-		
-		/* compress db */
-		fprintf(stderr, "# Compressing templates\n");
-		file_len = strlen(outputfilename);
-		strcat(outputfilename, ".comp.b");
-		out = fopen(outputfilename, "wb");
-		if(!out) {
-			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-			exit(-1);
-		} else if(templates->table != 0) {
-			finalDB = compressKMA_DB(out);
-		} else {
-			finalDB = compressKMA_megaDB(out);
-		}
-		fclose(out);
-		outputfilename[file_len] = 0;
-		fprintf(stderr, "# Template database created.\n");
+		makeDB(inputfiles, filecount, outputfilename, appender);	
 	}
+	
+	/* compress db */
+	fprintf(stderr, "# Compressing templates\n");
+	file_len = strlen(outputfilename);
+	strcat(outputfilename, ".comp.b");
+	out = fopen(outputfilename, "wb");
+	if(!out) {
+		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+		exit(-1);
+	} else if(templates->table != 0) {
+		finalDB = compressKMA_DB(out);
+	} else {
+		finalDB = compressKMA_megaDB(out);
+	}
+	fclose(out);
+	outputfilename[file_len] = 0;
+	fprintf(stderr, "# Template database created.\n");
 	
 	/* decontaminate */
 	if(deconcount != 0) {
