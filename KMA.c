@@ -2077,7 +2077,7 @@ int hashMap_index_get_bound(struct hashMap_index *dest, long unsigned key, int m
 int hashMap_index_getDub_bound(struct hashMap_index *dest, long unsigned key, const char *qseq, int q_len, int *next, int min, int max) {
 	
 	int i, index, pos, maxScore, score, mPos;
-	max = 0;
+	maxScore = 0;
 	mPos = 0;
 	
 	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; index++) {
@@ -2092,7 +2092,7 @@ int hashMap_index_getDub_bound(struct hashMap_index *dest, long unsigned key, co
 				mPos = -dest->index[index];
 			} else if(score == maxScore) {
 				mPos = 0;
-				*next = score;
+				*next = score - 1;
 			}
 		}
 	}
@@ -2110,7 +2110,7 @@ int hashMap_index_getDub_bound(struct hashMap_index *dest, long unsigned key, co
 					mPos = -dest->index[index];
 				} else if(score == maxScore) {
 					mPos = 0;
-					*next = score;
+					*next = score - 1;
 				}
 			}
 		}
@@ -3822,6 +3822,13 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 				while(start < end && seq[start] < phredCut) {
 					start++;
 				}
+				/*
+				for(i = start; i < end; i++) {
+					if(seq[i] < phredCut) {
+						seq[i] = 4;
+					}
+				}
+				*/
 				qseq->len = end - start;
 				/* print */
 				if(qseq->len > kmersize) {
@@ -5164,8 +5171,11 @@ struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct
 			/* capture dublet */
 			if((value = hashMap_index_get_bound(template_index, key, min, max)) < 0) {
 				value = hashMap_index_getDub_bound(template_index, key, qseq + i, q_len - i, &j, -min, -max);
+				/* skip repeat */
 				if(value == 0) {
-					i += j;
+					for(i = i; i < j; i++) {
+						key = ((key << 2) | qseq[i]) & mask;
+					}
 				}
 			}
 			
