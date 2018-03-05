@@ -523,6 +523,12 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 	}
 	strncpy(header->seq + header->len, dest->buffer + dest->pos, seqsize);
 	header->len += seqsize;
+	/* chomp header */
+	header->len--;
+	while(isspace(header->seq[header->len])) {
+		header->len--;
+	}
+	header->len++;
 	header->seq[header->len] = 0;
 	dest->pos = seqlen + 1;
 	
@@ -661,6 +667,13 @@ int FileBuffgetFq(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq
 	}
 	strncpy(header->seq + header->len, dest->buffer + dest->pos, buff_end);
 	header->len += buff_end;
+	/* chomp header */
+	header->len--;
+	while(isspace(header->seq[header->len])) {
+		header->len--;
+	}
+	header->len++;
+	header->seq[header->len] = 0;
 	dest->pos = seq_end + 1;
 	
 	
