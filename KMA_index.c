@@ -3320,6 +3320,7 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 			bias = compDNAref(compressor, qseq->seq, qseq->len);
 			if(qseq->len > MinLen && update_DB(compressor)) {
 				/* Update annots */
+				chomp(header->seq);
 				if(bias > 0) {
 					fprintf(name_out, "%s B%d\n", header->seq + 1, bias);
 				} else {
