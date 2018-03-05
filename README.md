@@ -38,9 +38,9 @@ If you use KMA for your published research, then please cite the KMA paper.
 Compilation
 
 Any c-compiler for C99 can be used, here GCC.
-gcc -O3 -o kma KMA.c -lm
-gcc -O3 -o kma_index KMA_index.c
-gcc -O3 -o kma_shm KMA_SHM.c
+    gcc -O3 -o kma KMA.c -lm
+    gcc -O3 -o kma_index KMA_index.c -lm
+    gcc -O3 -o kma_shm KMA_SHM.c -lm
 
 
 Indexing
