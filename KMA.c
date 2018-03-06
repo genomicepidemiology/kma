@@ -976,6 +976,54 @@ int getPhredFileBuff(struct FileBuff *dest) {
 					dest->pos++;
 				} else {
 					dest->pos = 0;
+					return 0;
+				}
+			}
+		}
+		/* get Phred scale */
+		seek = 1;
+		while(seek) {
+			if(dest->pos < dest->bytes) {
+				if(dest->buffer[dest->pos] == '\n') {
+					seek = 0;
+				} else if(dest->buffer[dest->pos] < 33) {
+					dest->pos = 0;
+					return 0;
+				} else if(53 < dest->buffer[dest->pos] && dest->buffer[dest->pos] < 59) {
+					dest->pos = 0;
+					return 33;
+				} else if(dest->buffer[dest->pos] > 84) {
+					dest->pos = 0;
+					return 64;
+				}
+				dest->pos++;
+			} else {
+				dest->pos = 0;
+				return 0;
+			}
+		}
+	}
+	
+	dest->pos = 0;
+	return 0;
+}
+
+int getPhredFileBuff_old(struct FileBuff *dest) {
+	
+	int i, seek;
+	
+	while(dest->pos < dest->bytes) {
+		/* skip header, seq and info */
+		for(i = 0; i < 3; i++) {
+			seek = 1;
+			while(seek) {
+				if(dest->pos < dest->bytes) {
+					if(dest->buffer[dest->pos] == '\n') {
+						seek = 0;
+					}
+					dest->pos++;
+				} else {
+					dest->pos = 0;
 					return 33;
 				}
 			}
