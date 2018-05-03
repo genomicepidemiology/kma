@@ -141,7 +141,7 @@ struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
 unsigned shifterI, prefix_shifter, *Scores, *Scores_tot, *bestTemplates;
 unsigned *template_lengths, *template_slengths, *template_ulengths;
-long unsigned mask, MAX_SIZE, INITIAL_SIZE, prefix;
+long unsigned mask, INITIAL_SIZE, prefix;
 char *to2Bit;
 double homQ, homT;
 
@@ -972,10 +972,15 @@ void deConMap_dump(struct hashMapKMA *dest, FILE *out) {
 		fwrite(dest->seq, sizeof(long unsigned), dest->seqsize, out);
 		fwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
 		fwrite(dest->value_index, sizeof(unsigned), dest->n, out);
-	}
-	
-	for(i = 0; i < dest->n; i++) {
-		fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
+		for(i = 0; i < dest->n; i++) {
+			fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
+		}
+	} else {
+		for(i = 0; i < dest->size; i++) {
+			if(templates->values[i]) {
+				fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
+			}
+		}
 	}
 }
 
@@ -1177,14 +1182,11 @@ int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
 	return 0;
 }
 
-int megaMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
+int megaMap_addCont(struct hashMapKMA *dest, long unsigned index, int value) {
 	
 	int *values;
-	unsigned index;
 	
-	index = dest->exist[key] & dest->size;
-	
-	if(dest->exist[index] != dest->null_index) {
+	if(dest->exist[index] != dest->n) {
 		values = templates->values[dest->exist[index]];
 		if(values[values[0]] != value) {
 			values[0]++;
@@ -1204,16 +1206,13 @@ int megaMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
 void hashMap2megaMap(struct hashTable *table) {
 	
 	long unsigned i;
+	int **tmp;
 	struct hashTable *node, *next;
 	
-	templates->values = realloc(templates->values, templates->size * sizeof(unsigned *));
+	tmp = templates->values;
+	templates->values = calloc(templates->size, sizeof(unsigned *));
 	if(!templates->values) {
 		OOM();
-	}
-	
-	/* null the indexes */
-	for(i = templates->n; i < templates->size; i++) {
-		templates->values[i] = 0;
 	}
 	templates->size--;
 	
@@ -1222,14 +1221,14 @@ void hashMap2megaMap(struct hashTable *table) {
 		next = node->next;
 		
 		/* move values */
-		templates->values[getKmerP(templates->seq, node->key)] = templates->values[node->values];
-		templates->values[node->values] = 0;
+		templates->values[getKmerP(templates->seq, node->key)] = tmp[node->values];
 		
 		/* clean */
 		free(node);
 	}
 	
 	/* clean */
+	free(tmp);
 	free(templates->seq);
 	templates->seq = 0;
 	templates->table = 0;
@@ -2870,7 +2869,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 	
 	long unsigned i, j;
-	unsigned v_index, v_update, new_index, *tmp;
+	unsigned v_index, c_index, v_update, new_index, *tmp;
 	int *values;
 	struct valuesHash *shmValues;
 	
@@ -2880,6 +2879,7 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 		OOM();
 	}
 	v_index = 0;
+	c_index = 0;
 	shmValues = initialize_hashValues(finalDB->n);
 	for(i = 0; i < finalDB->n; i++) {
 		/* potential increase */
@@ -2894,9 +2894,13 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 		
 		/* update size of compression */
 		if(new_index == v_index) {
-			v_index += v_update;
-		} else {
-			free(templates->values[tmp[i]]);
+			c_index += v_update;
+			if(v_index < c_index) {
+				v_index = c_index;
+			} else {
+				fprintf(stderr, "Compression overflow.\n");
+				exit(-1);
+			}
 		}
 	}
 	/* destroy shmValues */
@@ -2929,7 +2933,7 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 	
 	long unsigned i, j;
-	unsigned v_index, v_update, new_index, *tmp;
+	unsigned v_index, c_index, v_update, new_index, *tmp;
 	int *values;
 	struct valuesHash *shmValues;
 	
@@ -2939,9 +2943,10 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 		OOM();
 	}
 	v_index = 0;
+	c_index = 0;
 	shmValues = initialize_hashValues(finalDB->n);
 	for(i = 0; i < finalDB->size; i++) {
-		if(finalDB->exist[i] != finalDB->null_index) {
+		if(finalDB->exist[i] != finalDB->n) {
 			/* potential increase */
 			v_update = templates->values[finalDB->exist[i]][0] + 1;
 			
@@ -2954,12 +2959,18 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 			
 			/* update size of compression */
 			if(new_index == v_index) {
-				v_index += v_update;
+				c_index += v_update;
+				if(v_index < c_index) {
+					v_index = c_index;
+				} else {
+					fprintf(stderr, "Compression overflow.\n");
+					exit(-1);
+				}
 			} else {
 				free(templates->values[tmp[i]]);
 			}
 		} else {
-			tmp[i] = finalDB->null_index;
+			tmp[i] = finalDB->n;
 		}
 	}
 	/* destroy shmValues */
@@ -2973,13 +2984,17 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 		OOM();
 	}
 	for(i = 0; i < finalDB->size; i++) {
-		if(finalDB->exist[i] != finalDB->null_index && finalDB->values[finalDB->exist[i]] == 0) {
-			values = templates->values[tmp[i]];
-			v_index = finalDB->exist[i];
-			for(j = 0; j <= values[0]; j++) {
-				finalDB->values[v_index + j] = values[j];
+		if(finalDB->exist[i] != finalDB->n) {
+			if(finalDB->values[finalDB->exist[i]] == 0) {
+				values = templates->values[tmp[i]];
+				v_index = finalDB->exist[i];
+				for(j = 0; j <= values[0]; j++) {
+					finalDB->values[v_index + j] = values[j];
+				}
+				free(templates->values[tmp[i]]);
 			}
-			free(templates->values[tmp[i]]);
+		} else {
+			finalDB->exist[i] = finalDB->null_index;
 		}
 	}
 	
@@ -3147,11 +3162,6 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 			openFileBuff(inputfile, filename, "rb");
 		}
 		
-		if(!inputfile) {
-			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-			exit(-1);
-		}
-		
 		/* Get first char and determine the format */
 		buffFileBuff(inputfile);
 		if(inputfile->buffer[0] != '>') { //FASTA
@@ -3188,7 +3198,8 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	finalDB->size++;
 	
 	/* dump DB */
-	deConMap_dump(finalDB, DB_update);
+	fprintf(stderr, "# Dumping DeCon DB.\n");
+	//deConMap_dump(finalDB, DB_update);
 	fclose(DB_update);
 	
 	/* clean */
@@ -3395,9 +3406,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-k_t\t\tKmersize for template identification\t16\n");
 	fprintf(helpOut, "#\t-k_i\t\tKmersize for indexing\t\t\t16\n");
 	fprintf(helpOut, "#\t-ML\t\tMinimum length of templates\t\tkmersize (16)\n");
-	fprintf(helpOut, "#\t-CS\t\tChain size\t\t\t\t8 MB\n");
-	fprintf(helpOut, "#\t-MS\t\tMax chain size\t\t\t\t16 GB\n");
-	fprintf(helpOut, "#\t-SM\t\tStart at max chain size\t\t\tFalse\n");
+	fprintf(helpOut, "#\t-CS\t\tStart Chain size\t\t\t\t1 M\n");
 	fprintf(helpOut, "#\t-ME\t\tMega DB\t\t\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-Sparse\t\tMake Sparse DB ('-' for no prefix)\tNone/False\n");
 	fprintf(helpOut, "#\t-ht\t\tHomology template\t\t\t1.0\n");
@@ -3410,7 +3419,7 @@ void helpMessage(int exeStatus) {
 
 int main(int argc, char *argv[]) {
 	
-	int i, args, stop, filecount, deconcount, SM, sparse_run;
+	int i, args, stop, filecount, deconcount, sparse_run;
 	int line_size, l_len, mapped_cont, file_len, appender;
 	unsigned megaDB;
 	char **inputfiles, *outputfilename, *templatefilename, **deconfiles, *line;
@@ -3427,9 +3436,6 @@ int main(int argc, char *argv[]) {
 	
 	/* set defaults */
 	INITIAL_SIZE = 1048576;
-	//MAX_SIZE = 14 * (long unsigned)(pow(2, 30) + 0.5) / 8; //14 = #GB, 2^30 = GB, 8 = sizeof pointer
-	MAX_SIZE = 16;
-	MAX_SIZE *= (1 << 27);
 	kmersize = 16;
 	kmerindex = 16;
 	sparse_run = 0;
@@ -3438,7 +3444,6 @@ int main(int argc, char *argv[]) {
 	MinKlen = 1;
 	prefix_len = 0;
 	prefix = 0;
-	SM = 0;
 	homQ = 1;
 	homT = 1;
 	homcmp = &homcmp_or;
@@ -3456,24 +3461,16 @@ int main(int argc, char *argv[]) {
 	deconfiles = malloc(sizeof(char*));
 	line_size = 256;
 	line = malloc(line_size);
-	to2Bit = malloc(128);
+	to2Bit = malloc(384);
 	if(!inputfiles || !deconfiles || !line || !to2Bit) {
 		fprintf(stderr, "OOM\n");
 		exit(-1);
 	}
 	/* set to2Bit */
-	/*memset(to2Bit, 4, 128);
-	to2Bit['A'] = 0;
-	to2Bit['C'] = 1;
-	to2Bit['G'] = 2;
-	to2Bit['T'] = 3;
-	to2Bit['a'] = 0;
-	to2Bit['c'] = 1;
-	to2Bit['g'] = 2;
-	to2Bit['t'] = 3;*/
-	for(i = 0; i < 128; i++) {
+	for(i = 0; i < 384; i++) {
 		to2Bit[i] = 5;
 	}
+	to2Bit += 128;
 	to2Bit['A'] = 0;
 	to2Bit['C'] = 1;
 	to2Bit['G'] = 2;
@@ -3486,6 +3483,7 @@ int main(int argc, char *argv[]) {
 	to2Bit['n'] = 4;
 	
 	/* IUPAC to N */
+	/*
 	to2Bit['Y'] = 4;
 	to2Bit['R'] = 4;
 	to2Bit['W'] = 4;
@@ -3507,6 +3505,29 @@ int main(int argc, char *argv[]) {
 	to2Bit['v'] = 4;
 	to2Bit['h'] = 4;
 	to2Bit['b'] = 4;
+	to2Bit['x'] = 4;
+	*/
+	to2Bit['R'] = 0;
+	to2Bit['Y'] = 1;
+	to2Bit['S'] = 2;
+	to2Bit['W'] = 3;
+	to2Bit['K'] = 2;
+	to2Bit['M'] = 0;
+	to2Bit['B'] = 1;
+	to2Bit['D'] = 0;
+	to2Bit['H'] = 3;
+	to2Bit['V'] = 2;
+	to2Bit['X'] = 4;
+	to2Bit['r'] = 0;
+	to2Bit['y'] = 1;
+	to2Bit['s'] = 2;
+	to2Bit['w'] = 3;
+	to2Bit['k'] = 2;
+	to2Bit['m'] = 0;
+	to2Bit['b'] = 1;
+	to2Bit['d'] = 0;
+	to2Bit['h'] = 3;
+	to2Bit['v'] = 2;
 	to2Bit['x'] = 4;
 	
 	/* Future RNA encoding */
@@ -3624,12 +3645,11 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				
 				INITIAL_SIZE = pow(2, ceil(log(atoi(argv[args]))/log(2))) + 0.5;
-				INITIAL_SIZE *= (1048576 >> 3);
+				INITIAL_SIZE *= 1048576;
 				if(INITIAL_SIZE == 0) {
 					fprintf(stderr, "# Invalid Chain Size parsed, using default\n");
 					INITIAL_SIZE = 1048576;
 				}
-				//INITIAL_SIZE = strtoul(argv[args], NULL, 10);
 			}
 		} else if(strcmp(argv[args], "-and") == 0) {
 			homcmp = &homcmp_and;
@@ -3641,20 +3661,6 @@ int main(int argc, char *argv[]) {
 					fprintf(stderr, "# Invalid minimum length parsed, using default\n");
 				}
 			}
-		} else if(strcmp(argv[args], "-MS") == 0) {
-			args++;
-			if(args < argc) {
-				MAX_SIZE = pow(2, ceil(log(atoi(argv[args]))/log(2))) + 0.5;
-				MAX_SIZE *= (1 << 27);
-				if(MAX_SIZE == 0) {
-					fprintf(stderr, "# Invalid Max Size parsed, using default\n");
-					MAX_SIZE = 16;
-					MAX_SIZE *= (1 << 27);
-				}
-				//MAX_SIZE = strtoul(argv[args], NULL, 10);	
-			}
-		} else if(strcmp(argv[args], "-SM") == 0) {
-			SM = 1;
 		} else if(strcmp(argv[args], "-hq") == 0) {
 			args++;
 			if(args < argc) {
@@ -3939,7 +3945,7 @@ int main(int argc, char *argv[]) {
 		
 		/* compress DB */
 		fprintf(stderr, "# Compressing templates\n");
-		if(finalDB->seq != 0) {
+		if((finalDB->size - 1) != mask) {
 			compressKMA_deconDB(finalDB);
 		} else {
 			compressKMA_deconMegaDB(finalDB); /* here */
@@ -3954,7 +3960,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 			exit(-1);
 		}
-		if(finalDB->seq != 0) {
+		if((finalDB->size - 1) != mask) {
 			hashMapKMA_dump(finalDB, out);
 		} else {
 			megaMapKMA_dump(finalDB, out);
