@@ -1045,24 +1045,30 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 	}
 	templatefilename[file_len] = 0;
 	fread(&DB_size, sizeof(unsigned), 1, infile);
-	template_lengths = malloc((DB_size << 1) * sizeof(unsigned));
-	if(!template_lengths) {
-		OOM();
-	}
-	fread(template_lengths, sizeof(unsigned), DB_size, infile);
-	template_lengths[0] = DB_size << 1;
-	if(prefix_len > 0) {
-		template_slengths = template_lengths;
-		template_lengths = 0;
+	
+	if(prefix_len) {
+		template_lengths = malloc((DB_size << 1) * sizeof(unsigned));
+		template_slengths = malloc((DB_size << 1) * sizeof(unsigned));
 		template_ulengths = malloc((DB_size << 1) * sizeof(unsigned));
-		if(!template_ulengths) {
+		if(!template_lengths || !template_slengths || !template_ulengths) {
 			OOM();
 		}
+		fread(template_slengths, sizeof(unsigned), DB_size, infile);
 		fread(template_ulengths, sizeof(unsigned), DB_size, infile);
+		fread(template_lengths, sizeof(unsigned), DB_size, infile);
+		kmerindex = *template_lengths;
 		template_ulengths[0] = DB_size << 1;
+		template_slengths[0] = DB_size << 1;
 	} else {
+		template_lengths = malloc((DB_size << 1) * sizeof(unsigned));
 		template_slengths = 0;
 		template_ulengths = 0;
+		if(!template_lengths) {
+			OOM();
+		}
+		fread(template_lengths, sizeof(unsigned), DB_size, infile);
+		kmerindex = *template_lengths;
+		template_lengths[0] = DB_size << 1;
 	}
 	
 	fclose(infile);
@@ -1080,11 +1086,13 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 	templatefilename[file_len] = 0;
 	outputfilename[out_len] = 0;
 	
-	strcat(templatefilename, ".index.b");
-	strcat(outputfilename, ".index.b");
-	appender = CP(templatefilename, outputfilename);
-	templatefilename[file_len] = 0;
-	outputfilename[out_len] = 0;
+	if(template_ulengths == 0) {
+		strcat(templatefilename, ".index.b");
+		strcat(outputfilename, ".index.b");
+		appender = CP(templatefilename, outputfilename);
+		templatefilename[file_len] = 0;
+		outputfilename[out_len] = 0;
+	}
 	
 	return 1;
 	//return appender;
@@ -3044,14 +3052,17 @@ void updateAnnots(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 
 void updateAnnots_sparse(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	
-	/* Dump annots */
+	/* Dump nibble seq */
+	fwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
 	
+	template_lengths[DB_size] = qseq->seqlen;
 	DB_size++;
 	if(DB_size >= template_ulengths[0]) {
 		template_ulengths[0] *= 2;
 		template_slengths = realloc(template_slengths, template_ulengths[0] * sizeof(unsigned));
 		template_ulengths = realloc(template_ulengths, template_ulengths[0] * sizeof(unsigned));
-		if(!template_slengths || !template_ulengths) {
+		template_lengths = realloc(template_lengths, template_ulengths[0] * sizeof(unsigned));
+		if(!template_lengths || !template_slengths || !template_ulengths) {
 			fprintf(stderr, "OOM\n");
 			exit(-1);
 		}
@@ -3265,15 +3276,30 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 		exit(-1);
 	}
-	if(template_lengths != 0) {
+	if(appender) {
+		strcat(outputfilename, ".seq.b");
+		seq_out = fopen(outputfilename, "ab");
+		outputfilename[file_len] = 0;
+		if(!seq_out) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			exit(-1);
+		}
+	} else {
+		strcat(outputfilename, ".seq.b");
+		seq_out = fopen(outputfilename, "wb");
+		outputfilename[file_len] = 0;
+		if(!seq_out) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			exit(-1);
+		}
+	}
+	
+	if(template_ulengths == 0) {
 		if(appender) {
 			strcat(outputfilename, ".index.b");
 			index_out = fopen(outputfilename, "ab");
 			outputfilename[file_len] = 0;
-			strcat(outputfilename, ".seq.b");
-			seq_out = fopen(outputfilename, "ab");
-			outputfilename[file_len] = 0;
-			if(!index_out || !seq_out) {
+			if(!index_out) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 				exit(-1);
 			}
@@ -3281,10 +3307,7 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 			strcat(outputfilename, ".index.b");
 			index_out = fopen(outputfilename, "wb");
 			outputfilename[file_len] = 0;
-			strcat(outputfilename, ".seq.b");
-			seq_out = fopen(outputfilename, "wb");
-			outputfilename[file_len] = 0;
-			if(!index_out || !seq_out) {
+			if(!index_out) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 				exit(-1);
 			}
@@ -3292,7 +3315,6 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 		}
 	} else {
 		index_out = 0;
-		seq_out = 0;
 	}
 	
 	fprintf(stderr, "# Updating DBs\n");
@@ -3360,9 +3382,10 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 		template_slengths[0] = 0;
 		fwrite(template_slengths, sizeof(unsigned), DB_size, length_out);
 		fwrite(template_ulengths, sizeof(unsigned), DB_size, length_out);
+		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
 		fclose(length_out);
 	} else {
-		template_lengths[0] = 0;
+		template_lengths[0] = kmerindex;
 		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
 		fclose(index_out);
 		fclose(seq_out);
@@ -3813,12 +3836,13 @@ int main(int argc, char *argv[]) {
 			templates->prefix = prefix;
 			templates->prefix_len = prefix_len;
 			
-			template_lengths = 0;
+			template_lengths = malloc(1024 * sizeof(unsigned));;
 			template_slengths = malloc(1024 * sizeof(unsigned));
 			template_ulengths = malloc(1024 * sizeof(unsigned));
-			if(!template_slengths || !template_ulengths) {
+			if(!template_lengths || !template_slengths || !template_ulengths) {
 				OOM();
 			}
+			*template_lengths = kmerindex;
 			template_slengths[0] = 1024;
 			template_ulengths[0] = 1024;
 		} else {

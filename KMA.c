@@ -177,7 +177,7 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 12, 0};
+int version[3] = {0, 14, 0};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -204,16 +204,20 @@ void (*printPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*printPairPtr)(int*, struct compDNA*, int, struct qseqs*, struct compDNA*, int, struct qseqs*);
 void (*deConPrintPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*ankerPtr)(int*, int*, int*, int**, int**, int*, struct compDNA*, int, int, int, int, struct qseqs*);
-void (*assemblyPtr)(struct assem*, int, FILE**, int, FILE*, FILE*, char*, struct aln*, struct aln*, char*, struct qseqs*);
+void (*assemblyPtr)(struct assem*, int, FILE**, int, FILE*, FILE*, char*, struct aln*, struct aln*, struct qseqs*, struct qseqs*);
 void (*destroyPtr)(int);
 struct hashMap_index * (*alignLoadPtr)(FILE*, FILE*, int, long unsigned, long unsigned);
 int * (*hashMap_get)(long unsigned);
 void (*kmerScan)(int*, int*, int*, int*, struct compDNA*, struct compDNA*, struct qseqs*, int*);
 void (*save_kmers_pair)(int*, int*, int*, int*, int*, int*, struct compDNA*, struct compDNA*, struct qseqs*, struct qseqs*, int*);
 void (*printFsa_ptr)(struct qseqs*, struct qseqs*, struct compDNA*);
+void (*printFsa_pair_ptr)(struct qseqs*, struct qseqs*, struct qseqs*, struct qseqs*, struct compDNA*);
 void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, char*, char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*);
 long unsigned (*getKmerP)(long unsigned *, unsigned);
 int (*cmp)(int, int);
+int (*significantBase)(int, int);
+char (*baseCall)(char, int, int, int, struct assem*, short unsigned*);
+
 
 /*
  FUNCTIONS
@@ -2916,7 +2920,8 @@ void printPair(int *out_Tem, struct compDNA *qseq, int bestScore, struct qseqs *
 
 FILE * printFrags(char *filename, struct frag **alignFrags) {
 	
-	int i, seqlen;
+	static int buffer[7];
+	int i;
 	FILE *OUT;
 	struct frag *alignFrag, *next;
 	
@@ -2930,16 +2935,17 @@ FILE * printFrags(char *filename, struct frag **alignFrags) {
 			for(alignFrag = alignFrags[i]; alignFrag != 0; alignFrag = next) {
 				next = alignFrag->next;
 				
-				fwrite(&(int){i}, sizeof(int), 1, OUT);
-				fwrite(&(int){alignFrag->q_len}, sizeof(int), 1, OUT);
+				buffer[0] = i;
+				buffer[1] = alignFrag->q_len;
+				buffer[2] = alignFrag->bestHits;
+				buffer[3] = alignFrag->score;
+				buffer[4] = alignFrag->start;
+				buffer[5] = alignFrag->end;
+				buffer[6] = strlen(alignFrag->header)+1;
+				
+				fwrite(buffer, sizeof(int), 7, OUT);
 				fwrite(alignFrag->qseq, 1, alignFrag->q_len, OUT);
-				fwrite(&(int){alignFrag->bestHits}, sizeof(int), 1, OUT);
-				fwrite(&(int){alignFrag->score}, sizeof(int), 1, OUT);
-				fwrite(&(int){alignFrag->start}, sizeof(int), 1, OUT);
-				fwrite(&(int){alignFrag->end}, sizeof(int), 1, OUT);
-				seqlen = strlen(alignFrag->header)+1;
-				fwrite(&(int){seqlen}, sizeof(int), 1, OUT);
-				fwrite(alignFrag->header, 1, seqlen, OUT);
+				fwrite(alignFrag->header, 1, buffer[6], OUT);
 				
 				free(alignFrag->qseq);
 				free(alignFrag->header);
@@ -2953,7 +2959,6 @@ FILE * printFrags(char *filename, struct frag **alignFrags) {
 	
 	return fopen(filename, "rb");
 }
-
 
 void bootFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compressor) {
 	
@@ -3013,7 +3018,23 @@ void printFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compress
 	resetComp(compressor);
 }
 
-void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *header2, struct qseqs *qseq2, struct compDNA *compressor) {
+void printFsaMt1(struct qseqs *header, struct qseqs *qseq, struct compDNA *compressor) {
+	
+	template_lengths[1] = qseq->len;
+	template_lengths[6] = header->len;
+	
+	fwrite(template_lengths, sizeof(int), 7, stdout);
+	fwrite(qseq->seq, 1, qseq->len, stdout);
+	fwrite(header->seq + 1, 1, header->len, stdout);
+}
+
+void printFsa_pairMt1(struct qseqs *header, struct qseqs *qseq, struct qseqs *header_r, struct qseqs *qseq_r, struct compDNA *compressor) {
+	
+	printFsaMt1(header, qseq, compressor);
+	printFsaMt1(header_r, qseq_r, compressor);
+	
+}
+void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *header_r, struct qseqs *qseq_r, struct compDNA *compressor) {
 	
 	static int buffer[4];
 	
@@ -3036,21 +3057,21 @@ void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *heade
 	resetComp(compressor);
 	
 	/* translate to 2bit */
-	if(qseq2->len >= compressor->size) {
+	if(qseq_r->len >= compressor->size) {
 		freeComp(compressor);
-		allocComp(compressor, qseq2->len);
+		allocComp(compressor, qseq_r->len);
 	}
-	compDNA(compressor, qseq2->seq, qseq2->len);
+	compDNA(compressor, qseq_r->seq, qseq_r->len);
 	
 	buffer[0] = compressor->seqlen;
 	buffer[1] = compressor->complen;
 	buffer[2] = compressor->N[0];
-	buffer[3] = header2->len;
+	buffer[3] = header_r->len;
 	
 	fwrite(buffer, sizeof(int), 4, stdout);
 	fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
 	fwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	fwrite((header2->seq + 1), 1, header2->len, stdout);
+	fwrite((header_r->seq + 1), 1, header_r->len, stdout);
 	resetComp(compressor);
 }
 
@@ -5571,7 +5592,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 				} else if(qseq->len > kmersize) {
@@ -5590,7 +5611,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 				} else if(qseq->len > kmersize) {
@@ -5741,7 +5762,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 				} else if(qseq->len > kmersize) {
@@ -5760,7 +5781,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 				} else if(qseq->len > kmersize) {
@@ -7774,7 +7795,7 @@ struct mems {
 	int t_e;
 };
 
-int *chain, *best, *back, size;
+int *chain = 0, *best = 0, *back = 0, size = 0;
 
 int getMEM(struct mems *mem_ptr, int *mems, int end) {
 	
@@ -7990,87 +8011,96 @@ struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct
 	template_index = templates_index[template_name];
 	t_len = template_lengths[template_name];
 	
-	if(!chain || size < q_len) {
-		size = q_len << 1;
-		free(chain);
-		free(best);
-		free(back);
-		chain = calloc(size, sizeof(int));
-		best = calloc(size, sizeof(int));
-		back = calloc(size, sizeof(int));
-		if(!chain || !best || !back) {
-			ERROR();
-		}
-	} else {
-		for(i = 0; i < q_len; i++) {
-			chain[i] = 0;
-			best[i] = 0;
-			back[i] = 0;
-		}
-	}
-	
-	/* find seeds */
-	mem_count = 0;
-	i = 0;
-	while(i < q_len) {
-		end = charpos(qseq, 4, i, q_len);
-		if(end == -1) {
-			end = q_len;
-		}
-		
-		if(i < end - kmersize) {
-			key = makeKmer(qseq, i, kmersize - 1);
-			i += (kmersize - 1);
+	if(template_name) {
+		if(!chain || size < q_len) {
+			size = q_len << 1;
+			free(chain);
+			free(best);
+			free(back);
+			chain = calloc(size, sizeof(int));
+			best = calloc(size, sizeof(int));
+			back = calloc(size, sizeof(int));
+			if(!chain || !best || !back) {
+				ERROR();
+			}
 		} else {
-			i = end + 1;
+			for(i = 0; i < q_len; i++) {
+				chain[i] = 0;
+				best[i] = 0;
+				back[i] = 0;
+			}
 		}
 		
-		while(i < end) {
-			key = ((key << 2) | qseq[i]) & mask;
-			if((value = hashMap_index_get_bound(template_index, key, min, max)) < 0) {
-				value = 0;
-				chain[i - kmersize + 1] = -1;
+		/* find seeds */
+		mem_count = 0;
+		i = 0;
+		while(i < q_len) {
+			end = charpos(qseq, 4, i, q_len);
+			if(end == -1) {
+				end = q_len;
 			}
 			
-			if(0 < value) {
-				i -= (kmersize - 1);
-				
-				/* backseed for ambiguos seeds */
-				prev = value - 1;
-				for(j = i - 1; j >= 0 && prev >= 0 && chain[j] == -1 && qseq[j] == getNuc(template_index->seq, (prev - 1)); j--, prev--) {
-					chain[j] = prev;
-				}
-				
-				/* k-mer */
-				for(j = 0; j < kmersize; i++, j++, value++) {
-					chain[i] = value;
-				}
-				
-				/* extend */
-				while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, (value - 1))) {
-					chain[i] = value;
-					i++;
-					value++;
-				}
-				
-				/* update position */
-				if(i < end - kmersize && value != t_len) {
-					key = makeKmer(qseq, i, kmersize - 1);
-					i += (kmersize - 1);
-				} else {
-					i = end + 1;
-				}
-				mem_count++;
+			if(i < end - kmersize) {
+				key = makeKmer(qseq, i, kmersize - 1);
+				i += (kmersize - 1);
 			} else {
-				i++;
+				i = end + 1;
 			}
+			
+			while(i < end) {
+				key = ((key << 2) | qseq[i]) & mask;
+				if((value = hashMap_index_get_bound(template_index, key, min, max)) < 0) {
+					value = 0;
+					chain[i - kmersize + 1] = -1;
+				}
+				
+				if(0 < value) {
+					i -= (kmersize - 1);
+					
+					/* backseed for ambiguos seeds */
+					prev = value - 1;
+					for(j = i - 1; j >= 0 && prev >= 0 && chain[j] == -1 && qseq[j] == getNuc(template_index->seq, (prev - 1)); j--, prev--) {
+						chain[j] = prev;
+					}
+					
+					/* k-mer */
+					for(j = 0; j < kmersize; i++, j++, value++) {
+						chain[i] = value;
+					}
+					
+					/* extend */
+					while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, (value - 1))) {
+						chain[i] = value;
+						i++;
+						value++;
+					}
+					
+					/* update position */
+					if(i < end - kmersize && value != t_len) {
+						key = makeKmer(qseq, i, kmersize - 1);
+						i += (kmersize - 1);
+					} else {
+						i = end + 1;
+					}
+					mem_count++;
+				} else {
+					i++;
+				}
+			}
+			i = end + 1;
 		}
-		i = end + 1;
 	}
 	
 	/* get best seed chain */
 	stop = chainMEMs(chain, q_len, 1);
-	
+	/*for(i = 0; i < q_len; i++) {
+		fprintf(stderr, "%d ", best[i]);
+	}
+	fprintf(stderr, "\n");
+	for(i = 0; i < q_len; i++) {
+		fprintf(stderr, "%d ", chain[i]);
+	}
+	fprintf(stderr, "\n");*/
 	//if((stop * kmersize) < (q_len - stop + kmersize)) {
 	if(stop < (q_len >> 5)) {
 		Stat.score = 0;
@@ -8091,9 +8121,7 @@ struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct
 	i = 0;
 	while(i < q_len) {
 		if(best[i] > prev_index) {
-			
 			value = best[i] - 1;
-			
 			if(value < Stat.pos) {
 				Stat.pos = value;
 				/* Get intervals in query and template to align */
@@ -8185,7 +8213,7 @@ struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct
 			/* Expand from matching k-mer */
 			prev_index = value;
 			stop = 0;
-			while(i < end && prev_index < t_len && !stop) {
+			while(i < q_len && prev_index < t_len && !stop) {
 				nuc = getNuc(template_index->seq, prev_index);
 				if(qseq[i] == nuc) {
 					Stat.score += d[nuc][nuc];
@@ -8495,14 +8523,215 @@ struct alnScore KMA_score(const int template_name, const char *qseq, int q_len, 
 	return Stat;
 }
 
-void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, char *qseq, struct qseqs *header) {
+int preseed(struct hashMap_index *template_index, char *qseq, int q_len) {
 	
-	int i, j, t_len, q_len, aln_len, asm_len, start, end, bias, myBias, gaps;
+	int i;
+	
+	if(exhaustive) {
+		return 0;
+	}
+	
+	for(i = 0; i < q_len; i += kmersize) {
+		if(hashMap_index_get_bound(template_index, makeKmer(qseq, i, kmersize), 0, template_index->len) != 0) {
+			return 0;
+		}
+	}
+	
+	return i;
+}
+
+int anker_rc(const int template_name, char *qseq, int q_len) {
+	
+	int i, j, rc, end, mem_count, score, score_r, bestScore, value, t_len;
+	int prev, *track;
+	long unsigned key;
+	struct hashMap_index *template_index;
+	
+	t_len = template_lengths[template_name];
+	template_index = templates_index[template_name];
+	
+	if(!chain || size < q_len) {
+		size = q_len << 1;
+		free(chain);
+		free(best);
+		free(back);
+		chain = calloc(size, sizeof(int));
+		best = calloc(size, sizeof(int));
+		back = calloc(size, sizeof(int));
+		if(!chain || !best || !back) {
+			ERROR();
+		}
+	} else {
+		for(i = 0; i < q_len; i++) {
+			chain[i] = 0;
+			best[i] = 0;
+			back[i] = 0;
+		}
+	}
+	
+	/* find seeds */
+	track = chain;
+	bestScore = 0;
+	score = 0;
+	score_r = 0;
+	for(rc = 0; rc < 2; rc++) {
+		if(rc) {
+			strrc(qseq, q_len);
+			track = best;
+			score = score_r;
+		}
+		score_r = 0;
+		i = preseed(template_index, qseq, q_len);
+		while(i < q_len) {
+			end = charpos(qseq, 4, i, q_len);
+			if(end == -1) {
+				end = q_len;
+			}
+			if(i < end - kmersize) {
+				key = makeKmer(qseq, i, kmersize - 1);
+				i += (kmersize - 1);
+			} else {
+				i = end + 1;
+			}
+			
+			while(i < end) {
+				key = ((key << 2) | qseq[i]) & mask;
+				if((value = hashMap_index_get_bound(template_index, key, 0, t_len)) < 0) {
+					value = 0;
+					track[i - kmersize + 1] = -1;
+				}
+				
+				if(0 < value) {
+					i -= (kmersize - 1);
+					/* backseed for ambiguos seeds */
+					prev = value - 1;
+					for(j = i - 1; j >= 0 && prev >= 0 && track[j] == -1 && qseq[j] == getNuc(template_index->seq, (prev - 1)); j--, prev--) {
+						track[j] = prev;
+						score_r++;
+					}
+					/* k-mer */
+					for(j = 0; j < kmersize; i++, j++, value++) {
+						track[i] = value;
+					}
+					score_r += kmersize;
+					
+					/* extend */
+					while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, (value - 1))) {
+						track[i] = value;
+						i++;
+						value++;
+						score_r++;
+					}
+					
+					/* update position */
+					if(i < end - kmersize && value != t_len) {
+						key = makeKmer(qseq, i, kmersize - 1);
+						i += (kmersize - 1);
+					} else {
+						i = end + 1;
+					}
+				} else {
+					i++;
+				}
+			}
+			i = end + 1;
+		}
+		if(bestScore < score_r) {
+			bestScore = score_r;
+		}
+	}
+	
+	if(bestScore * kmersize < (q_len - kmersize - bestScore)) {
+		bestScore = 0;
+	} else if(bestScore == score) {
+		strrc(qseq, q_len);
+		for(i = 0; i < q_len; i++) {
+			best[i] = 0;
+		}
+		Score[template_name] += bestScore;
+	} else {
+		track = best;
+		best = chain;
+		chain = track;
+		for(i = 0; i < q_len; i++) {
+			best[i] = 0;
+		}
+		Score[template_name] += bestScore;
+	}
+	
+	return bestScore;
+}
+
+int significantNuc(int X, int Y) {
+	return (p_chisqr(pow(X - Y, 2) / (X + Y)) <= evalue && Y < X);
+}
+
+int significantAnd90Nuc(int X, int Y) {
+	return (p_chisqr(pow(X - Y, 2) / (X + Y)) <= evalue && (9 * (X + Y) <= 10 * X));
+}
+
+char baseCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, short unsigned *calls) {
+	
+	/* determine base at current position */
+	if(depthUpdate == 0) {
+			aligned_assem->q[i] = '-';
+	} else {
+		/* Use MC Neymars test to test significance of the base call */
+		if(significantBase(bestScore, depthUpdate - bestScore)) {
+			aligned_assem->q[i] = bestNuc;
+		} else if(bestNuc == '-' && aligned_assem->t[i] != '-') {
+			aligned_assem->q[i] = 'n';
+		} else {
+			aligned_assem->q[i] = tolower(bestNuc);
+		}
+	}
+	
+	return bestNuc;
+}
+
+char nanoCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, short unsigned *calls) {
+	
+	// calls = assembly[pos]
+	
+	int j, bestBaseScore;
+	
+	/* determine base at current position */
+	if(depthUpdate == 0) {
+			aligned_assem->q[i] = '-';
+	} else {
+		/* Use MC Neymars test to test significance of the base call */
+		if(significantBase(bestScore, depthUpdate - bestScore)) {
+			aligned_assem->q[i] = bestNuc;
+		} else if(bestNuc == '-' && aligned_assem->t[i] != '-') {
+			bestBaseScore = 0;
+			for(j = 0; j < 5; j++) {
+				if(bestBaseScore < calls[j]) {
+					bestBaseScore = calls[j];
+					bestNuc = j;
+				}
+			}
+			if(bestBaseScore == 0) {
+				aligned_assem->q[i] = '-';
+			} else {
+				aligned_assem->q[i] = tolower(bases[bestNuc]);
+			}
+		} else {
+			aligned_assem->q[i] = tolower(bestNuc);
+		}
+	}
+	
+	return bestNuc;
+}
+
+void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
+	
+	static int buffer[7];
+	int i, j, t_len, aln_len, asm_len, start, end, bias, myBias, gaps;
 	int read_score, depthUpdate, bestBaseScore, pos, file_len, bestScore;
 	int nextTemplate, file_i, max_asmlen, nextGap, stats[4], *assemNext;
 	unsigned depth, coverScore;
 	short unsigned (*assembly)[6];
-	double q_value, p_value, score;
+	double score;
 	char bestNuc;
 	FILE *file;
 	struct alnScore alnStat;
@@ -8530,127 +8759,163 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	while(file_i < file_count) {
 		file = files[file_i];
 		if(file != 0) {
-			fread(&nextTemplate, sizeof(int), 1, file);
-			if(nextTemplate == template) {
+			fread(buffer, sizeof(int), 7, file);
+			if((nextTemplate = buffer[0]) == template) {
 				/* load frag */
-				fread(&q_len, sizeof(int), 1, file);
-				fread(qseq, 1, q_len, file);
+				qseq->len = buffer[1];
+				stats[0] = buffer[2];
+				read_score = buffer[3];
+				stats[2] = buffer[4];
+				stats[3] = buffer[5];
+				header->len = buffer[6];
 				
-				/*
-				stats[0] = 1;
-				fread(&stats[1], sizeof(int), 1, file);
-				fread(&stats[2], sizeof(int), 1, file);
-				fread(&stats[3], sizeof(int), 1, file);
-				*/
-				fread(stats, sizeof(int), 4, file);
-				fread(&header->len, sizeof(int), 1, file);
+				if(delta < qseq->len) {
+					free(qseq->seq);
+					qseq->size = qseq->len << 1;
+					qseq->seq = malloc(qseq->size);
+					if(!qseq->seq) {
+						ERROR();
+					}
+				}
+				if(header->size < header->len) {
+					header->size = header->len + 1;
+					free(header->seq);
+					header->seq = malloc(header->size);
+					if(!header->seq) {
+						ERROR();
+					}
+				}
+				fread(qseq->seq, 1, qseq->len, file);
 				fread(header->seq, 1, header->len, file);
 				
-				/* Update assembly with read */
-				/* Start with alignment */
-				alnStat = KMA(template, qseq, q_len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
-				//alnStat = KMA(template, qseq, q_len, aligned, gap_align, 0, t_len);
-				
-				/* get read score */
-				aln_len = alnStat.len;
-				start = alnStat.pos;
-				end = start + aln_len - alnStat.gaps;
-				
-				/* Get normed score */
-				read_score = alnStat.score;
-				if(aln_len > 0) {
-					score = 1.0 * read_score / aln_len;
-				} else {
-					score = 0;
+				if(delta < qseq->len) {
+					delta = qseq->len << 1;
+					free(aligned->t);
+					free(aligned->s);
+					free(aligned->q);
+					free(gap_align->t);
+					free(gap_align->s);
+					free(gap_align->q);
+					aligned->t = malloc((delta + 1) << 1);
+					aligned->s = malloc((delta + 1) << 1);
+					aligned->q = malloc((delta + 1) << 1);
+					gap_align->t = malloc((delta + 1) << 1);
+					gap_align->s = malloc((delta + 1) << 1);
+					gap_align->q = malloc((delta + 1) << 1);
+					if(!aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
+						ERROR();
+					}
 				}
 				
-				if(read_score > kmersize && score > scoreT) {
+				/* Update assembly with read */
+				if(read_score || anker_rc(template, qseq->seq, qseq->len)) {
+					/* Start with alignment */
+					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
+					//alnStat = KMA(template, qseq, q_len, aligned, gap_align, 0, t_len);
 					
-					stats[1] = read_score;
-					stats[2] = start;
-					stats[3] = end;
+					/* get read score */
+					aln_len = alnStat.len;
+					start = alnStat.pos;
+					end = start + aln_len - alnStat.gaps;
 					
-					/* Update backbone and counts */
-					i = 0;
-					pos = start;
-					while(i < aln_len) {
-						if(aligned->t[i] == 5) { // Template gap, insertion
-							if(pos >= t_len) {
+					/* Get normed score */
+					read_score = alnStat.score;
+					if(aln_len > 0) {
+						score = 1.0 * read_score / aln_len;
+					} else {
+						score = 0;
+					}
+					
+					if(read_score > kmersize && score > scoreT) {
+						
+						stats[1] = read_score;
+						stats[2] = start;
+						stats[3] = end;
+						
+						/* Update backbone and counts */
+						i = 0;
+						pos = start;
+						while(i < aln_len) {
+							if(aligned->t[i] == 5) { // Template gap, insertion
+								if(pos >= t_len) {
+									assembly[pos][aligned->q[i]]++;
+									i++;
+									pos = assemNext[pos];
+								} else {
+									/* get estimate for non insertions */
+									myBias = 0;
+									for(j = 0; j < 6; j++) {
+										myBias += assembly[pos][j];
+									}
+									if(myBias > 0) {
+										myBias--;
+									}
+									
+									/* find position of insertion */
+									gaps = pos;
+									pos--;
+									while(assemNext[pos] != gaps) {
+										pos = assemNext[pos];
+									}
+									
+									while(i < aln_len && aligned->t[i] == 5) {
+										assemNext[pos] = nextGap;
+										pos = assemNext[pos];
+										assemNext[pos] = gaps;
+										nextGap++;
+										for(j = 0; j < 5; j++) {
+											assembly[pos][j] = 0;
+										}
+										assembly[pos][5] = myBias;
+										assembly[pos][aligned->q[i]]++;
+										
+										i++;
+										if(nextGap == max_asmlen) {
+											max_asmlen += t_len;
+											assembly = realloc(assembly, max_asmlen * 6 * sizeof(short unsigned));
+											assemNext = realloc(assemNext, max_asmlen * sizeof(int));
+											if(!assembly || !assemNext) {
+												ERROR();
+											}
+										}
+										asm_len++;
+									}
+									pos = assemNext[pos];
+								}
+							} else if(pos >= t_len) { // Old template gap, not present in this read
+								assembly[pos][5]++;
+								pos = assemNext[pos];
+							} else { // (Match, mismatch) and (Query gap, deletion)
 								assembly[pos][aligned->q[i]]++;
 								i++;
 								pos = assemNext[pos];
-							} else {
-								/* get estimate for non insertions */
-								myBias = 0;
-								for(j = 0; j < 6; j++) {
-									myBias += assembly[pos][j];
-								}
-								if(myBias > 0) {
-									myBias--;
-								}
-								
-								/* find position of insertion */
-								gaps = pos;
-								pos--;
-								while(assemNext[pos] != gaps) {
-									pos = assemNext[pos];
-								}
-								
-								while(i < aln_len && aligned->t[i] == 5) {
-									assemNext[pos] = nextGap;
-									pos = assemNext[pos];
-									assemNext[pos] = gaps;
-									nextGap++;
-									for(j = 0; j < 5; j++) {
-										assembly[pos][j] = 0;
-									}
-									assembly[pos][5] = myBias;
-									assembly[pos][aligned->q[i]]++;
-									
-									i++;
-									if(nextGap == max_asmlen) {
-										max_asmlen += t_len;
-										assembly = realloc(assembly, max_asmlen * 6 * sizeof(short unsigned));
-										assemNext = realloc(assemNext, max_asmlen * sizeof(int));
-										if(!assembly || !assemNext) {
-											ERROR();
-										}
-									}
-									asm_len++;
-								}
-								pos = assemNext[pos];
 							}
-						} else if(pos >= t_len) { // Old template gap, not present in this read
-							assembly[pos][5]++;
-							pos = assemNext[pos];
-						} else { // (Match, mismatch) and (Query gap, deletion)
-							assembly[pos][aligned->q[i]]++;
-							i++;
-							pos = assemNext[pos];
 						}
+						
+						/* Convert fragment */
+						for(i = 0; i < qseq->len; i++) {
+							 qseq->seq[i] = bases[qseq->seq[i]];
+						}
+						qseq->seq[qseq->len] = 0;
+						
+						/* Save fragment */
+						fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 					}
-					
-					/* Convert fragment */
-					for(i = 0; i < q_len; i++) {
-						 qseq[i] = bases[qseq[i]];
-					}
-					qseq[q_len] = 0;
-					
-					/* Save fragment */
-					fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 				}
 			} else if(nextTemplate == -1) {
-				fclose(file);
+				if(template) {
+					fclose(file);
+				} else {
+					pclose(file);
+				}
 				files[file_i] = 0;
 				file_i++;
 			} else if(nextTemplate < template) {
-				fread(&q_len, sizeof(int), 1, file);
-				fseek(file, q_len + 4 * sizeof(int), SEEK_CUR);
-				fread(&q_len, sizeof(int), 1, file);
-				fseek(file, q_len, SEEK_CUR);
+				/* Move pointer forward */
+				fseek(file, buffer[1] + buffer[6], SEEK_CUR);
 			} else {
 				/* Move pointer back */
-				fseek(file, (-1) * sizeof(int), SEEK_CUR);
+				fseek(file, (-7) * sizeof(int), SEEK_CUR);
 				file_i++;
 			}
 		} else {
@@ -8713,18 +8978,8 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 		}
 		
 		/* determine base at current position */
-		if(depthUpdate == 0 || bestNuc == '-') {
-			aligned_assem->q[i] = '-';
-		} else {
-			/* Use MC Neymars test to test significance of the base call */
-			q_value = pow(bestScore - (depthUpdate - bestScore), 2) / depthUpdate;
-			p_value = p_chisqr(q_value);
-			if(p_value <= evalue && bestScore > (depthUpdate - bestScore)) {
-				aligned_assem->q[i] = bestNuc;
-			} else {
-				aligned_assem->q[i] = tolower(bestNuc);
-			}
-		}
+		bestNuc = baseCall(bestNuc, i, bestScore, depthUpdate, aligned_assem, assembly[pos]);
+		
 		if(bestNuc != '-') {
 			depth += depthUpdate;
 		}
@@ -8738,13 +8993,6 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 		fprintf(matrix_out, "#%s\n", template_names[template]);
 		for(i = 0, pos = 0; i < asm_len; i++, pos = assemNext[pos]) {
 			fprintf(matrix_out, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", aligned_assem->t[i], assembly[pos][0], assembly[pos][1], assembly[pos][2], assembly[pos][3], assembly[pos][4], assembly[pos][5]);
-			/*
-			fprintf(matrix_out, "%c", aligned_assem->t[i]);
-			for(j = 0; j < 6; j++) {
-				fprintf(matrix_out, "\t%hu", assembly[i][j]);
-			}
-			fprintf(matrix_out, "\n");
-			*/
 		}
 		fprintf(matrix_out, "\n");
 	}
@@ -8777,13 +9025,14 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	free(assemNext);
 }
 
-void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, char *qseq, struct qseqs *header) {
+void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
 	
-	int i, j, t_len, q_len, aln_len, start, end, file_len, file_i, stats[4];
+	static int buffer[7];
+	int i, j, t_len, aln_len, start, end, file_len, file_i, stats[4];
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
 	unsigned depth, coverScore;
 	short unsigned (*assembly)[6];
-	double q_value, p_value, score;
+	double score;
 	char bestNuc;
 	FILE *file;
 	struct alnScore alnStat;
@@ -8812,72 +9061,109 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	while(file_i < file_count) {
 		file = files[file_i];
 		if(file != 0) {
-			fread(&nextTemplate, sizeof(int), 1, file);
-			if(nextTemplate == template) {
+			fread(buffer, sizeof(int), 7, file);
+			if((nextTemplate = buffer[0]) == template) {
 				/* load frag */
-				fread(&q_len, sizeof(int), 1, file);
-				fread(qseq, 1, q_len, file);
+				qseq->len = buffer[1];
+				stats[0] = buffer[2];
+				read_score = buffer[3];
+				stats[2] = buffer[4];
+				stats[3] = buffer[5];
+				header->len = buffer[6];
 				
-				fread(stats, sizeof(int), 4, file);
-				
-				fread(&header->len, sizeof(int), 1, file);
+				if(delta < qseq->len) {
+					free(qseq->seq);
+					qseq->size = qseq->len << 1;
+					qseq->seq = malloc(qseq->size);
+					if(!qseq->seq) {
+						ERROR();
+					}
+				}
+				if(header->size < header->len) {
+					header->size = header->len + 1;
+					free(header->seq);
+					header->seq = malloc(header->size);
+					if(!header->seq) {
+						ERROR();
+					}
+				}
+				fread(qseq->seq, 1, qseq->len, file);
 				fread(header->seq, 1, header->len, file);
 				
-				/* Update assembly with read */
-				/* Start with alignment */
-				alnStat = KMA(template, qseq, q_len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
-				
-				/* get read score */
-				aln_len = alnStat.len;
-				start = alnStat.pos;
-				end = start + aln_len - alnStat.gaps;
-				
-				/* Get normed score */
-				read_score = alnStat.score;
-				if(aln_len > 0) {
-					score = 1.0 * read_score / aln_len;
-				} else {
-					score = 0;
+				if(delta < qseq->len) {
+					delta = qseq->len << 1;
+					free(aligned->t);
+					free(aligned->s);
+					free(aligned->q);
+					free(gap_align->t);
+					free(gap_align->s);
+					free(gap_align->q);
+					aligned->t = malloc((delta + 1) << 1);
+					aligned->s = malloc((delta + 1) << 1);
+					aligned->q = malloc((delta + 1) << 1);
+					gap_align->t = malloc((delta + 1) << 1);
+					gap_align->s = malloc((delta + 1) << 1);
+					gap_align->q = malloc((delta + 1) << 1);
+					if(!aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
+						ERROR();
+					}
 				}
 				
-				if(read_score > kmersize && score > scoreT) {
+				/* Update assembly with read */
+				if(read_score || anker_rc(template, qseq->seq, qseq->len)) {
+					/* Start with alignment */
+					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
 					
-					stats[1] = read_score;
-					stats[2] = start;
-					stats[3] = end;
+					/* get read score */
+					aln_len = alnStat.len;
+					start = alnStat.pos;
+					end = start + aln_len - alnStat.gaps;
 					
-					/* Update backbone and counts */
-					for(i = 0, pos = start; i < aln_len; i++) {
-						if(aligned->t[i] == aligned_assem->t[pos]) {
-							assembly[pos][aligned->q[i]]++;
-							pos++;
+					/* Get normed score */
+					read_score = alnStat.score;
+					if(aln_len > 0) {
+						score = 1.0 * read_score / aln_len;
+					} else {
+						score = 0;
+					}
+					
+					if(read_score > kmersize && score > scoreT) {
+						
+						stats[1] = read_score;
+						stats[2] = start;
+						stats[3] = end;
+						
+						/* Update backbone and counts */
+						for(i = 0, pos = start; i < aln_len; i++) {
+							if(aligned->t[i] == aligned_assem->t[pos]) {
+								assembly[pos][aligned->q[i]]++;
+								pos++;
+							}
 						}
+						
+						/* Convert fragment */
+						for(i = 0; i < qseq->len; i++) {
+							 qseq->seq[i] = bases[qseq->seq[i]];
+						}
+						qseq->seq[qseq->len] = 0;
+						
+						fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 					}
-					
-					/* Convert fragment */
-					for(i = 0; i < q_len; i++) {
-						 qseq[i] = bases[qseq[i]];
-					}
-					qseq[q_len] = 0;
-					
-					/* Save fragment */
-					/*for(i = 0; i < q_len; i++) {
-						fprintf(frag_out, "%c", bases[qseq[i]]);
-					}*/
-					fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 				}
 			} else if (nextTemplate == -1) {
-				fclose(file);
+				if(template) {
+					fclose(file);
+				} else {
+					pclose(file);
+				}
 				files[file_i] = 0;
 				file_i++;
 			} else if(nextTemplate < template) {
-				fread(&q_len, sizeof(int), 1, file);
-				fseek(file, q_len + 4 * sizeof(int), SEEK_CUR);
-				fread(&q_len, sizeof(int), 1, file);
-				fseek(file, q_len, SEEK_CUR);
+				/* Move pointer forward */
+				fseek(file, buffer[1] + buffer[6], SEEK_CUR);
 			} else {
 				/* Move pointer back */
-				fseek(file, (-1) * sizeof(int), SEEK_CUR);
+				fseek(file, (-7) * sizeof(int), SEEK_CUR);
 				file_i++;
 			}
 		} else {
@@ -8924,18 +9210,8 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 		}
 		
 		/* determine base at current position */
-		if(depthUpdate == 0 || bestNuc == '-') {
-			aligned_assem->q[i] = '-';
-		} else {
-			/* Use MC Neymars test to test significance of the base call */
-			q_value = pow(bestScore - (depthUpdate - bestScore), 2) / depthUpdate;
-			p_value = p_chisqr(q_value);
-			if(p_value <= evalue && bestScore > (depthUpdate - bestScore)) {
-				aligned_assem->q[i] = bestNuc;
-			} else {
-				aligned_assem->q[i] = tolower(bestNuc);
-			}
-		}
+		bestNuc = baseCall(bestNuc, i, bestScore, depthUpdate, aligned_assem, assembly[i]);
+		
 		if(bestNuc != '-') {
 			depth += depthUpdate;
 		}
@@ -8958,13 +9234,6 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 		fprintf(matrix_out, "#%s\n", template_names[template]);
 		for(i = 0; i < t_len; i++) {
 			fprintf(matrix_out, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", aligned_assem->t[i], assembly[i][0], assembly[i][1], assembly[i][2], assembly[i][3], assembly[i][4], assembly[i][5]);
-			/*
-			fprintf(matrix_out, "%c", aligned_assem->t[i]);
-			for(j = 0; j < 6; j++) {
-				fprintf(matrix_out, "\t%hu", assembly[i][j]);
-			}
-			fprintf(matrix_out, "\n");
-			*/
 		}
 		fprintf(matrix_out, "\n");
 	}
@@ -9708,13 +9977,13 @@ void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct c
 void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, best_read_score;
-	int template, bestHits, t_len, read_counter, start, end, q_len, aln_len;
+	int template, bestHits, t_len, read_counter, start, end, aln_len;
 	int bestTemplate, fragCount, fileCount, maxFrag, read_score, rc_flag;
 	int coverScore, bias, tmp_start, tmp_end, *matched_templates;
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
 	long *index_indexes, *seq_indexes;
-	char *outZipped, *qseq, *qseq_r;
+	char *outZipped;
 	double etta, tmp_score, bestScore, depth, id, q_id, cover, q_cover;
 	double expected, q_value, p_value;
 	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out, *matrix_out;
@@ -9725,7 +9994,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	struct assem *aligned_assem;
 	struct frag **alignFrags, *alignFrag;
 	struct compDNA *qseq_comp, *qseq_r_comp;
-	struct qseqs *header, *header_r;
+	struct qseqs *qseq, *qseq_r, *header, *header_r;
 	
 	/* open pipe */
 	inputfile = popen(exePrev, "r");
@@ -9761,15 +10030,15 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
 	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len);
-	qseq = malloc(delta + 1);
-	qseq_r = malloc(delta + 1);
 	qseq_comp = malloc(sizeof(struct compDNA));
 	qseq_r_comp = malloc(sizeof(struct compDNA));
 	index_indexes = malloc((DB_size + 1) * sizeof(long));
 	seq_indexes = malloc((DB_size + 1) * sizeof(long));
-	if(!qseq || !qseq_r || !qseq_comp || !qseq_r_comp || !outZipped || !index_indexes || !seq_indexes) {
+	if(!qseq_comp || !qseq_r_comp || !outZipped || !index_indexes || !seq_indexes) {
 		ERROR();
 	}
+	qseq = setQseqs(delta);
+	qseq_r = setQseqs(delta);
 	header = setQseqs(256);
 	header_r = setQseqs(256);
 	allocComp(qseq_comp, delta);
@@ -9877,27 +10146,29 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		} else { // PE
 			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, inputfile);
 			read_score = abs(read_score);
-			t_len = qseq_r_comp->seqlen;
+			qseq_r->len = qseq_r_comp->seqlen;
 		}
 		
-		q_len = qseq_comp->seqlen;
+		qseq->len = qseq_comp->seqlen;
 		
-		if(delta <= MAX(q_len, t_len)) {
-			delta = MAX(q_len, t_len);
+		if(delta <= MAX(qseq->len, qseq_r->len)) {
+			delta = MAX(qseq->len, qseq_r->len);
 			delta <<= 1;
-			free(qseq);
-			free(qseq_r);
-			qseq = malloc(delta);
-			qseq_r = malloc(delta);
-			if(!qseq || !qseq_r) {
+			qseq->size = delta;
+			qseq_r->size = delta;
+			free(qseq->seq);
+			free(qseq_r->seq);
+			qseq->seq = malloc(delta);
+			qseq_r->seq = malloc(delta);
+			if(!qseq->seq || !qseq_r->seq) {
 				ERROR();
 			}
 		}
 		
 		if(read_score) { // PE
-			alnFragsPE(matched_templates, qseq_comp, qseq_r_comp, qseq, qseq_r, header, header_r, bestTemplates, bestTemplates_r, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw);
+			alnFragsPE(matched_templates, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, header, header_r, bestTemplates, bestTemplates_r, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw);
 		} else { // SE
-			alnFragsSE(matched_templates, rc_flag, qseq_comp, qseq_r_comp, qseq, qseq_r, q_len, header, bestTemplates, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw);
+			alnFragsSE(matched_templates, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, header, bestTemplates, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw);
 		}
 	
 	}
@@ -9934,8 +10205,8 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	fragCount = 0;
 	fileCount = 0;
 	maxFrag = 1000000;
-	while(fread(&q_len, sizeof(int), 1, frag_in_raw)) {
-		fread(qseq, 1, q_len, frag_in_raw);
+	while(fread(&qseq->len, sizeof(int), 1, frag_in_raw)) {
+		fread(qseq->seq, 1, qseq->len, frag_in_raw);
 		fread(&bestHits, sizeof(int), 1, frag_in_raw);
 		fread(&read_score, sizeof(int), 1, frag_in_raw);
 		
@@ -9946,7 +10217,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		fread(&header->len, sizeof(int), 1, frag_in_raw);
 		fread(header->seq, 1, header->len, frag_in_raw);
 		
-		if(q_len > kmersize) {
+		if(qseq->len > kmersize) {
 			/* Several mapped templates, choose best */
 			if(bestHits > 1) {
 				bestTemplate = 0;
@@ -10015,7 +10286,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			/* reverse complement seq */
 			if(bestTemplate < 0) {
 				bestTemplate = -bestTemplate;
-				strrc(qseq, q_len);
+				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
 			
@@ -10063,13 +10334,13 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			if(!alignFrag) {
 				ERROR();
 			}
-			alignFrag->q_len = q_len;
-			alignFrag->qseq = malloc(q_len);
+			alignFrag->q_len = qseq->len;
+			alignFrag->qseq = malloc(qseq->len);
 			alignFrag->header = strdup(header->seq);
 			if(!alignFrag->qseq || !alignFrag->header) {
 				ERROR();
 			}
-			memcpy(alignFrag->qseq, qseq, q_len);
+			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
 			alignFrag->bestHits = bestHits;
 			alignFrag->score = read_score;
 			alignFrag->start = start;
@@ -10098,7 +10369,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			/* dump seq to all */
 			if(frag_out_all) {
-				printFrag(qseq, q_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
+				printFrag(qseq->seq, qseq->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			}
 		}
 	}
@@ -10116,7 +10387,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	free(best_end_pos);
 	free(matched_templates);
 	free(bestTemplates);
-	free(qseq_r);
+	destroyQseqs(qseq_r);
 	if(frag_out_all) {
 		pclose(frag_out_all);
 	}
@@ -10169,7 +10440,6 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			expected = (Nhits - read_score) * (1.0 * t_len) / (template_tot_ulen - t_len + etta);
 			q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
 			p_value  = p_chisqr(q_value);
-			
 			
 			if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
 				/* Do assembly */
@@ -10273,8 +10543,8 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			}
 		}
 	}
-	free(qseq);
-	free(header);
+	destroyQseqs(qseq);
+	destroyQseqs(header);
 	if(aligned_assem->size != 0) {
 		free(aligned_assem->t);
 		free(aligned_assem->s);
@@ -10310,14 +10580,14 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	   instead of alignment score. */
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, best_read_score;
-	int template, bestHits, t_len, read_counter, start, end, q_len, aln_len;
+	int template, bestHits, t_len, read_counter, start, end, aln_len;
 	int rc_flag, coverScore, bias, tmp_start, tmp_end, bestTemplate, fragCount;
 	int fileCount, maxFrag, read_score;
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
 	double etta, tmp_score, bestScore, depth, id, cover, q_id, q_cover;
 	double expected, q_value, p_value;
-	char *outZipped, *qseq, *qseq_r;
+	char *outZipped;
 	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out, *matrix_out;
 	FILE *alignment_out, *consensus_out, *frag_out, *frag_out_all;
 	FILE *frag_out_raw, **template_fragments;
@@ -10326,7 +10596,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	struct assem *aligned_assem;
 	struct frag **alignFrags, *alignFrag;
 	struct compDNA *qseq_comp, *qseq_r_comp;
-	struct qseqs *header, *header_r;
+	struct qseqs *qseq, *qseq_r, *header, *header_r;
 	
 	/* open pipe */
 	inputfile = popen(exePrev, "r");
@@ -10358,15 +10628,15 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
 	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len);
-	qseq = malloc(delta + 1);
-	qseq_r = malloc(delta + 1);
 	qseq_comp = malloc(sizeof(struct compDNA));
 	qseq_r_comp = malloc(sizeof(struct compDNA));
-	if(!qseq || !qseq_r || !qseq_comp || !qseq_r_comp || !outZipped) {
+	if(!qseq_comp || !qseq_r_comp || !outZipped) {
 		ERROR();
 	}
 	allocComp(qseq_comp, delta);
 	allocComp(qseq_r_comp, delta);
+	qseq = setQseqs(delta);
+	qseq_r = setQseqs(delta);
 	header = setQseqs(256);
 	header_r = setQseqs(256);
 	
@@ -10446,23 +10716,25 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		} else { // PE
 			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, inputfile);
 			read_score = abs(read_score);
-			t_len = qseq_r_comp->seqlen;
+			qseq_r->len = qseq_r_comp->seqlen;
 		}
 		
-		q_len = qseq_comp->seqlen;
+		qseq->len = qseq_comp->seqlen;
 		
-		if(delta <= MAX(q_len, t_len)) {
-			delta = MAX(q_len, t_len);
+		if(delta <= MAX(qseq->len, qseq_r->len)) {
+			delta = MAX(qseq->len, qseq_r->len);
 			delta <<= 1;
-			free(qseq);
-			free(qseq_r);
-			qseq = malloc(delta);
-			qseq_r = malloc(delta);
-			if(!qseq || !qseq_r) {
+			qseq->size = delta;
+			qseq_r->size = delta;
+			free(qseq->seq);
+			free(qseq_r->seq);
+			qseq->seq = malloc(delta);
+			qseq_r->seq = malloc(delta);
+			if(!qseq->seq || !qseq_r->seq) {
 				ERROR();
 			}
 		}
-		unCompDNA(qseq_comp, qseq);
+		unCompDNA(qseq_comp, qseq->seq);
 		
 		
 		/* reverse complement seq */
@@ -10472,17 +10744,17 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			best_end_pos[bestHits] = template_lengths[abs(matched_templates[i])];
 		}
 		
-		update_Scores(qseq, q_len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+		update_Scores(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 		if(read_score) {
-			unCompDNA(qseq_r_comp, qseq_r);
-			update_Scores(qseq_r, t_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+			unCompDNA(qseq_r_comp, qseq_r->seq);
+			update_Scores(qseq_r->seq, t_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
 		}
 		
 		/* dump seq to all */
 		if(frag_out_all) {
-			printFrag(qseq, q_len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
+			printFrag(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			if(read_score) {
-				printFrag(qseq_r, t_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
+				printFrag(qseq_r->seq, t_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
 			}
 		}
 	}
@@ -10521,8 +10793,8 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	fragCount = 0;
 	fileCount = 0;
 	maxFrag = 1000000;
-	while(fread(&q_len, sizeof(int), 1, frag_in_raw)) {
-		fread(qseq, 1, q_len, frag_in_raw);
+	while(fread(&qseq->len, sizeof(int), 1, frag_in_raw)) {
+		fread(qseq->seq, 1, qseq->len, frag_in_raw);
 		fread(&bestHits, sizeof(int), 1, frag_in_raw);
 		fread(&read_score, sizeof(int), 1, frag_in_raw);
 		
@@ -10533,7 +10805,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		fread(&header->len, sizeof(int), 1, frag_in_raw);
 		fread(header->seq, header->len, 1, frag_in_raw);
 		
-		if(q_len > kmersize) {
+		if(qseq->len > kmersize) {
 			/* Several mapped templates, choose best */
 			if(bestHits > 1) {
 				bestTemplate = -1;
@@ -10600,7 +10872,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			/* reverse complement seq */
 			if(bestTemplate < 0) {
 				bestTemplate = -bestTemplate;
-				strrc(qseq, q_len);
+				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
 			
@@ -10648,13 +10920,13 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			if(!alignFrag) {
 				ERROR();
 			}
-			alignFrag->q_len = q_len;
-			alignFrag->qseq = malloc(q_len);
+			alignFrag->q_len = qseq->len;
+			alignFrag->qseq = malloc(qseq->len);
 			alignFrag->header = strdup(header->seq);
 			if(!alignFrag->qseq || !alignFrag->header) {
 				ERROR();
 			}
-			memcpy(alignFrag->qseq, qseq, q_len);
+			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
 			alignFrag->bestHits = bestHits;
 			alignFrag->score = read_score;
 			alignFrag->start = start;
@@ -10873,8 +11145,8 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			fseek(seq_in, ((template_lengths[template] >> 5) + 1) * sizeof(long unsigned), SEEK_CUR);
 		}	
 	}
-	free(qseq);
-	free(header);
+	destroyQseqs(header);
+	destroyQseqs(qseq);
 	if(aligned_assem->size != 0) {
 		free(aligned_assem->t);
 		free(aligned_assem->s);
@@ -10901,6 +11173,359 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 }
 
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int Mt1) {
+	
+	int i, j, end, aln_len, t_len, bias, read_score, coverScore;
+	int file_len, shmid;
+	long unsigned seeker, *seq;
+	double etta, expected, q_value, p_value, id, q_id, cover, q_cover, depth;
+	char *outZipped;
+	FILE *res_out, *alignment_out, *consensus_out, *frag_out, *matrix_out;
+	FILE *template_fragments, *DB_file;
+	time_t t0, t1;
+	key_t key;
+	struct aln *aligned, *gap_align;
+	struct assem *aligned_assem;
+	struct qseqs *qseq, *header;
+	
+	/* open pipe */
+	template_fragments = popen(exePrev, "r");
+	if(!template_fragments) {
+		ERROR();
+	}
+	
+	file_len = strlen(outputfilename);
+	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len);
+	if(!outZipped) {
+		ERROR();
+	}
+	header = setQseqs(256);
+	qseq = setQseqs(delta);
+	
+	/* etta = small value to avoid zero-divisio */
+	etta = 1.0e-6;
+	/* open outputfiles */
+	if(outputfilename) {
+		strcat(outputfilename, ".res");
+		res_out = fopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
+		strcat(outputfilename, ".frag.gz");
+		//sprintf(outZipped, "gzip -c > %s", outputfilename);
+		sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+		frag_out = popen(outZipped, "w");
+		outputfilename[file_len] = 0;
+		strcat(outputfilename, ".aln");
+		alignment_out = fopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
+		strcat(outputfilename, ".fsa");
+		consensus_out = fopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
+		if(print_matrix) {
+			strcat(outputfilename, ".mat.gz");
+			//sprintf(outZipped, "gzip -c > %s", outputfilename);
+			sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+			matrix_out = popen(outZipped, "w");
+			if(!matrix_out) {
+				ERROR();
+			}
+			outputfilename[file_len] = 0;
+		} else {
+			matrix_out = 0;
+		}
+	} else {
+		fprintf(stderr, " No output file specified!\n");
+		exit(2);
+	}
+	if(!res_out || !frag_out || !consensus_out || !alignment_out) {
+		ERROR();
+	}
+	
+	
+	/* load indexing */
+	file_len = strlen(templatefilename);
+	strcat(templatefilename, ".length.b");
+	DB_file = fopen(templatefilename, "rb");
+	if(!DB_file) {
+		fprintf(stderr, "Wrong format of DB, or DB does not exist.\n");
+		exit(errno);
+	}
+	fread(&DB_size, sizeof(int), 1, DB_file);
+	contamination = DB_size;
+	template_lengths = malloc(DB_size * sizeof(int));
+	if(!template_lengths) {
+		ERROR();
+	}
+	/* load lengths */
+	fseek(DB_file, (2 * DB_size) * sizeof(int), SEEK_CUR);
+	if(fread(template_lengths, sizeof(int), DB_size, DB_file) == 0) {
+		fseek(DB_file, sizeof(int), SEEK_SET);
+		fread(template_lengths, sizeof(int), DB_size, DB_file);
+	}
+	templatefilename[file_len] = 0;
+	fclose(DB_file);
+	if(kmersize < 4) {
+		kmersize = *template_lengths;
+		if(kmersize < 4) {
+			kmersize = 16;
+		}
+	}
+	mask = 0;
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
+	r_shifter = (kmersize << 1) - 2;
+	
+	/* get seq / index */
+	seeker = 0;
+	for(i = 2; i <= Mt1; i++) {
+		seeker += ((template_lengths[i - 1] >> 5) + 1) * sizeof(long unsigned);
+	}
+	templates_index = malloc(sizeof(struct hashMap_index*));
+	if(!templates_index) {
+		ERROR();
+	}
+	Score = calloc(1, sizeof(int));
+	*templates_index = calloc(1, sizeof(struct hashMap_index));
+	if(!templates_index[0] || !Score) {
+		ERROR();
+	}
+	
+	strcat(templatefilename, ".seq.b");
+	DB_file = fopen(templatefilename, "rb");
+	if(!DB_file) {
+		fprintf(stderr, "Wrong format of DB, or DB does not exist.\n");
+		exit(errno);
+	}
+	hashMap_index_initialize(*templates_index, template_lengths[Mt1]);
+	fseek(DB_file, seeker, SEEK_SET);
+	fread(templates_index[0]->seq, sizeof(long unsigned), (template_lengths[Mt1] >> 5) + 1, DB_file);
+	fclose(DB_file);
+	templatefilename[file_len] = 0;
+	
+	/* make index */
+	seq = templates_index[0]->seq;
+	end = template_lengths[Mt1] - kmersize + 1;
+	for(i = 0; i < end; i++) {
+		hashMap_index_add(*templates_index, getKmer(seq, i), i);
+	}
+	*template_lengths = template_lengths[Mt1];
+	template_lengths = realloc(template_lengths, sizeof(int));
+	if(!template_lengths) {
+		ERROR();
+	}
+	
+	/* get name */
+	strcat(templatefilename, ".name");
+	DB_file = fopen(templatefilename, "rb");
+	if(!DB_file) {
+		fprintf(stderr, "File coruption: %s\n", templatefilename);
+		ERROR();
+	}
+	/* get size of file */
+	fseek(DB_file, 0, SEEK_END);
+	seeker = ftell(DB_file);
+	/* load file */
+	rewind(DB_file);
+	template_names = malloc(DB_size * sizeof(char*));
+	if(!template_names) {
+		ERROR();
+	}
+	template_names[0] = malloc(seeker);
+	if(!template_names[0]) {
+		ERROR();
+	}
+	fread(template_names[0], 1, seeker, DB_file);
+	template_names[0][seeker - 1] = 0;
+	
+	template_names[1] = template_names[0];
+	for(i = 0, j = 2; j < DB_size; i++) {
+		if(template_names[0][i] == '\n') {
+			template_names[0][i] = 0;
+			template_names[j] = template_names[0] + i + 1;
+			j++;
+		}
+	}
+	templatefilename[file_len] = 0;
+	fclose(DB_file);
+	*template_names = strdup(template_names[Mt1]);
+	free(template_names[1]);
+	template_names = realloc(template_names, sizeof(char*));
+	if(!template_names || !template_names[0]) {
+		ERROR();
+	}
+	
+	fprintf(stderr, "#\n# Doing local assemblies of found templates, and output results\n");
+	t0 = clock();
+	
+	/* print heading of resistance file: */
+	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
+	
+	/* allocate matrcies for NW */
+	NW_s = 1024 * 1024;
+	NW_q = 1024;
+	E = malloc(NW_s);
+	if(!E) {
+		ERROR();
+	}
+	D[0] = malloc((NW_q << 1) * sizeof(int));
+	P[0] = malloc((NW_q << 1) * sizeof(int));
+	if(!D[0] || !P[0]) {
+		ERROR();
+	}
+	D[1] = D[0] + NW_q;
+	P[1] = P[0] + NW_q;
+	
+	/* Do local assemblies of fragments mapping to the same template */
+	aligned = malloc(sizeof(struct aln));
+	gap_align = malloc(sizeof(struct aln));
+	if(!aligned || !gap_align) {
+		ERROR();
+	}
+	aligned_assem = malloc(sizeof(struct assem));
+	aligned->t = malloc((delta + 1) << 1);
+	aligned->s = malloc((delta + 1) << 1);
+	aligned->q = malloc((delta + 1) << 1);
+	gap_align->t = malloc((delta + 1) << 1);
+	gap_align->s = malloc((delta + 1) << 1);
+	gap_align->q = malloc((delta + 1) << 1);
+	if(!aligned_assem || !aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
+		ERROR();
+	}
+	aligned_assem->size = 0;
+	aligned_assem->t = NULL;
+	aligned_assem->s = NULL;
+	aligned_assem->q = NULL;
+	
+	/* Do assembly */
+	assemblyPtr(aligned_assem, 0, &template_fragments, 1, frag_out, matrix_out, outputfilename, aligned, gap_align, qseq, header);
+	
+	/* make p_value */
+	read_score = *Score;
+	t_len = *template_lengths;
+	expected = 0;
+	q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
+	p_value  = p_chisqr(q_value);
+	
+	if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
+		
+		/* Depth, ID and coverage */
+		if(aligned_assem->cover > 0) {
+			coverScore = aligned_assem->cover;
+			depth = aligned_assem->depth;
+			depth /= t_len;
+			id = 100.0 * coverScore / t_len;
+			aln_len = strlen(aligned_assem->q) - countChar(aligned_assem->q, '-');
+			q_id = 100.0 * coverScore / aln_len;
+			cover = 100.0 * aln_len / t_len;
+			q_cover = 100.0 * t_len / aln_len;
+		} else {
+			id = 0;
+		}
+		if(id >= ID_t) {
+			/* Output result */
+			fprintf(res_out, "%-12s\t%8u\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
+				*template_names, read_score, (int) expected, t_len, id, cover, q_id, q_cover, depth, q_value, p_value);
+			
+			/* print alignment */
+			aln_len = strlen(aligned_assem->s);
+			fprintf(alignment_out, "# %s\n", *template_names);
+			for(i = 0; i < aln_len; i += 60) {
+				fprintf(alignment_out, "%-10s\t%.60s\n", "template:", aligned_assem->t + i);
+				fprintf(alignment_out, "%-10s\t%.60s\n", "", aligned_assem->s + i);
+				fprintf(alignment_out, "%-10s\t%.60s\n\n", "query:", aligned_assem->q + i);
+				/*
+				fprintf(alignment_out, "%-10s\t", "template:");
+				for(j = i; j < i + 60 && aligned_assem->t[j]; j++) {
+					fprintf(alignment_out, "%c", aligned_assem->t[j]);
+				}
+				fprintf(alignment_out, "\n%-10s\t", "");
+				for(j = i; j < i + 60 && aligned_assem->s[j]; j++) {
+					fprintf(alignment_out, "%c", aligned_assem->s[j]);
+				}
+				fprintf(alignment_out, "\n%-10s\t", "query:");
+				for(j = i; j < i + 60 && aligned_assem->q[j]; j++) {
+					fprintf(alignment_out, "%c", aligned_assem->q[j]);
+				}
+				fprintf(alignment_out, "\n\n");
+				*/
+			}
+			
+			/* Prepare consensus */
+			if(ref_fsa) {
+				for(i = 0; i < aln_len; i++) {
+					if(aligned_assem->q[i] == '-') {
+						aligned_assem->q[i] = 'n';
+					}
+				}
+				/*
+				for(i = 0; i < aln_len; i += 60) {
+					for(j = i; j < i + 60 && aligned_assem->q[j]; j++) {
+						if(aligned_assem->q[j]) {
+							if(aligned_assem->q[j] != '-') {
+								fprintf(consensus_out, "%c", aligned_assem->q[j]);
+							} else {
+								fprintf(consensus_out, "%c", 'n');
+							}
+						}
+					}
+					fprintf(consensus_out, "\n");
+				}
+				*/
+			} else {
+				for(i = 0, bias = 0; i < aln_len; i++, bias++) {
+					aligned_assem->q[bias] = aligned_assem->q[i];
+					if(aligned_assem->q[i] == '-') {
+						bias--;
+					}
+				}
+				aln_len = bias;
+				aligned_assem->q[aln_len] = 0;
+				/*
+				bias = 0;
+				for(i = 0; i < aln_len; i += 60 + bias) {
+					bias = 0;
+					for(j = i; j < i + 60 + bias && aligned_assem->q[j]; j++) {
+						if(aligned_assem->q[j] && aligned_assem->q[j] != '-') {
+							fprintf(consensus_out, "%c", aligned_assem->q[j]);
+						} else {
+							bias++;
+						}
+					}
+					fprintf(consensus_out, "\n");
+				}
+				*/
+			}
+			/* Print consensus */
+			fprintf(consensus_out, ">%s\n", *template_names);
+			for(i = 0; i < aln_len; i += 60) {
+				fprintf(consensus_out, "%.60s\n", aligned_assem->q + i);
+			}
+		}
+		/* destroy this DB index */
+		destroyPtr(0);
+	}
+	
+	destroyQseqs(header);
+	destroyQseqs(qseq);
+	if(aligned_assem->size != 0) {
+		free(aligned_assem->t);
+		free(aligned_assem->s);
+		free(aligned_assem->q);
+	}
+	free(aligned_assem);
+	
+	/* Close files */
+	fclose(res_out);
+	fclose(alignment_out);
+	fclose(consensus_out);
+	pclose(frag_out);
+	if(matrix_out) {
+		pclose(matrix_out);
+	}
+	
+	t1 = clock();
+	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+}
+
 void helpMessage(int exeStatus) {
 	FILE *helpOut;
 	if(exeStatus == 0) {
@@ -10916,7 +11541,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-i\t\tInput file name(s)\t\tSTDIN\n");
 	fprintf(helpOut, "#\t-ipe\t\tInput paired end file name(s)\n");
 	fprintf(helpOut, "#\t-int\t\tInput interleaved file name(s)\n");
-	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%d\n", kmersize);
+	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%s\n", "DB defined");
 	fprintf(helpOut, "#\t-e\t\tevalue\t\t\t\t%1.2f\n", evalue);
 	fprintf(helpOut, "#\t-mem_mode\tUse kmers to choose best\n#\t\t\ttemplate, and save memory\tFalse\n");
 	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
@@ -10928,6 +11553,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-mp\t\tMinimum phred score\t\t30\n");
 	fprintf(helpOut, "#\t-5p\t\tCut a constant number of\n#\t\t\tnucleotides from the 5 prime.\t0\n");
 	fprintf(helpOut, "#\t-Sparse\t\tOnly count kmers\t\tFalse\n");
+	fprintf(helpOut, "#\t-Mt1\t\tMap only to \"num\" template.\t0 / False\n");
 	fprintf(helpOut, "#\t-ID\t\tMinimum ID\t\t\t%3.1f%%\n", ID_t);
 	fprintf(helpOut, "#\t-ss\t\tSparse sorting (q,c,d)\t\tq\n");
 	fprintf(helpOut, "#\t-pm\t\tPairing method (p,u,f)\t\tu\n");
@@ -10936,6 +11562,9 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-swap\t\tSwap DB to disk\t\t\t%d (lvl)\n", diskDB);
 	fprintf(helpOut, "#\t-1t1\t\tSkip HMM\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
+	fprintf(helpOut, "#\t-bc\t\tBase calls should be\n#\t\t\tsignificantly overrepresented.\tTrue\n");
+	fprintf(helpOut, "#\t-bc90\t\tBase calls should be both\n#\t\t\tsignificantly overrepresented,\n#\t\t\tand have 90%% agreement.\t\tFalse\n");
+	fprintf(helpOut, "#\t-bcNano\t\tCall bases at suspicious\n#\t\t\tdeletions, made for nanopore.\tFalse\n");
 	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t%1.2f\n", scoreT);
 	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t%d\n", M);
@@ -10953,7 +11582,7 @@ void helpMessage(int exeStatus) {
 int main(int argc, char *argv[]) {
 	
 	int i, j, args, exe_len, minPhred, fiveClip, sparse_run, mem_mode;
-	int step1, step2, fileCounter, fileCounter_PE, fileCounter_INT;
+	int step1, step2, fileCounter, fileCounter_PE, fileCounter_INT, Mt1;
 	char *exeBasic, *outputfilename, *templatefilename, ss;
 	char **inputfiles, **inputfiles_PE, **inputfiles_INT;
 	FILE *templatefile;
@@ -10980,7 +11609,7 @@ int main(int argc, char *argv[]) {
 	print_all = 0;
 	ref_fsa = 0;
 	contamination = -1;
-	kmersize = 16;
+	kmersize = 0;
 	evalue = 0.05;
 	delta = 2048;
 	exhaustive = 0;
@@ -11013,6 +11642,9 @@ int main(int argc, char *argv[]) {
 	inputfiles_PE = 0;
 	inputfiles_INT = 0;
 	inputfiles = 0;
+	Mt1 = 0;
+	significantBase = &significantNuc; //-bc
+	baseCall = &baseCaller;
 	
 	/* PARSE COMMAND LINE OPTIONS */
 	args = 1;
@@ -11237,6 +11869,13 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				evalue = atof(argv[args]);
 			}
+		} else if(strcmp(argv[args], "-bc") == 0) {
+			significantBase = &significantNuc;
+		} else if(strcmp(argv[args], "-bc90") == 0) {
+			significantBase = &significantAnd90Nuc;
+		} else if(strcmp(argv[args], "-bcNano") == 0) {
+			significantBase = &significantAnd90Nuc;
+			baseCall = &nanoCaller;
 		} else if(strcmp(argv[args], "-ID") == 0) {
 			args++;
 			if(args < argc) {
@@ -11276,6 +11915,17 @@ int main(int argc, char *argv[]) {
 			cmp = &cmp_and;
 		} else if(strcmp(argv[args], "-boot") == 0) {
 			printFsa_ptr = &bootFsa;
+		} else if(strcmp(argv[args], "-Mt1") == 0) {
+			args++;
+			if(args < argc) {
+				Mt1 = atoi(argv[args]);
+			}
+			if(Mt1 < 1) {
+				fprintf(stderr, "Invalid template specified at \"-Mt1\"\n");
+				exit(3);
+			}
+			printFsa_ptr = &printFsaMt1;
+			printFsa_pair_ptr = &printFsa_pairMt1;
 		} else if(strcmp(argv[args], "-v") == 0) {
 			fprintf(stdout, "KMA-%d.%d.%d\n", version[0], version[1], version[2]);
 			exit(0);
@@ -11446,6 +12096,31 @@ int main(int argc, char *argv[]) {
 			run_input_sparse(inputfiles, fileCounter, minPhred, fiveClip);
 		} else {
 			
+			if(Mt1) {
+				template_lengths = malloc(7 * sizeof(int));
+				if(!template_lengths) {
+					ERROR();
+				}
+				strcat(templatefilename, ".length.b");
+				templatefile = fopen(templatefilename, "rb");
+				if(!templatefile) {
+					fprintf(stderr, "File coruption: %s\n", templatefilename);
+					ERROR();
+				}
+				/* DB_size s_lengths u_length lengths */
+				template_lengths[0] = 0;
+				template_lengths[2] = 1;
+				template_lengths[3] = 0;
+				template_lengths[4] = 0;
+				fread(&DB_size, sizeof(int), 1, templatefile);
+				fseek(templatefile, (2 * DB_size + Mt1) * sizeof(int), SEEK_CUR);
+				if(fread(template_lengths + 5, sizeof(int), 1, templatefile) == 0) {
+					fseek(templatefile, (Mt1 + 1) * sizeof(int), SEEK_SET);
+				}
+				fclose(templatefile);
+				DB_size = Mt1;
+			}
+			
 			/* SE */
 			if(fileCounter > 0) {
 				run_input(inputfiles, fileCounter, minPhred, fiveClip);
@@ -11461,10 +12136,32 @@ int main(int argc, char *argv[]) {
 				run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip);
 			}
 			
+			if(Mt1) {
+				Mt1 = -1;
+				fwrite(&Mt1, sizeof(int), 1, stdout);
+			}
+			
 		}
 		fflush(stdout);
 		t1 = clock();
 		fprintf(stderr, "#\n# Total time used for converting query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+	} else if(Mt1) {
+		exe_len = strlen("-step1");
+		for(args = 0; args < argc; args++) {
+			exe_len += strlen(argv[args]) + 1;
+		}
+		exeBasic = calloc((exe_len + 1), sizeof(char));
+		if(!exeBasic) {
+			ERROR();
+		}
+		for(args = 0; args < argc; args++) {
+			strcat(exeBasic, argv[args]);
+			strcat(exeBasic, " ");
+		}
+		strcat(exeBasic, "-step1");
+		runKMA_Mt1(templatefilename, outputfilename, exeBasic, Mt1);
+		fprintf(stderr, "# Closing files\n");
+		fflush(stdout);
 	} else if(step2) {
 		exe_len = strlen("-step1");
 		for(args = 0; args < argc; args++) {
