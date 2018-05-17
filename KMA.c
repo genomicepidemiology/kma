@@ -60,6 +60,12 @@ struct assem {
 };
 
 struct frag {
+	
+	int buffer[6];
+	char *qseq;
+	char *header;
+	struct frag *next;
+	/*
 	char *qseq;
 	int q_len;
 	int bestHits;
@@ -68,6 +74,7 @@ struct frag {
 	int end;
 	char *header;
 	struct frag *next;
+	*/
 };
 
 struct hashTable {
@@ -177,7 +184,7 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 0};
+int version[3] = {0, 14, 1};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -2920,7 +2927,6 @@ void printPair(int *out_Tem, struct compDNA *qseq, int bestScore, struct qseqs *
 
 FILE * printFrags(char *filename, struct frag **alignFrags) {
 	
-	static int buffer[7];
 	int i;
 	FILE *OUT;
 	struct frag *alignFrag, *next;
@@ -2935,17 +2941,10 @@ FILE * printFrags(char *filename, struct frag **alignFrags) {
 			for(alignFrag = alignFrags[i]; alignFrag != 0; alignFrag = next) {
 				next = alignFrag->next;
 				
-				buffer[0] = i;
-				buffer[1] = alignFrag->q_len;
-				buffer[2] = alignFrag->bestHits;
-				buffer[3] = alignFrag->score;
-				buffer[4] = alignFrag->start;
-				buffer[5] = alignFrag->end;
-				buffer[6] = strlen(alignFrag->header)+1;
-				
-				fwrite(buffer, sizeof(int), 7, OUT);
-				fwrite(alignFrag->qseq, 1, alignFrag->q_len, OUT);
-				fwrite(alignFrag->header, 1, buffer[6], OUT);
+				fwrite(&i, sizeof(int), 1, OUT);
+				fwrite(alignFrag->buffer, sizeof(int), 6, OUT);
+				fwrite(alignFrag->qseq, 1, alignFrag->buffer[0], OUT);
+				fwrite(alignFrag->header, 1, alignFrag->buffer[5], OUT);
 				
 				free(alignFrag->qseq);
 				free(alignFrag->header);
@@ -10291,49 +10290,25 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			w_scores[bestTemplate] += read_score;
 			
 			/* dump frag info */
-			/*
-			if(alignFrags[bestTemplate] == 0) {
-				alignFrags[bestTemplate] = malloc(sizeof(struct frag));
-				alignFrag = alignFrags[bestTemplate];
-				if(!alignFrag) {
-					ERROR();
-				}
-				alignFrag->q_len = q_len;
-				alignFrag->qseq = malloc(q_len);
-				alignFrag->header = strdup(header->seq);
-				if(!alignFrag->qseq || !alignFrag->header) {
-					ERROR();
-				}
-				memcpy(alignFrag->qseq, qseq, q_len);
-				alignFrag->bestHits = bestHits;
-				alignFrag->score = read_score;
-				alignFrag->start = start;
-				alignFrag->end = end;
-				alignFrag->next = 0;
-			} else {
-				alignFrag = malloc(sizeof(struct frag));
-				if(!alignFrag) {
-					ERROR();
-				}
-				alignFrag->q_len = q_len;
-				alignFrag->qseq = malloc(q_len);
-				alignFrag->header = strdup(header->seq);
-				if(!alignFrag->qseq || !alignFrag->header) {
-					ERROR();
-				}
-				memcpy(alignFrag->qseq, qseq, q_len);
-				alignFrag->bestHits = bestHits;
-				alignFrag->score = read_score;
-				alignFrag->start = start;
-				alignFrag->end = end;
-				alignFrag->next = alignFrags[bestTemplate];
-				alignFrags[bestTemplate] = alignFrag;
-			}
-			*/
 			alignFrag = malloc(sizeof(struct frag));
 			if(!alignFrag) {
 				ERROR();
 			}
+			alignFrag->buffer[0] = qseq->len;
+			alignFrag->buffer[1] = bestHits;
+			alignFrag->buffer[2] = read_score;
+			alignFrag->buffer[3] = start;
+			alignFrag->buffer[4] = end;
+			alignFrag->buffer[5] = header->len;
+			alignFrag->qseq = malloc(qseq->len);
+			alignFrag->header = strdup(header->seq);
+			if(!alignFrag->qseq || !alignFrag->header) {
+				ERROR();
+			}
+			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
+			alignFrag->next = alignFrags[bestTemplate];
+			alignFrags[bestTemplate] = alignFrag;
+			/*
 			alignFrag->q_len = qseq->len;
 			alignFrag->qseq = malloc(qseq->len);
 			alignFrag->header = strdup(header->seq);
@@ -10347,6 +10322,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			alignFrag->end = end;
 			alignFrag->next = alignFrags[bestTemplate];
 			alignFrags[bestTemplate] = alignFrag;
+			*/
 			
 			fragCount++;
 			if(fragCount >= maxFrag) {
@@ -10877,64 +10853,24 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			w_scores[bestTemplate] += read_score;
 			
 			/* dump frag info */
-			/*
-			if(alignFrags[bestTemplate] == 0) {
-				alignFrags[bestTemplate] = malloc(sizeof(struct frag));
-				alignFrag = alignFrags[bestTemplate];
-				if(!alignFrag) {
-					ERROR();
-				}
-				alignFrag->q_len = q_len;
-				alignFrag->qseq = malloc(q_len);
-				alignFrag->header = strdup(header->seq);
-				if(!alignFrag->qseq || !alignFrag->header) {
-					ERROR();
-				}
-				memcpy(alignFrag->qseq, qseq, q_len);
-				alignFrag->bestHits = bestHits;
-				alignFrag->score = read_score;
-				alignFrag->start = start;
-				alignFrag->end = end;
-				alignFrag->next = 0;
-			} else {
-				alignFrag = malloc(sizeof(struct frag));
-				if(!alignFrag) {
-					ERROR();
-				}
-				alignFrag->q_len = q_len;
-				alignFrag->qseq = malloc(q_len);
-				alignFrag->header = strdup(header->seq);
-				if(!alignFrag->qseq || !alignFrag->header) {
-					ERROR();
-				}
-				memcpy(alignFrag->qseq, qseq, q_len);
-				alignFrag->bestHits = bestHits;
-				alignFrag->score = read_score;
-				alignFrag->start = start;
-				alignFrag->end = end;
-				alignFrag->next = alignFrags[bestTemplate];
-				alignFrags[bestTemplate] = alignFrag;
-			}
-			*/
 			alignFrag = malloc(sizeof(struct frag));
 			if(!alignFrag) {
 				ERROR();
 			}
-			alignFrag->q_len = qseq->len;
+			alignFrag->buffer[0] = qseq->len;
+			alignFrag->buffer[1] = bestHits;
+			alignFrag->buffer[2] = read_score;
+			alignFrag->buffer[3] = start;
+			alignFrag->buffer[4] = end;
+			alignFrag->buffer[5] = header->len;
 			alignFrag->qseq = malloc(qseq->len);
 			alignFrag->header = strdup(header->seq);
 			if(!alignFrag->qseq || !alignFrag->header) {
 				ERROR();
 			}
 			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
-			alignFrag->bestHits = bestHits;
-			alignFrag->score = read_score;
-			alignFrag->start = start;
-			alignFrag->end = end;
 			alignFrag->next = alignFrags[bestTemplate];
 			alignFrags[bestTemplate] = alignFrag;
-			
-			
 			
 			fragCount++;
 			if(fragCount >= maxFrag) {
@@ -11558,6 +11494,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ss\t\tSparse sorting (q,c,d)\t\tq\n");
 	fprintf(helpOut, "#\t-pm\t\tPairing method (p,u,f)\t\tu\n");
 	fprintf(helpOut, "#\t-fpm\t\tFine Pairing method (p,u,f)\tu\n");
+	fprintf(helpOut, "#\t-apm\t\tSets both pm and fpm\t\tu\n");
 	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\t%d (lvl)\n", shm);
 	fprintf(helpOut, "#\t-swap\t\tSwap DB to disk\t\t\t%d (lvl)\n", diskDB);
 	fprintf(helpOut, "#\t-1t1\t\tSkip HMM\t\t\tFalse\n");
@@ -11634,6 +11571,7 @@ int main(int argc, char *argv[]) {
 	alnFragsPE = &alnFragsUnionPE;
 	printPairPtr = &printPair;
 	printPtr = &print_ankers;
+	printFsa_pair_ptr = &printFsa_pair;
 	deConPrintPtr = printPtr;
 	ankerPtr = &ankerAndClean;
 	alignLoadPtr = &alignLoad_fly;
@@ -11743,6 +11681,27 @@ int main(int argc, char *argv[]) {
 					alnFragsPE = &alnFragsUnionPE;
 				} else if(*(argv[args]) == 'f') {
 					alnFragsPE = &alnFragsForcePE;
+				} else {
+					fprintf(stderr, "Invalid argument at fine pairing method: \"-fpm\"\n");
+					fprintf(stderr, "Options are:\n");
+					fprintf(stderr, "p:\tReward for pairing.\n");
+					fprintf(stderr, "u:\tUnion of best hits.\n");
+					fprintf(stderr, "f:\tForce paring.\n");
+					exit(1);
+				}
+			}
+		} else if(strcmp(argv[args], "-apm") == 0) {
+			args++;
+			if(args < argc) {
+				if(*(argv[args]) == 'p') {
+					alnFragsPE = &alnFragsPenaltyPE;
+					save_kmers_pair = &save_kmers_penaltyPair;
+				} else if(*(argv[args]) == 'u') {
+					alnFragsPE = &alnFragsUnionPE;
+					save_kmers_pair = &save_kmers_unionPair;
+				} else if(*(argv[args]) == 'f') {
+					alnFragsPE = &alnFragsForcePE;
+					save_kmers_pair = &save_kmers_forcePair;
 				} else {
 					fprintf(stderr, "Invalid argument at fine pairing method: \"-fpm\"\n");
 					fprintf(stderr, "Options are:\n");
