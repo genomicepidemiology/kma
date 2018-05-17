@@ -2621,7 +2621,6 @@ int get_ankers(int *out_Tem, struct compDNA *qseq, struct qseqs *header, FILE *i
 	if(fread(infoSize, sizeof(int), 6, inputfile)) {
 		qseq->seqlen = infoSize[0];
 		qseq->complen = infoSize[1];
-		qseq->N[0] = infoSize[2];
 		*out_Tem = infoSize[4];
 		header->len = infoSize[5];
 		
@@ -2641,8 +2640,8 @@ int get_ankers(int *out_Tem, struct compDNA *qseq, struct qseqs *header, FILE *i
 			if(!qseq->seq || !qseq->N) {
 				ERROR();
 			}
-			qseq->N[0] = 0;
 		}
+		qseq->N[0] = infoSize[2];
 		if(header->size < header->len) {
 			free(header->seq);
 			header->size = header->len;
@@ -4232,7 +4231,8 @@ int getR_Best(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r
 void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
 	
 	int i, end, bestScore, bestScore_r;
-	
+	bestScore = 0;
+	bestScore_r = 0;
 	get_kmers(bestTemplates, bestTemplates_r, Score, Score_r, qseq, qseq_r, &bestScore, &bestScore_r, extendScore);
 	
 	/* Validate best match */
@@ -8786,6 +8786,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 				}
 				fread(qseq->seq, 1, qseq->len, file);
 				fread(header->seq, 1, header->len, file);
+				header->seq[header->len] = 0;
 				
 				if(delta < qseq->len) {
 					delta = qseq->len << 1;
@@ -8810,7 +8811,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 				if(read_score || anker_rc(template, qseq->seq, qseq->len)) {
 					/* Start with alignment */
 					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
-					//alnStat = KMA(template, qseq, q_len, aligned, gap_align, 0, t_len);
+					//alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, 0, t_len);
 					
 					/* get read score */
 					aln_len = alnStat.len;
@@ -9088,6 +9089,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 				}
 				fread(qseq->seq, 1, qseq->len, file);
 				fread(header->seq, 1, header->len, file);
+				header->seq[header->len] = 0;
 				
 				if(delta < qseq->len) {
 					delta = qseq->len << 1;
@@ -10723,14 +10725,14 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		update_Scores(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 		if(read_score) {
 			unCompDNA(qseq_r_comp, qseq_r->seq);
-			update_Scores(qseq_r->seq, t_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+			update_Scores(qseq_r->seq, qseq_r->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
 		}
 		
 		/* dump seq to all */
 		if(frag_out_all) {
 			printFrag(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			if(read_score) {
-				printFrag(qseq_r->seq, t_len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
+				printFrag(qseq_r->seq, qseq_r->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
 			}
 		}
 	}
@@ -10779,7 +10781,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 		
 		fread(&header->len, sizeof(int), 1, frag_in_raw);
-		fread(header->seq, header->len, 1, frag_in_raw);
+		fread(header->seq, 1, header->len, frag_in_raw);
 		
 		if(qseq->len > kmersize) {
 			/* Several mapped templates, choose best */
