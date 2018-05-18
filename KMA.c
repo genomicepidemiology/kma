@@ -65,16 +65,6 @@ struct frag {
 	char *qseq;
 	char *header;
 	struct frag *next;
-	/*
-	char *qseq;
-	int q_len;
-	int bestHits;
-	int score;
-	int start;
-	int end;
-	char *header;
-	struct frag *next;
-	*/
 };
 
 struct hashTable {
@@ -184,7 +174,7 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 1};
+int version[3] = {0, 14, 2};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -2590,15 +2580,6 @@ void print_ankers(int *out_Tem, struct compDNA *qseq, int rc_flag, struct qseqs 
 	
 	static int infoSize[6];
 	
-	//dumpComp(qseq, stdout);
-	/*
-	fwrite(&qseq->seqlen, sizeof(int), 1, stdout);
-	fwrite(&qseq->complen, sizeof(int), 1, stdout);
-	fwrite(qseq->N, sizeof(int), 1, stdout);
-	fwrite(&(int){rc_flag}, sizeof(int), 1, stdout);
-	fwrite(out_Tem, sizeof(int), 1, stdout);
-	fwrite(&(int){header->len}, sizeof(int), 1, stdout);
-	*/
 	infoSize[0] = qseq->seqlen;
 	infoSize[1] = qseq->complen;
 	infoSize[2] = qseq->N[0];
@@ -4230,6 +4211,369 @@ int getR_Best(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r
 
 void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
 	
+	int i, j, l, end, HIT, gaps, score, Ms, MMs, Us, W1s, template;
+	int bestHits, hitCounter, bestScore, bestScore_r, *values, *last;
+	
+	if(qseq->seqlen < kmersize) {
+		return;
+	}
+	
+	bestScore = 0;
+	bestScore_r = 0;
+	
+	/* reverse complement qseq */
+	rc_comp(qseq, qseq_r);
+	
+	/* Search forward strand */
+	/* Make quick check of the qseq */
+	HIT = exhaustive;
+	j = 0;
+	qseq->N[0]++;
+	qseq->N[qseq->N[0]] = qseq->seqlen;
+	for(i = 1; i <= qseq->N[0] && !HIT; i++) {
+		end = qseq->N[i] - kmersize + 1;
+		for(;j < end && !HIT; j += kmersize) {
+			if(hashMap_get(getKmer(qseq->seq, j))) {
+				HIT = 1;
+			}
+		}
+		j = qseq->N[i] + 1;
+	}
+	
+	/* If deltamer qseq hits, then continue */
+	if(HIT) {
+		/* Scan the deltamer exhaustively, and collect scores in Score*/
+		hitCounter = 0;
+		*bestTemplates = 0;
+		last = 0;
+		gaps = 0;
+		HIT = 0;
+		Ms = 0;
+		MMs = 0;
+		Us = 0;
+		W1s = 0;
+		j = 0;
+		for(i = 1; i <= qseq->N[0]; i++) {
+			end = qseq->N[i] - kmersize + 1;
+			for(;j < end; j++) {
+				if((values = hashMap_get(getKmer(qseq->seq, j)))) {
+					if(values == last) {
+						if(kmersize < gaps) {
+							Ms += kmersize;
+							gaps -= kmersize;
+							if(gaps) {
+								/* go for best scenario */
+								if(gaps == 1) {
+									MMs += 2;
+								} else {
+									gaps -= 2;
+									if((MM << 1) + gaps * M < 0) {
+										Ms += gaps;
+										MMs += 2;
+									}
+								}
+							} else {
+								MMs++;
+							}
+						} else if (gaps) {
+							gaps--;
+							W1s++;
+							Us += gaps;
+						} else {
+							Ms++;
+						}
+						HIT = j;
+						gaps = 0;
+					} else {
+						if(last) {
+							if(HIT) {
+								HIT += kmersize;
+							} else {
+								HIT = j + kmersize;
+							}
+							score = Ms * M + MMs * MM + Us * U + W1s * W1;
+							for(l = *last; 0 < l; l--) {
+								Score[(template = last[l])] += score;
+								extendScore[template] = HIT;
+							}
+							
+							score = kmersize * M;
+							MMs = MM << 1;
+							for(l = 1; l <= *values; l++) {
+								if(j < extendScore[(template = values[l])]) {
+									if(extendScore[template] == HIT) {
+										Score[template] += M;
+									} else {
+										gaps = extendScore[template] - j - 1;
+										Score[template] += (W1 + gaps * U);
+									}
+								} else if(Score[template] != 0) {
+									Score[template] += score;
+									if((gaps = extendScore[template] - j)) {
+										if(gaps == 1) {
+											Score[template] += MMs;
+										} else {
+											gaps -= 2;
+											if((Ms = MMs + gaps * M) < 0) {
+												Score[template] += Ms;
+											}
+										}
+									} else {
+										Score[template] += MM;
+									}
+								} else {
+									Score[template] = score;
+									bestTemplates[0]++;
+									bestTemplates[*bestTemplates] = template;
+								}
+							}
+						} else {
+							for(l = 1; l <= *values; l++) {
+								Score[(template = values[l])] = kmersize * M;
+								bestTemplates[l] = template;
+							}
+							*bestTemplates = *values;
+						}
+						HIT = 0;
+						gaps = 0;
+						Ms = 0;
+						MMs = 0;
+						Us = 0;
+						W1s = 0;
+						last = values;
+					}
+					hitCounter++;
+				} else {
+					gaps++;
+				}
+			}
+			j = qseq->N[i] + 1;
+		}
+		if(last) {
+			score = Ms * M + MMs * MM + Us * U + W1s * W1;
+			for(l = *last; 0 < l; l--) {
+				Score[last[l]] += score;
+			}
+			for(l = *bestTemplates; 0 < l; l--) {
+				extendScore[(template = bestTemplates[l])] = 0;
+				if(Score[template] < 0) {
+					Score[template] = 0;
+				}
+			}
+		}
+		
+		/* get best match(es) */
+		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+			bestHits = 0;
+			for(l = 1; l <= *bestTemplates; l++) {
+				if(Score[(template = bestTemplates[l])] > bestScore) {
+					bestScore = Score[template];
+					bestHits = 1;
+					bestTemplates[bestHits] = template;
+				} else if(Score[template] == bestScore) {
+					bestHits++;
+					bestTemplates[bestHits] = template;
+				}
+				Score[template] = 0;
+				extendScore[template] = 0;
+			}
+			*bestTemplates = bestHits;
+		} else {
+			for(l = *bestTemplates; 0 < l; l--) {
+				extendScore[(template = bestTemplates[l])] = 0;
+				Score[template] = 0;
+			}
+			*bestTemplates = 0;
+		}
+	}
+	qseq->N[0]--;
+	
+	/* search rc strand */
+	/* Make quick check of the qseq */
+	HIT = exhaustive;
+	j = 0;
+	qseq_r->N[0]++;
+	qseq_r->N[qseq_r->N[0]] = qseq_r->seqlen;
+	for(i = 1; i <= qseq_r->N[0] && !HIT; i++) {
+		end = qseq_r->N[i] - kmersize + 1;
+		for(;j < end && !HIT; j += kmersize) {
+			if(hashMap_get(getKmer(qseq_r->seq, j))) {
+				HIT = 1;
+			}
+		}
+		j = qseq_r->N[i] + 1;
+	}
+	
+	/* If deltamer qseq hits, then continue */
+	if(HIT) {
+		/* Scan the deltamer exhaustively, and collect scores in Score*/
+		hitCounter = 0;
+		*bestTemplates_r = 0;
+		last = 0;
+		gaps = 0;
+		HIT = 0;
+		Ms = 0;
+		MMs = 0;
+		Us = 0;
+		W1s = 0;
+		j = 0;
+		for(i = 1; i <= qseq_r->N[0]; i++) {
+			end = qseq_r->N[i] - kmersize + 1;
+			for(;j < end; j++) {
+				if((values = hashMap_get(getKmer(qseq_r->seq, j)))) {
+					if(values == last) {
+						if(kmersize < gaps) {
+							Ms += kmersize;
+							gaps -= kmersize;
+							if(gaps) {
+								/* go for best scenario */
+								if(gaps == 1) {
+									MMs += 2;
+								} else {
+									gaps -= 2;
+									if((MM << 1) + gaps * M < 0) {
+										Ms += gaps;
+										MMs += 2;
+									}
+								}
+							} else {
+								MMs++;
+							}
+						} else if (gaps) {
+							gaps--;
+							W1s++;
+							Us += gaps;
+						} else {
+							Ms++;
+						}
+						HIT = j;
+						gaps = 0;
+					} else {
+						if(last) {
+							if(HIT) {
+								HIT += kmersize;
+							} else {
+								HIT = j + kmersize;
+							}
+							score = Ms * M + MMs * MM + Us * U + W1s * W1;
+							for(l = *last; 0 < l; l--) {
+								Score_r[(template = last[l])] += score;
+								extendScore[template] = HIT;
+							}
+							
+							score = kmersize * M;
+							MMs = MM << 1;
+							for(l = 1; l <= *values; l++) {
+								if(j < extendScore[(template = values[l])]) {
+									if(extendScore[template] == HIT) {
+										Score_r[template] += M;
+									} else {
+										gaps = extendScore[template] - j - 1;
+										Score_r[template] += (W1 + gaps * U);
+									}
+								} else if(Score_r[template] != 0) {
+									Score_r[template] += score;
+									if((gaps = extendScore[template] - j)) {
+										if(gaps == 1) {
+											Score_r[template] += MMs;
+										} else {
+											gaps -= 2;
+											if((Ms = MMs + gaps * M) < 0) {
+												Score_r[template] += Ms;
+											}
+										}
+									} else {
+										Score_r[template] += MM;
+									}
+								} else {
+									Score_r[template] = score;
+									bestTemplates_r[0]++;
+									bestTemplates_r[*bestTemplates_r] = template;
+								}
+							}
+						} else {
+							for(l = 1; l <= *values; l++) {
+								Score_r[(template = values[l])] = kmersize * M;
+								bestTemplates_r[l] = template;
+							}
+							*bestTemplates_r = *values;
+						}
+						HIT = 0;
+						gaps = 0;
+						Ms = 0;
+						MMs = 0;
+						Us = 0;
+						W1s = 0;
+						last = values;
+					}
+					hitCounter++;
+				} else {
+					gaps++;
+				}
+			}
+			j = qseq_r->N[i] + 1;
+		}
+		if(last) {
+			score = Ms * M + MMs * MM + Us * U + W1s * W1;
+			for(l = *last; 0 < l; l--) {
+				Score_r[last[l]] += score;
+			}
+		}
+		
+		/* get best match(es) */
+		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+			bestHits = 0;
+			for(l = 1; l <= *bestTemplates_r; l++) {
+				if(Score_r[(template = bestTemplates_r[l])] > bestScore_r) {
+					bestScore_r = Score_r[template];
+					bestHits = 1;
+					bestTemplates_r[bestHits] = template;
+				} else if(Score_r[template] == bestScore_r) {
+					bestHits++;
+					bestTemplates_r[bestHits] = template;
+				}
+				Score_r[template] = 0;
+				extendScore[template] = 0;
+			}
+			*bestTemplates_r = bestHits;
+		} else {
+			for(l = *bestTemplates_r; 0 < l; l--) {
+				extendScore[(template = bestTemplates_r[l])] = 0;
+				Score_r[template] = 0;
+			}
+			*bestTemplates_r = 0;
+		}
+	}
+	qseq_r->N[0]--;
+	
+	/* Validate best match */
+	if(bestScore > 0 || bestScore_r > 0) {
+		end = qseq->seqlen + 1;
+		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
+			if(bestScore > bestScore_r) {
+				lock(excludeOut);
+				deConPrintPtr(bestTemplates, qseq, bestScore, header);
+				unlock(excludeOut);
+			} else if(bestScore < bestScore_r) {
+				lock(excludeOut);
+				deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header);
+				unlock(excludeOut);
+			} else {
+				/* merge */
+				for(i = 1; i <= *bestTemplates_r; i++) {
+					bestTemplates[0]++;
+					bestTemplates[*bestTemplates] = -bestTemplates_r[i];
+				}
+				lock(excludeOut);
+				deConPrintPtr(bestTemplates, qseq, -bestScore, header);
+				unlock(excludeOut);
+			}
+		}
+	}
+}
+
+void save_kmers_old(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
+	
 	int i, end, bestScore, bestScore_r;
 	bestScore = 0;
 	bestScore_r = 0;
@@ -5071,6 +5415,7 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 }
 
 void save_kmers_sparse(struct hashMap_kmers *foundKmers, struct compKmers *compressor) {
+	
 	/* save_kmers find ankering k-mers the in query sequence,
 	and is the time determining step */
 	
@@ -5407,37 +5752,27 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor);
 					qseq->seq -= start;
-					/* translate to 2bit */
-					/*if(qseq->len >= compressor->size) {
-						freeComp(compressor);
-						allocComp(compressor, qseq->len);
-					}
-					compDNA(compressor, qseq->seq + start, qseq->len);
-					*/
-					/* print */
-					/*dumpComp(compressor, stdout);
-					fwrite(&header->len, sizeof(int), 1, stdout);
-					fwrite((header->seq + 1), 1, header->len, stdout);
-					resetComp(compressor);*/
 				}
 			}
 		} else if(FASTA) {
 			while(FileBuffgetFsa(inputfile, header, qseq)) {
+				/* remove leading and trailing N's */
+				start = 0;
+				end = qseq->len - 1;
+				seq = qseq->seq;
+				while(end >= 0 && seq[end] == 4) {
+					end--;
+				}
+				end++;
+				while(start < end && seq[start] == 4) {
+					start++;
+				}
+				qseq->len = end - start;
 				if(qseq->len > kmersize) {
-					/* translate to 2bit */
-					/*if(qseq->len >= compressor->size) {
-						freeComp(compressor);
-						allocComp(compressor, qseq->len);
-					}
-					compDNA(compressor, qseq->seq, qseq->len);*/
-					
+					/* dump seq */
+					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor);
-					
-					/* print */
-					/*dumpComp(compressor, stdout);
-					fwrite(&header->len, sizeof(int), 1, stdout);
-					fwrite((header->seq + 1), 1, header->len, stdout);
-					resetComp(compressor);*/
+					qseq->seq -= start;
 				}
 			}
 		}
@@ -5606,6 +5941,31 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 			}
 		} else if(FASTA) {
 			while((FileBuffgetFsa(inputfile, header, qseq) | FileBuffgetFsa(inputfile2, header2, qseq2))) {
+				/* remove leading and trailing N's */
+				start = 0;
+				end = qseq->len - 1;
+				seq = qseq->seq;
+				while(end >= 0 && seq[end] == 4) {
+					end--;
+				}
+				end++;
+				while(start < end && seq[start] == 4) {
+					start++;
+				}
+				qseq->len = end - start;
+				
+				start2 = 0;
+				end = qseq2->len - 1;
+				seq = qseq2->seq;
+				while(end >= 0 && seq[end] == 4) {
+					end--;
+				}
+				end++;
+				while(start2 < end && seq[start2] == 4) {
+					start++;
+				}
+				qseq2->len = end - start2;
+				
 				/* print */
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
@@ -5776,6 +6136,31 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 			}
 		} else if(FASTA) {
 			while((FileBuffgetFsa(inputfile, header, qseq) | FileBuffgetFsa(inputfile, header2, qseq2))) {
+				/* remove leading and trailing N's */
+				start = 0;
+				end = qseq->len - 1;
+				seq = qseq->seq;
+				while(end >= 0 && seq[end] == 4) {
+					end--;
+				}
+				end++;
+				while(start < end && seq[start] == 4) {
+					start++;
+				}
+				qseq->len = end - start;
+				
+				start2 = 0;
+				end = qseq2->len - 1;
+				seq = qseq2->seq;
+				while(end >= 0 && seq[end] == 4) {
+					end--;
+				}
+				end++;
+				while(start2 < end && seq[start2] == 4) {
+					start++;
+				}
+				qseq2->len = end - start2;
+				
 				/* print */
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
@@ -8092,14 +8477,7 @@ struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct
 	
 	/* get best seed chain */
 	stop = chainMEMs(chain, q_len, 1);
-	/*for(i = 0; i < q_len; i++) {
-		fprintf(stderr, "%d ", best[i]);
-	}
-	fprintf(stderr, "\n");
-	for(i = 0; i < q_len; i++) {
-		fprintf(stderr, "%d ", chain[i]);
-	}
-	fprintf(stderr, "\n");*/
+	
 	//if((stop * kmersize) < (q_len - stop + kmersize)) {
 	if(stop < (q_len >> 5)) {
 		Stat.score = 0;
@@ -9245,17 +9623,19 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 
 void update_Scores(char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, struct qseqs *header, FILE *frag_out_raw) {
 	
+	static int buffer[4];
 	int i;
 	
-	/* print read:  q_len, qseq, num, score, start, end, template */
-	fwrite(&q_len, sizeof(int), 1, frag_out_raw);
+	/* print frag */
+	buffer[0] = q_len;
+	buffer[1] = counter;
+	buffer[2] = score;
+	buffer[3] = header->len;
+	fwrite(buffer, sizeof(int), 4, frag_out_raw);
 	fwrite(qseq, 1, q_len, frag_out_raw);
-	fwrite(&counter, sizeof(int), 1, frag_out_raw);
-	fwrite(&score, sizeof(int), 1, frag_out_raw);
 	fwrite(start, sizeof(int), counter, frag_out_raw);
 	fwrite(end, sizeof(int), counter, frag_out_raw);
 	fwrite(template, sizeof(int), counter, frag_out_raw);
-	fwrite(&header->len, sizeof(int), 1, frag_out_raw);
 	fwrite(header->seq, 1, header->len, frag_out_raw);
 	
 	/* update scores */
@@ -9263,17 +9643,14 @@ void update_Scores(char *qseq, int q_len, int counter, int score, int *start, in
 		if(*template < 0) {
 			template[0] = -template[0];
 		}
-		//alignment_scores[template[0]] += (1.0 * score) / (end[0] - start[0]);
 		alignment_scores[*template] += score;
 		uniq_alignment_scores[*template] += score;
-		//uniq_alignment_scores[template[0]]++;
 	} else {
 		for(i = 0; i < counter; i++) {
 			if(template[i] < 0) {
 				template[i] = -template[i];
 			}
 			alignment_scores[template[i]] += score;
-			//alignment_scores[template[i]] += (1.0 * score) / (end[i] - start[i]);
 		}
 	}
 }
@@ -9980,7 +10357,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	int i, j, tmp_template, tmp_tmp_template, file_len, best_read_score;
 	int template, bestHits, t_len, read_counter, start, end, aln_len;
 	int bestTemplate, fragCount, fileCount, maxFrag, read_score, rc_flag;
-	int coverScore, bias, tmp_start, tmp_end, *matched_templates;
+	int coverScore, bias, tmp_start, tmp_end, stats[4], *matched_templates;
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
 	long *index_indexes, *seq_indexes;
@@ -10206,19 +10583,17 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	fragCount = 0;
 	fileCount = 0;
 	maxFrag = 1000000;
-	while(fread(&qseq->len, sizeof(int), 1, frag_in_raw)) {
-		fread(qseq->seq, 1, qseq->len, frag_in_raw);
-		fread(&bestHits, sizeof(int), 1, frag_in_raw);
-		fread(&read_score, sizeof(int), 1, frag_in_raw);
-		
-		fread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-		fread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-		fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-		
-		fread(&header->len, sizeof(int), 1, frag_in_raw);
-		fread(header->seq, 1, header->len, frag_in_raw);
-		
+	while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		qseq->len = stats[0];
+		bestHits = stats[1];
+		read_score = stats[2];
+		header->len = stats[3];
 		if(qseq->len > kmersize) {
+			fread(qseq->seq, 1, qseq->len, frag_in_raw);
+			fread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
+			fread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
+			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
+			fread(header->seq, 1, header->len, frag_in_raw);
 			/* Several mapped templates, choose best */
 			if(bestHits > 1) {
 				bestTemplate = 0;
@@ -10310,21 +10685,6 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
 			alignFrag->next = alignFrags[bestTemplate];
 			alignFrags[bestTemplate] = alignFrag;
-			/*
-			alignFrag->q_len = qseq->len;
-			alignFrag->qseq = malloc(qseq->len);
-			alignFrag->header = strdup(header->seq);
-			if(!alignFrag->qseq || !alignFrag->header) {
-				ERROR();
-			}
-			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
-			alignFrag->bestHits = bestHits;
-			alignFrag->score = read_score;
-			alignFrag->start = start;
-			alignFrag->end = end;
-			alignFrag->next = alignFrags[bestTemplate];
-			alignFrags[bestTemplate] = alignFrag;
-			*/
 			
 			fragCount++;
 			if(fragCount >= maxFrag) {
@@ -10349,6 +10709,8 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			if(frag_out_all) {
 				printFrag(qseq->seq, qseq->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			}
+		} else {
+			fseek(frag_in_raw, qseq->len + header->len + 3 * bestHits * sizeof(int), SEEK_CUR);
 		}
 	}
 	sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
@@ -10560,7 +10922,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	int i, j, tmp_template, tmp_tmp_template, file_len, best_read_score;
 	int template, bestHits, t_len, read_counter, start, end, aln_len;
 	int rc_flag, coverScore, bias, tmp_start, tmp_end, bestTemplate, fragCount;
-	int fileCount, maxFrag, read_score;
+	int fileCount, maxFrag, read_score, stats[4];
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
 	double etta, tmp_score, bestScore, depth, id, cover, q_id, q_cover;
@@ -10771,19 +11133,17 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	fragCount = 0;
 	fileCount = 0;
 	maxFrag = 1000000;
-	while(fread(&qseq->len, sizeof(int), 1, frag_in_raw)) {
-		fread(qseq->seq, 1, qseq->len, frag_in_raw);
-		fread(&bestHits, sizeof(int), 1, frag_in_raw);
-		fread(&read_score, sizeof(int), 1, frag_in_raw);
-		
-		fread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-		fread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-		fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-		
-		fread(&header->len, sizeof(int), 1, frag_in_raw);
-		fread(header->seq, 1, header->len, frag_in_raw);
-		
+	while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		qseq->len = stats[0];
+		bestHits = stats[1];
+		read_score = stats[2];
+		header->len = stats[3];
 		if(qseq->len > kmersize) {
+			fread(qseq->seq, 1, qseq->len, frag_in_raw);
+			fread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
+			fread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
+			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
+			fread(header->seq, 1, header->len, frag_in_raw);
 			/* Several mapped templates, choose best */
 			if(bestHits > 1) {
 				bestTemplate = -1;
@@ -10892,6 +11252,8 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 					}
 				}
 			}
+		} else {
+			fseek(frag_in_raw, qseq->len + header->len + 3 * bestHits * sizeof(int), SEEK_CUR);
 		}
 	}
 	sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
@@ -11004,21 +11366,6 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 						fprintf(alignment_out, "%-10s\t%.60s\n", "template:", aligned_assem->t + i);
 						fprintf(alignment_out, "%-10s\t%.60s\n", "", aligned_assem->s + i);
 						fprintf(alignment_out, "%-10s\t%.60s\n\n", "query:", aligned_assem->q + i);
-						/*
-						fprintf(alignment_out, "%-10s\t", "template:");
-						for(j = i; j < i + 60 && aligned_assem->t[j]; j++) {
-							fprintf(alignment_out, "%c", aligned_assem->t[j]);
-						}
-						fprintf(alignment_out, "\n%-10s\t", "");
-						for(j = i; j < i + 60 && aligned_assem->s[j]; j++) {
-							fprintf(alignment_out, "%c", aligned_assem->s[j]);
-						}
-						fprintf(alignment_out, "\n%-10s\t", "query:");
-						for(j = i; j < i + 60 && aligned_assem->q[j]; j++) {
-							fprintf(alignment_out, "%c", aligned_assem->q[j]);
-						}
-						fprintf(alignment_out, "\n\n");
-						*/
 					}
 					
 					/* Prepare consensus */
@@ -11028,20 +11375,6 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 								aligned_assem->q[i] = 'n';
 							}
 						}
-						/*
-						for(i = 0; i < aln_len; i += 60) {
-							for(j = i; j < i + 60 && aligned_assem->q[j]; j++) {
-								if(aligned_assem->q[j]) {
-									if(aligned_assem->q[j] != '-') {
-										fprintf(consensus_out, "%c", aligned_assem->q[j]);
-									} else {
-										fprintf(consensus_out, "%c", 'n');
-									}
-								}
-							}
-							fprintf(consensus_out, "\n");
-						}
-						*/
 					} else {
 						for(i = 0, bias = 0; i < aln_len; i++, bias++) {
 							aligned_assem->q[bias] = aligned_assem->q[i];
@@ -11051,20 +11384,6 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 						}
 						aln_len = bias;
 						aligned_assem->q[aln_len] = 0;
-						/*
-						bias = 0;
-						for(i = 0; i < aln_len; i += 60 + bias) {
-							bias = 0;
-							for(j = i; j < i + 60 + bias && aligned_assem->q[j]; j++) {
-								if(aligned_assem->q[j] && aligned_assem->q[j] != '-') {
-									fprintf(consensus_out, "%c", aligned_assem->q[j]);
-								} else {
-									bias++;
-								}
-							}
-							fprintf(consensus_out, "\n");
-						}
-						*/
 					}
 					/* Print consensus */
 					fprintf(consensus_out, ">%s\n", template_names[template]);
@@ -11370,21 +11689,6 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 				fprintf(alignment_out, "%-10s\t%.60s\n", "template:", aligned_assem->t + i);
 				fprintf(alignment_out, "%-10s\t%.60s\n", "", aligned_assem->s + i);
 				fprintf(alignment_out, "%-10s\t%.60s\n\n", "query:", aligned_assem->q + i);
-				/*
-				fprintf(alignment_out, "%-10s\t", "template:");
-				for(j = i; j < i + 60 && aligned_assem->t[j]; j++) {
-					fprintf(alignment_out, "%c", aligned_assem->t[j]);
-				}
-				fprintf(alignment_out, "\n%-10s\t", "");
-				for(j = i; j < i + 60 && aligned_assem->s[j]; j++) {
-					fprintf(alignment_out, "%c", aligned_assem->s[j]);
-				}
-				fprintf(alignment_out, "\n%-10s\t", "query:");
-				for(j = i; j < i + 60 && aligned_assem->q[j]; j++) {
-					fprintf(alignment_out, "%c", aligned_assem->q[j]);
-				}
-				fprintf(alignment_out, "\n\n");
-				*/
 			}
 			
 			/* Prepare consensus */
@@ -11394,20 +11698,6 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 						aligned_assem->q[i] = 'n';
 					}
 				}
-				/*
-				for(i = 0; i < aln_len; i += 60) {
-					for(j = i; j < i + 60 && aligned_assem->q[j]; j++) {
-						if(aligned_assem->q[j]) {
-							if(aligned_assem->q[j] != '-') {
-								fprintf(consensus_out, "%c", aligned_assem->q[j]);
-							} else {
-								fprintf(consensus_out, "%c", 'n');
-							}
-						}
-					}
-					fprintf(consensus_out, "\n");
-				}
-				*/
 			} else {
 				for(i = 0, bias = 0; i < aln_len; i++, bias++) {
 					aligned_assem->q[bias] = aligned_assem->q[i];
@@ -11417,20 +11707,6 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 				}
 				aln_len = bias;
 				aligned_assem->q[aln_len] = 0;
-				/*
-				bias = 0;
-				for(i = 0; i < aln_len; i += 60 + bias) {
-					bias = 0;
-					for(j = i; j < i + 60 + bias && aligned_assem->q[j]; j++) {
-						if(aligned_assem->q[j] && aligned_assem->q[j] != '-') {
-							fprintf(consensus_out, "%c", aligned_assem->q[j]);
-						} else {
-							bias++;
-						}
-					}
-					fprintf(consensus_out, "\n");
-				}
-				*/
 			}
 			/* Print consensus */
 			fprintf(consensus_out, ">%s\n", *template_names);
