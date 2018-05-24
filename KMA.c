@@ -174,7 +174,7 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 2};
+int version[3] = {0, 14, 3};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -494,6 +494,55 @@ int buffFileBuff(struct FileBuff *dest) {
 	dest->pos = 0;
 	dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file);
 	return dest->bytes;
+}
+
+int openAndDetermine(struct FileBuff *inputfile, char *filename, char *cmd) {
+	
+	unsigned FASTQ;
+	short unsigned *check;
+	
+	/* determine filetype and open it */
+	FASTQ = 0;
+	if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
+		sprintf(cmd, "gunzip -c %s", filename);
+		popenFileBuff(inputfile, cmd, "r");
+		FASTQ = 4;
+	} else if(strncmp(filename, "--", 2) == 0) {
+		inputfile->file = stdin;
+	} else {
+		openFileBuff(inputfile, filename, "rb");
+	}
+	
+	/* Get first char and determine the format */
+	if(buffFileBuff(inputfile)) {
+		check = (short unsigned *) inputfile->buffer;
+		if(*check == 35615) {
+			closeFileBuff(inputfile);
+			sprintf(cmd, "gunzip -c %s", filename);
+			popenFileBuff(inputfile, cmd, "r");
+			buffFileBuff(inputfile);
+			FASTQ = 4;
+		}
+	} else if(FASTQ & 4) {
+		pcloseFileBuff(inputfile);
+		openFileBuff(inputfile, filename, "rb");
+		buffFileBuff(inputfile);
+		FASTQ = 0;
+	}
+	
+	if(!inputfile->bytes) {
+		inputfile->buffer[0] = 0;
+	}
+	
+	if(inputfile->buffer[0] == '@') { //FASTQ
+		FASTQ |= 1;
+	} else if(inputfile->buffer[0] == '>') { //FASTA
+		FASTQ |= 2;
+	} else {
+		fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
+	}
+	
+	return FASTQ;
 }
 
 int chunkPos(char* seq, int start, int end) {
@@ -1351,7 +1400,7 @@ void compDNA(struct compDNA *compressor, char *seq, int seqlen) {
 	}
 	
 	
-	for(i = 0; i < seqlen; i += 32) {
+	for(i = 0, pos = 0; i < seqlen; i += 32) {
 		end = (i + 32 < seqlen) ? i + 32 : seqlen;
 		pos = i >> 5;
 		for(j = i; j < end; j++) {
@@ -3141,6 +3190,7 @@ void get_kmers_old(int *bestTemplates, int *bestTemplates_r, int *Score, int *Sc
 		last = 0;
 		reps = 0;
 		j = 0;
+		end = qseq->seqlen;
 		for(i = 1; i <= qseq->N[0]; i++) {
 			end = qseq->N[i] - kmersize + 1;
 			for(;j < end; j++) {
@@ -3229,6 +3279,7 @@ void get_kmers_old(int *bestTemplates, int *bestTemplates_r, int *Score, int *Sc
 		last = 0;
 		reps = 0;
 		j = 0;
+		end = qseq_r->seqlen;
 		for(i = 1; i <= qseq_r->N[0]; i++) {
 			end = qseq_r->N[i] - kmersize + 1;
 			for(;j < end; j++) {
@@ -3344,6 +3395,7 @@ void get_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_
 		Us = 0;
 		W1s = 0;
 		j = 0;
+		end = qseq->seqlen;
 		for(i = 1; i <= qseq->N[0]; i++) {
 			end = qseq->N[i] - kmersize + 1;
 			for(;j < end; j++) {
@@ -3508,6 +3560,7 @@ void get_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_
 		Us = 0;
 		W1s = 0;
 		j = 0;
+		end = qseq_r->seqlen;
 		for(i = 1; i <= qseq_r->N[0]; i++) {
 			end = qseq_r->N[i] - kmersize + 1;
 			for(;j < end; j++) {
@@ -4253,6 +4306,7 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 		Us = 0;
 		W1s = 0;
 		j = 0;
+		end = qseq->seqlen;
 		for(i = 1; i <= qseq->N[0]; i++) {
 			end = qseq->N[i] - kmersize + 1;
 			for(;j < end; j++) {
@@ -4417,6 +4471,7 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 		Us = 0;
 		W1s = 0;
 		j = 0;
+		end = qseq_r->seqlen;
 		for(i = 1; i <= qseq_r->N[0]; i++) {
 			end = qseq_r->N[i] - kmersize + 1;
 			for(;j < end; j++) {
@@ -4897,6 +4952,8 @@ void * save_kmers_threaded(void *arg) {
 		if(!regionScores) {
 			ERROR();
 		}
+	} else {
+		regionScores = 0;
 	}
 	extendScore = calloc((DB_size + 1), sizeof(int));
 	header_r = malloc(sizeof(struct qseqs));
@@ -5024,6 +5081,8 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 			/* init HMM */
 			Ms_prev = HMM_param[7] + HMM_param[2];
 			Ns_prev = HMM_param[5] + HMM_param[0];
+			Ms = 0;
+			Ns = 0;
 			
 			/* extend backward */
 			j = i - 1;
@@ -5669,17 +5728,24 @@ struct Hit withDraw_Contamination(int *Scores, int *Scores_tot, struct hashTable
 
 void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	
-	int FASTA, FASTQ, fileCounter, phredCut, start, end;
-	char *filename, *cmd, *zipped, *seq;
+	int fileCounter, phredCut, start, end;
+	unsigned FASTQ;
+	char *filename, *cmd, *seq;
 	struct qseqs *header, *qseq, *qual;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
 	freopen(NULL, "wb", stdout);
 	
+	start = strlen(*inputfiles);
+	for(fileCounter = 1; fileCounter < fileCount; fileCounter++) {
+		end = strlen(inputfiles[fileCounter]);
+		if(start < end) {
+			start = end;
+		}
+	}
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(1);
-	zipped = strdup(".gz");
-	if(!cmd || !zipped || !compressor) {
+	cmd = malloc(start + 16);
+	if(!cmd || !compressor) {
 		ERROR();
 	}
 	allocComp(compressor, 1024);
@@ -5691,7 +5757,8 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	for(fileCounter = 0; fileCounter < fileCount; fileCounter++) {
 		filename = (char*)(inputfiles[fileCounter]);
 		
-		/* determine filetype and open it */
+		/*
+		// determine filetype and open it
 		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
 			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
 			if(!cmd) {
@@ -5706,7 +5773,7 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 		}
 		fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 		
-		/* Get first char and determine the format */
+		// Get first char and determine the format
 		buffFileBuff(inputfile);
 		FASTQ = 0;
 		FASTA = 0;
@@ -5717,9 +5784,14 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 		} else {
 			fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
 		}
+		*/
+		/* determine filetype and open it */
+		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
+			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
+		}
 		
 		/* parse the file */
-		if(FASTQ) {
+		if(FASTQ & 1) {
 			/* get phred scale */
 			phredCut = getPhredFileBuff(inputfile);
 			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
@@ -5754,7 +5826,7 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 					qseq->seq -= start;
 				}
 			}
-		} else if(FASTA) {
+		} else if(FASTQ & 2) {
 			while(FileBuffgetFsa(inputfile, header, qseq)) {
 				/* remove leading and trailing N's */
 				start = 0;
@@ -5777,16 +5849,14 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 			}
 		}
 		
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		if(FASTQ & 4) {
 			pcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
-		
 	}
 	
 	free(cmd);
-	free(zipped);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -5797,17 +5867,24 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 
 void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	
-	int FASTA, FASTQ, fileCounter, phredCut, start, start2, end;
-	char *filename, *cmd, *zipped, *seq;
+	int fileCounter, phredCut, start, start2, end;
+	unsigned FASTQ, FASTQ2;
+	char *filename, *cmd, *seq;
 	struct qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	struct FileBuff *inputfile, *inputfile2;
 	struct compDNA *compressor;
 	freopen(NULL, "wb", stdout);
 	
+	start = strlen(*inputfiles);
+	for(fileCounter = 1; fileCounter < fileCount; fileCounter++) {
+		end = strlen(inputfiles[fileCounter]);
+		if(start < end) {
+			start = end;
+		}
+	}
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(1);
-	zipped = strdup(".gz");
-	if(!cmd || !zipped || !compressor) {
+	cmd = malloc(start + 16);
+	if(!cmd || !compressor) {
 		ERROR();
 	}
 	allocComp(compressor, 1024);
@@ -5824,7 +5901,19 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 		
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		FASTQ = openAndDetermine(inputfile, filename, cmd);
+		fileCounter++;
+		filename = inputfiles[fileCounter];
+		FASTQ2 = openAndDetermine(inputfile2, filename, cmd);
+		if((FASTQ & 3) && (FASTQ & 3) == (FASTQ2 & 3)) {
+			fprintf(stderr, "# Reading inputfile:\t%s %s\n", inputfiles[fileCounter-1], filename);
+		} else {
+			fprintf(stderr, "Inputfiles:\t%s %s\nAre in different format.\n", inputfiles[fileCounter-1], filename);
+			FASTQ = 0;
+		}
+		
+		/*
+		if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
 			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
 			if(!cmd) {
 				ERROR();
@@ -5839,8 +5928,8 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 		
 		fileCounter++;
 		filename = inputfiles[fileCounter];
-		/* determine filetype and open it */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		
+		if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
 			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
 			if(!cmd) {
 				ERROR();
@@ -5853,9 +5942,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 			openFileBuff(inputfile2, filename, "rb");
 		}
 		
-		fprintf(stderr, "# Reading inputfile:\t%s %s\n", inputfiles[fileCounter-1], filename);
-		
-		/* Get first char and determine the format */
+		// Get first char and determine the format
 		buffFileBuff(inputfile);
 		buffFileBuff(inputfile2);
 		FASTQ = 0;
@@ -5867,9 +5954,10 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 		} else {
 			fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
 		}
+		*/
 		
 		/* parse the file */
-		if(FASTQ) {
+		if(FASTQ & 1) {
 			/* get phred scale */
 			phredCut = getPhredFileBuff(inputfile);
 			if(phredCut == 0) {
@@ -5939,7 +6027,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 					qseq2->seq -= start2;
 				}
 			}
-		} else if(FASTA) {
+		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq) | FileBuffgetFsa(inputfile2, header2, qseq2))) {
 				/* remove leading and trailing N's */
 				start = 0;
@@ -5986,13 +6074,13 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 		}
 		
 		fileCounter--;
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		if(FASTQ & 4) {
 			pcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
 		fileCounter++;
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		if(FASTQ2 & 4) {
 			pcloseFileBuff(inputfile2);
 		} else {
 			closeFileBuff(inputfile2);
@@ -6001,7 +6089,6 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 	}
 	
 	free(cmd);
-	free(zipped);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -6016,17 +6103,24 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 
 void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	
-	int FASTA, FASTQ, fileCounter, phredCut, start, start2, end;
-	char *filename, *cmd, *zipped, *seq;
+	int fileCounter, phredCut, start, start2, end;
+	unsigned FASTQ;
+	char *filename, *cmd, *seq;
 	struct qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
 	freopen(NULL, "wb", stdout);
 	
+	start = strlen(*inputfiles);
+	for(fileCounter = 1; fileCounter < fileCount; fileCounter++) {
+		end = strlen(inputfiles[fileCounter]);
+		if(start < end) {
+			start = end;
+		}
+	}
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(1);
-	zipped = strdup(".gz");
-	if(!cmd || !zipped || !compressor) {
+	cmd = malloc(start + 16);
+	if(!cmd || !compressor) {
 		ERROR();
 	}
 	allocComp(compressor, 1024);
@@ -6042,34 +6136,12 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 		filename = (char*)(inputfiles[fileCounter]);
 		
 		/* determine filetype and open it */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
-			if(!cmd) {
-				ERROR();
-			}
-			sprintf(cmd, "gunzip -c %s", filename);
-			popenFileBuff(inputfile, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile->file = stdin;
-		} else {
-			openFileBuff(inputfile, filename, "rb");
-		}
-		fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
-		
-		/* Get first char and determine the format */
-		buffFileBuff(inputfile);
-		FASTQ = 0;
-		FASTA = 0;
-		if(inputfile->buffer[0] == '@') { //FASTQ
-			FASTQ = 1;
-		} else if(inputfile->buffer[0] == '>') { //FASTA
-			FASTA = 1;
-		} else {
-			fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
+		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
+			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 		}
 		
 		/* parse the file */
-		if(FASTQ) {
+		if(FASTQ & 1) {
 			/* get phred scale */
 			phredCut = getPhredFileBuff(inputfile);
 			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
@@ -6134,7 +6206,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 					qseq2->seq -= start2;
 				}
 			}
-		} else if(FASTA) {
+		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq) | FileBuffgetFsa(inputfile, header2, qseq2))) {
 				/* remove leading and trailing N's */
 				start = 0;
@@ -6180,7 +6252,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 			}
 		}
 		
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		if(FASTQ & 4) {
 			pcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
@@ -6189,7 +6261,6 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 	}
 	
 	free(cmd);
-	free(zipped);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -6782,6 +6853,7 @@ void save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char 
 			depth = 0;
 			cover = 0;
 			score = 0;
+			template = 0;
 			if(ss == 'q') {
 				for(i = 0; i < DB_size; i++) {
 					if(SearchList[i] && w_Scores_tot[i] >= score) {
@@ -6872,7 +6944,7 @@ void save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char 
 			}
 			
 			/* validate best match */
-			if(cover >= ID_t) {
+			if(cover && cover >= ID_t) {
 				/* with draw contamination k-mers matching this template */
 				score_add = 0;
 				score_tot_add = 0;
@@ -6963,6 +7035,7 @@ void save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char 
 			depth = 0;
 			cover = 0;
 			score = 0;
+			template = 0;
 			if(ss == 'q') {
 				for(i = 0; i < DB_size; i++) {
 					if(SearchList[i] && w_Scores_tot[i] >= score) {
@@ -7053,7 +7126,7 @@ void save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char 
 			}
 			
 			/* validate best match */
-			if(cover >= ID_t) {
+			if(cover && cover >= ID_t) {
 				/* output results */
 				query_cover = 100.0 * w_Scores_tot[template] / Ntot;
 				/* calc tot values */
@@ -8919,7 +8992,7 @@ int preseed(struct hashMap_index *template_index, char *qseq, int q_len) {
 
 int anker_rc(const int template_name, char *qseq, int q_len) {
 	
-	int i, j, rc, end, mem_count, score, score_r, bestScore, value, t_len;
+	int i, j, rc, end, score, score_r, bestScore, value, t_len;
 	int prev, *track;
 	long unsigned key;
 	struct hashMap_index *template_index;
@@ -10354,7 +10427,7 @@ void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct c
 
 void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
-	int i, j, tmp_template, tmp_tmp_template, file_len, best_read_score;
+	int i, tmp_template, tmp_tmp_template, file_len, best_read_score;
 	int template, bestHits, t_len, read_counter, start, end, aln_len;
 	int bestTemplate, fragCount, fileCount, maxFrag, read_score, rc_flag;
 	int coverScore, bias, tmp_start, tmp_end, stats[4], *matched_templates;
@@ -10799,7 +10872,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 					id = 0;
 				}
 				
-				if(id >= ID_t) {
+				if(ID_t <= id && 0 < id) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8u\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						template_names[template], read_score, (int) expected, t_len, id, cover, q_id, q_cover, depth, q_value, p_value);
@@ -10919,7 +10992,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	   at the cost it chooses best templates based on kmers
 	   instead of alignment score. */
 	
-	int i, j, tmp_template, tmp_tmp_template, file_len, best_read_score;
+	int i, tmp_template, tmp_tmp_template, file_len, best_read_score;
 	int template, bestHits, t_len, read_counter, start, end, aln_len;
 	int rc_flag, coverScore, bias, tmp_start, tmp_end, bestTemplate, fragCount;
 	int fileCount, maxFrag, read_score, stats[4];
@@ -11354,7 +11427,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 				} else {
 					id = 0;
 				}
-				if(id >= ID_t) {
+				if(ID_t <= id && 0 < id) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8u\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						template_names[template], read_score, (int) expected, t_len, id, cover, q_id, q_cover, depth, q_value, p_value);
@@ -11432,15 +11505,13 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 
 void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int Mt1) {
 	
-	int i, j, end, aln_len, t_len, bias, read_score, coverScore;
-	int file_len, shmid;
+	int i, j, end, aln_len, t_len, bias, read_score, coverScore, file_len;
 	long unsigned seeker, *seq;
 	double etta, expected, q_value, p_value, id, q_id, cover, q_cover, depth;
 	char *outZipped;
 	FILE *res_out, *alignment_out, *consensus_out, *frag_out, *matrix_out;
 	FILE *template_fragments, *DB_file;
 	time_t t0, t1;
-	key_t key;
 	struct aln *aligned, *gap_align;
 	struct assem *aligned_assem;
 	struct qseqs *qseq, *header;
@@ -11677,7 +11748,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		} else {
 			id = 0;
 		}
-		if(id >= ID_t) {
+		if(ID_t <= id && 0 < id) {
 			/* Output result */
 			fprintf(res_out, "%-12s\t%8u\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				*template_names, read_score, (int) expected, t_len, id, cover, q_id, q_cover, depth, q_value, p_value);
