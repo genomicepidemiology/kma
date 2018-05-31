@@ -173,9 +173,10 @@ int chomp(char *string) {
 	/* remove trailing spaces and newlines */
 	int k = strlen(string) - 1;
 	/* isspace = ((string[k] >= 9  && string[k] <= 13) || string[k] == 32), in ASCII */
-	while (isspace(string[k]))
-		k--;
-	k++;
+	while (isspace(string[k])) {
+		--k;
+	}
+	++k;
 	string[k] = 0;
 	return k;
 }
@@ -210,7 +211,7 @@ int uint_eq(const unsigned *s1, const unsigned *s2, int len) {
 		return 1;
 	}
 	int i;
-	for(i = 0; i < len; i++) {
+	for(i = 0; i < len; ++i) {
 		if(s1[i] != s2[i]) {
 			return 0;
 		}
@@ -223,7 +224,7 @@ int int_eq(const int *s1, const int *s2, int len) {
 		return 1;
 	}
 	int i;
-	for(i = 0; i < len; i++) {
+	for(i = 0; i < len; ++i) {
 		if(s1[i] != s2[i]) {
 			return 0;
 		}
@@ -233,7 +234,7 @@ int int_eq(const int *s1, const int *s2, int len) {
 
 void convertToNum(char *qseq, int q_len) {
 	int i;
-	for(i = 0; i < q_len; i++) {
+	for(i = 0; i < q_len; ++i) {
 		qseq[i] = to2Bit[qseq[i]];
 	}
 }
@@ -246,7 +247,7 @@ void strrc(char *qseq, int q_len) {
 	
 	seqlen = q_len >> 1;
 	
-	for(i = 0, j = q_len - 1; i < seqlen; i++, j--) {
+	for(i = 0, j = q_len - 1; i < seqlen; ++i, --j) {
 		carry = comp[qseq[i]];
 		qseq[i] = comp[qseq[j]];
 		qseq[j] = carry;
@@ -319,7 +320,7 @@ void compDNA(struct compDNA *compressor, char *seq, int seqlen) {
 	for(i = 0; i < seqlen; i += 32) {
 		end = (i + 32 < seqlen) ? i + 32 : seqlen;
 		pos = i >> 5;
-		for(j = i; j < end; j++) {
+		for(j = i; j < end; ++j) {
 			nuc = seq[j];
 			if(nuc == 4) {
 				compressor->seq[pos] <<= 2;
@@ -344,16 +345,16 @@ int compDNAref(struct compDNA *compressor, char *qseq, int seqlen) {
 	seq = qseq;
 	bias = 0;
 	while(*seq == 4) {
-		seq++;
-		bias++;
+		++seq;
+		++bias;
 	}
 	seqlen -= bias;
 	/* trim trailing N's */
-	seqlen--;
+	--seqlen;
 	while(seq[seqlen] == 4) {
-		seqlen--;
+		--seqlen;
 	}
-	seqlen++;
+	++seqlen;
 	
 	compressor->seqlen = seqlen;
 	if(seqlen & 31) {
@@ -368,7 +369,7 @@ int compDNAref(struct compDNA *compressor, char *qseq, int seqlen) {
 	for(i = 0; i < seqlen; i += 32) {
 		end = (i + 32 < seqlen) ? i + 32 : seqlen;
 		pos = i >> 5;
-		for(j = i; j < end; j++) {
+		for(j = i; j < end; ++j) {
 			if(seq[j] == 4) {
 				compressor->seq[pos] = (compressor->seq[pos] << 2) | nuc;
 				compressor->N[0]++;
@@ -391,12 +392,12 @@ void unCompDNA(struct compDNA *compressor, char *seq) {
 	int i;
 	
 	/* get nucs */
-	for(i = 0; i < compressor->seqlen; i++) {
+	for(i = 0; i < compressor->seqlen; ++i) {
 		seq[i] = getNuc(compressor->seq, i);
 	}
 	
 	/* get N's */
-	for(i = 1; i <= compressor->N[0]; i++) {
+	for(i = 1; i <= compressor->N[0]; ++i) {
 		seq[compressor->N[i]] = 4;
 	}
 	
@@ -421,10 +422,10 @@ unsigned addKmerC(long unsigned key, int extend) {
 	
 	pos = templates->seq_n - kmersize + extend;
 	key <<= ((kmersize - extend) << 1);
-	for(i = kmersize - extend; i < kmersize; i++) {
+	for(i = kmersize - extend; i < kmersize; ++i) {
 		key <<= 2;
 		SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
-		templates->seq_n++;
+		++templates->seq_n;
 	}
 	
 	return pos;
@@ -502,7 +503,7 @@ void rc_comp(struct compDNA *compressor, struct compDNA *compressor_rc) {
 	compressor_rc->complen = compressor->complen;
 	
 	/* reverse and complement*/
-	for(i = 0, j = compressor->complen - 1; i < compressor->complen; i++, j--) {
+	for(i = 0, j = compressor->complen - 1; i < compressor->complen; ++i, --j) {
 		compressor_rc->seq[j] = binRev2(~compressor->seq[i]);
 	}
 	
@@ -510,7 +511,7 @@ void rc_comp(struct compDNA *compressor, struct compDNA *compressor_rc) {
 	if((compressor->seqlen & 31)) {
 		shift = (((compressor->complen << 5) - compressor->seqlen) << 1);
 		r_shift = 64 - shift;
-		for(i = 0, j = 1; j < compressor->complen; i++, j++) {
+		for(i = 0, j = 1; j < compressor->complen; i = j++) {
 			compressor_rc->seq[i] = (compressor_rc->seq[i] << shift) | (compressor_rc->seq[j] >> r_shift);
 		}
 		compressor_rc->seq[i] <<= shift;
@@ -520,7 +521,7 @@ void rc_comp(struct compDNA *compressor, struct compDNA *compressor_rc) {
 	compressor_rc->N[0] = compressor->N[0];
 	r_shift = compressor->seqlen - 1;
 	shift = compressor->N[0];
-	for(i = 1, j = compressor->N[0]; i <= shift; i++, j--) {
+	for(i = 1, j = compressor->N[0]; i <= shift; ++i, --j) {
 		compressor_rc->N[i] = r_shift - compressor->N[j];
 		//compressor_rc->N[i] = compressor->seqlen - compressor->N[i] - 1;
 	}
@@ -534,7 +535,7 @@ void rcComp(struct compDNA *compressor) {
 	
 	/* reverse and complement*/
 	complen = compressor->complen >> 1;
-	for(i = 0, j = compressor->complen - 1; i < complen; i++, j--) {
+	for(i = 0, j = compressor->complen - 1; i < complen; ++i, --j) {
 		carry = binRev2(~compressor->seq[i]);
 		compressor->seq[i] = binRev2(~compressor->seq[j]);
 		compressor->seq[j] = carry;
@@ -547,7 +548,7 @@ void rcComp(struct compDNA *compressor) {
 	if((compressor->seqlen & 31)) {
 		shift = (((compressor->complen << 5) - compressor->seqlen) << 1);
 		r_shift = 64 - shift;
-		for(i = 0, j = 1; j < compressor->complen; i++, j++) {
+		for(i = 0, j = 1; j < compressor->complen; i = j++) {
 			compressor->seq[i] = (compressor->seq[i] << shift) | (compressor->seq[j] >> r_shift);
 		}
 		compressor->seq[i] <<= shift;
@@ -556,16 +557,16 @@ void rcComp(struct compDNA *compressor) {
 	/* Change N's */
 	j = compressor->N[0] - 1;
 	complen = compressor->N[0] >> 1;
-	compressor->N++;
+	++compressor->N;
 	r_shift = compressor->seqlen - 1;
-	for(i = 0; i < complen; i++, j--) {
+	for(i = 0; i < complen; ++i, --j) {
 		shift = r_shift - compressor->N[i];
 		compressor->N[i] = r_shift - compressor->N[j];
 		compressor->N[j] = shift;
 	}
-	compressor->N--;
+	--compressor->N;
 	if((compressor->N[0] & 1)) {
-		complen++;
+		++complen;
 		compressor->N[complen] = r_shift - compressor->N[complen];
 	}
 	
@@ -668,7 +669,10 @@ void destroyFileBuff(struct FileBuff *dest) {
 
 int buffFileBuff(struct FileBuff *dest) {
 	dest->pos = 0;
-	dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file);
+	if((dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file)) == 0) {
+		dest->buffer[0] = 0;
+	}
+	
 	return dest->bytes;
 }
 
@@ -676,7 +680,7 @@ int chunkPos(char* seq, int start, int end) {
 	
 	int i;
 	
-	for(i = start; i < end; i++) {
+	for(i = start; i < end; ++i) {
 		if(seq[i] == '\n') {
 			return i;
 		}
@@ -737,7 +741,7 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 		/* accept char */
 		seq_ptr[seqlen] = to2Bit[buff_ptr[destpos]];
 		if(seq_ptr[seqlen] < 5) {
-			seqlen++;
+			++seqlen;
 			if(seqlen == seqsize) {
 				seq->size <<= 1;
 				seq->seq = realloc(seq->seq, seq->size);
@@ -749,7 +753,7 @@ int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *se
 				seq_ptr = seq->seq;
 			}
 		}
-		destpos++;
+		++destpos;
 		
 		if(destpos == destbytes) {
 			destpos = 0;
@@ -807,7 +811,7 @@ struct hashMap * hashMap_initialize(long unsigned size) {
 	}
 	
 	/* masking */
-	src->size--;
+	--src->size;
 	
 	return src;
 }
@@ -854,10 +858,10 @@ struct hashMap * hashMap_load(char *filename) {
 			OOM();
 		}
 		/* masking */
-		src->size--;
+		--src->size;
 		
 		/* load */
-		for(i = 0; i < src->n; i++) {
+		for(i = 0; i < src->n; ++i) {
 			fread(pos, sizeof(unsigned), 2, infile);
 			src->values[pos[0]] = malloc((pos[1] + 1) * sizeof(unsigned));
 			if(!src->values[pos[0]]) {
@@ -874,11 +878,11 @@ struct hashMap * hashMap_load(char *filename) {
 			OOM();
 		}
 		/* masking */
-		src->size--;
+		--src->size;
 		
 		/* load */
 		fread(src->seq, sizeof(long unsigned), (src->seq_n >> 5) + 1, infile);
-		for(i = 0; i < src->n; i++) {
+		for(i = 0; i < src->n; ++i) {
 			fread(pos, sizeof(unsigned), 1, infile);
 			src->values[i] = malloc((pos[0] + 1) * sizeof(unsigned));
 			if(!src->values[i]) {
@@ -888,7 +892,7 @@ struct hashMap * hashMap_load(char *filename) {
 			fread(src->values[i] + 1, sizeof(unsigned), pos[0], infile);
 		}
 		
-		for(i = 0; i < src->n; i++) {
+		for(i = 0; i < src->n; ++i) {
 			//fread(pos, sizeof(unsigned), 2, infile);
 			node = malloc(sizeof(struct hashTable));
 			if(!node) {
@@ -916,7 +920,7 @@ void hashMap_dump(struct hashMap *src, FILE *outfile) {
 	struct hashTable *node;
 	
 	/* dump content */
-	src->size++;
+	++src->size;
 	fwrite(&src->kmersize, sizeof(unsigned), 1, outfile);
 	fwrite(&src->size, sizeof(long unsigned), 1, outfile);
 	fwrite(&src->n, sizeof(unsigned), 1, outfile);
@@ -927,7 +931,7 @@ void hashMap_dump(struct hashMap *src, FILE *outfile) {
 	/* allocate */
 	if((src->size - 1) == mask) {
 		/* dump values */
-		for(i = 0; i < src->size; i++) {
+		for(i = 0; i < src->size; ++i) {
 			if(src->values[i]) {
 				fwrite(&(unsigned){i}, sizeof(unsigned), 1, outfile);
 				fwrite(src->values[i], sizeof(unsigned), src->values[i][0] + 1, outfile);
@@ -936,10 +940,10 @@ void hashMap_dump(struct hashMap *src, FILE *outfile) {
 	} else {
 		/* dump */
 		fwrite(src->seq, sizeof(long unsigned), (src->seq_n >> 5) + 1, outfile);
-		for(i = 0; i < src->n; i++) {
+		for(i = 0; i < src->n; ++i) {
 			fwrite(src->values[i], sizeof(unsigned), src->values[i][0] + 1, outfile);
 		}
-		for(i = 0; i < src->size; i++) {
+		for(i = 0; i < src->size; ++i) {
 			for(node = src->table[i]; node != 0; node = node->next) {
 				//fwrite(&(unsigned){i}, sizeof(unsigned), 1, outfile);
 				fwrite(&node->key, sizeof(unsigned), 1, outfile);
@@ -949,8 +953,7 @@ void hashMap_dump(struct hashMap *src, FILE *outfile) {
 	}
 	
 	/* masking */
-	
-	src->size--;
+	--src->size;
 }
 
 void deConMap_dump(struct hashMapKMA *dest, FILE *out) {
@@ -975,11 +978,11 @@ void deConMap_dump(struct hashMapKMA *dest, FILE *out) {
 		fwrite(dest->seq, sizeof(long unsigned), dest->seqsize, out);
 		fwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
 		fwrite(dest->value_index, sizeof(unsigned), dest->n, out);
-		for(i = 0; i < dest->n; i++) {
+		for(i = 0; i < dest->n; ++i) {
 			fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
 		}
 	} else {
-		for(i = 0; i < dest->size; i++) {
+		for(i = 0; i < dest->size; ++i) {
 			if(templates->values[i]) {
 				fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
 			}
@@ -1112,7 +1115,7 @@ int megaMap_addKMA(long unsigned key, int value, int extend) {
 		values[0] = 1;
 		values[1] = value;
 		templates->values[key] = values;
-		templates->n++;
+		++templates->n;
 	} else if(values[values[0]] != value) {
 		values[0]++;
 		values = realloc(values, (values[0] + 1) * sizeof(int));
@@ -1137,7 +1140,7 @@ int megaMap_addKMA_sparse(long unsigned key, int value, int extend) {
 		values[0] = 1;
 		values[1] = value;
 		templates->values[key] = values;
-		templates->n++;
+		++templates->n;
 		template_ulengths[value]++;
 	} else if(values[values[0]] != value) {
 		values[0]++;
@@ -1171,7 +1174,7 @@ int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
 	if(pos != dest->null_index) {
 		kmer = getKmerP(dest->seq, dest->key_index[pos]);
 		while(key != kmer) {
-			pos++;
+			++pos;
 			if(kpos != (kmer & dest->size)) {
 				return 0;
 			}
@@ -1224,7 +1227,7 @@ void hashMap2megaMap(struct hashTable *table) {
 	if(!templates->values) {
 		OOM();
 	}
-	templates->size--;
+	--templates->size;
 	
 	/* table sorted in semi descending order */
 	for(node = table; node != 0; node = next) {
@@ -1275,10 +1278,10 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 	
 	/* new value check if there is space */
 	if(templates->n == templates->size) {
-		templates->size++;
+		++templates->size;
 		/* link table */
 		table = 0;
-		for(i = 0; i < templates->size; i++) {
+		for(i = 0; i < templates->size; ++i) {
 			for(node = templates->table[i]; node != 0; node = next) {
 				next = node->next;
 				node->next = table;
@@ -1300,7 +1303,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 		if(!templates->values || !templates->table) {
 			OOM();
 		}
-		templates->size--;
+		--templates->size;
 		
 		for(node = table; node != 0; node = next) {
 			next = node->next;
@@ -1319,7 +1322,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 			OOM();
 		}
 		/* nullify new chunk */
-		for(; i < templates->seq_size; i++) {
+		for(; i < templates->seq_size; ++i) {
 			templates->seq[i] = 0;
 		}
 	}
@@ -1333,13 +1336,13 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 	/*if(extend) {
 		node->key = templates->seq_n - kmersize + 1;
 		SetNuc(templates->seq, (key & 3), templates->seq_n);
-		templates->seq_n++;
+		++templates->seq_n;
 	} else {
 		node->key = templates->seq_n;
-		for(i = 0; i < kmersize; i++) {
+		for(i = 0; i < kmersize; ++i) {
 			key <<= 2;
 			SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
-			templates->seq_n++;
+			++templates->seq_n;
 		}
 	}*/
 	
@@ -1353,7 +1356,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 	node->next = templates->table[index];
 	templates->table[index] = node;
 	
-	templates->n++;
+	++templates->n;
 	
 	return 1;
 }
@@ -1386,10 +1389,10 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 	
 	/* new value check if there is space */
 	if(templates->n == templates->size) {
-		templates->size++;
+		++templates->size;
 		/* link table */
 		table = 0;
-		for(i = 0; i < templates->size; i++) {
+		for(i = 0; i < templates->size; ++i) {
 			for(node = templates->table[i]; node != 0; node = next) {
 				next = node->next;
 				node->next = table;
@@ -1412,7 +1415,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		if(!templates->values || !templates->table) {
 			OOM();
 		}
-		templates->size--;
+		--templates->size;
 		
 		for(node = table; node != 0; node = next) {
 			next = node->next;
@@ -1431,7 +1434,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 			OOM();
 		}
 		/* nullify new chunk */
-		for(; i < templates->seq_size; i++) {
+		for(; i < templates->seq_size; ++i) {
 			templates->seq[i] = 0;
 		}
 	}
@@ -1445,10 +1448,10 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 	node->key = addKmer(key, extend);
 	/*node->key = templates->seq_n - kmersize + extend;
 	key <<= ((kmersize - extend) << 1);
-	for(i = kmersize - extend; i < kmersize; i++) {
+	for(i = kmersize - extend; i < kmersize; ++i) {
 		key <<= 2;
 		SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
-		templates->seq_n++;
+		++templates->seq_n;
 	}*/
 	
 	/* value */
@@ -1461,7 +1464,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 	node->next = templates->table[index];
 	templates->table[index] = node;
 	
-	templates->n++;
+	++templates->n;
 	template_ulengths[value]++;
 	
 	return 1;
@@ -1880,14 +1883,14 @@ int hashMap_index_get(struct hashMap_index *dest, long unsigned key) {
 	
 	int index, pos;
 	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; index++) {
+	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
 		if(getKmer(dest->seq, abs(pos) - 1) == key) {
 			return pos;
 		}
 	}
 	
 	if(index == dest->size) {
-		for(index = 0; (pos = dest->index[index]) != 0; index++) {
+		for(index = 0; (pos = dest->index[index]) != 0; ++index) {
 			if(getKmer(dest->seq, abs(pos) - 1) == key) {
 				return pos;
 			}
@@ -1903,12 +1906,12 @@ int hashMap_index_getDub(struct hashMap_index *dest, long unsigned key, const ch
 	max = 0;
 	mPos = 0;
 	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; index++) {
+	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
 		if(pos < 0 && getKmer(dest->seq, (-1) - pos) == key) {
 			pos = kmersize - pos + 1;
 			score = 0;
-			for(i = kmersize; i < q_len && pos < dest->len && getNuc(dest->seq, pos) == qseq[i]; i++, pos++) {
-				score++;
+			for(i = kmersize; i < q_len && pos < dest->len && getNuc(dest->seq, pos) == qseq[i]; ++i, ++pos) {
+				++score;
 			}
 			if(score > max) {
 				max = score;
@@ -1920,12 +1923,12 @@ int hashMap_index_getDub(struct hashMap_index *dest, long unsigned key, const ch
 	}
 	
 	if(index == dest->size) {
-		for(index = 0; (pos = dest->index[index]) != 0; index++) {
+		for(index = 0; (pos = dest->index[index]) != 0; ++index) {
 			if(pos < 0 && getKmer(dest->seq, (-1) - pos) == key) {
 				pos = kmersize - pos + 1;
 				score = 0;
-				for(i = kmersize; i < q_len && pos < dest->len && getNuc(dest->seq, pos) == qseq[i]; i++, pos++) {
-					score++;
+				for(i = kmersize; i < q_len && pos < dest->len && getNuc(dest->seq, pos) == qseq[i]; ++i, ++pos) {
+					++score;
 				}
 				if(score > max) {
 					max = score;
@@ -1944,9 +1947,9 @@ void hashMap_index_add(struct hashMap_index *dest, long unsigned key, int newpos
 	
 	int index, pos, neg;
 	neg = 1;
-	newpos++;
+	++newpos;
 	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; index++) {
+	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
 		if(pos > 0) {
 			if(getKmerIndex(dest->seq, pos - 1) == key) {
 				dest->index[index] = 1 - dest->index[index];
@@ -1960,7 +1963,7 @@ void hashMap_index_add(struct hashMap_index *dest, long unsigned key, int newpos
 	}
 	
 	if(index == dest->size) {
-		for(index = 0; (pos = dest->index[index]) != 0; index++) {
+		for(index = 0; (pos = dest->index[index]) != 0; ++index) {
 			if(pos > 0) {
 				if(getKmerIndex(dest->seq, pos - 1) == key) {
 					dest->index[index] = 1 - dest->index[index];
@@ -2030,7 +2033,7 @@ void valuesHash_destroy(struct valuesHash *src) {
 	unsigned i;
 	struct valuesTable *node, *next;
 	
-	for(i = 0; i < src->size; i++) {
+	for(i = 0; i < src->size; ++i) {
 		for(node = src->table[i]; node != 0; node = next) {
 			next = node->next;
 			free(node);
@@ -2049,7 +2052,7 @@ unsigned valuesHash_add(struct valuesHash *dest, int *newValues, unsigned org_in
 	
 	/* construct key */
 	key = 0;
-	for(i = 0; i <= newValues[0]; i++) {
+	for(i = 0; i <= newValues[0]; ++i) {
 		key = key * DB_size + newValues[i];
 	}
 	
@@ -2065,7 +2068,7 @@ unsigned valuesHash_add(struct valuesHash *dest, int *newValues, unsigned org_in
 	}
 	
 	/* new values */
-	dest->n++;
+	++dest->n;
 	node = malloc(sizeof(struct valuesTable));
 	if(!node) {
 		OOM();
@@ -2089,7 +2092,7 @@ int hashMap_CountKmer(struct hashMap_kmers *dest, long unsigned key) {
 		node = dest->table[index];
 		node->key = key;
 		node->next = 0;
-		dest->n++;
+		++dest->n;
 		return 1;
 	} else {
 		for(node = dest->table[index]; node != 0; node = node->next) {
@@ -2100,7 +2103,7 @@ int hashMap_CountKmer(struct hashMap_kmers *dest, long unsigned key) {
 				node = node->next;
 				node->key = key;
 				node->next = 0;
-				dest->n++;
+				++dest->n;
 				return 1;
 			}
 		}
@@ -2113,7 +2116,7 @@ void emptyHash(struct hashMap_kmers *dest) {
 	unsigned i;
 	struct hashTable_kmers *node, *next;
 	
-	for(i = 0; i < dest->size; i++) {
+	for(i = 0; i < dest->size; ++i) {
 		for(node = dest->table[i]; node != 0; node = next) {
 			next = node->next;
 			free(node);
@@ -2139,10 +2142,10 @@ int updateDBs(struct compDNA *qseq) {
 	qseq->N[qseq->N[0]] = qseq->seqlen;
 	
 	/* iterate sequence */
-	for(i = 1, j = 0; i <= qseq->N[0]; i++) {
+	for(i = 1, j = 0; i <= qseq->N[0]; ++i) {
 		extend = kmersize;
 		end = qseq->N[i] - kmersize + 1;
-		for(;j < end; j++) {
+		for(;j < end; ++j) {
 			/* update hashMap */
 			extend = hashMap_add(getKmer(qseq->seq, j), DB_size, extend) ? 1 : kmersize;
 		}
@@ -2177,9 +2180,9 @@ void makeIndexing(struct compDNA *compressor, FILE *seq_out, FILE *index_out) {
 	compressor->N[0]++;
 	compressor->N[compressor->N[0]] = compressor->seqlen + 1;
 	j = 0;
-	for(i = 1; i <= compressor->N[0]; i++) {
+	for(i = 1; i <= compressor->N[0]; ++i) {
 		end = compressor->N[i] - kmerindex;
-		for(;j < end; j++) {
+		for(;j < end; ++j) {
 			hashMap_index_add(template_index, getKmerIndex(compressor->seq, j), j);
 		}
 		j = compressor->N[i] + 1;
@@ -2203,7 +2206,7 @@ int lengthCheck(struct compDNA *qseq) {
 	
 	thisKlen = MinKlen;
 	
-	for(rc = 0; rc < 2; rc++) {
+	for(rc = 0; rc < 2; ++rc) {
 		/* revers complement */
 		if(rc) {
 			rcComp(qseq);
@@ -2212,11 +2215,11 @@ int lengthCheck(struct compDNA *qseq) {
 		/* iterate seq */
 		qseq->N[0]++;
 		qseq->N[qseq->N[0]] = qseq->seqlen;
-		for(i = 1, j = 0; i <= qseq->N[0] && thisKlen != 0; i++) {
+		for(i = 1, j = 0; i <= qseq->N[0] && thisKlen != 0; ++i) {
 			end = qseq->N[i] - prefix_len - kmersize + 1;
-			for(;j < end && thisKlen != 0; j++) {
+			for(;j < end && thisKlen != 0; ++j) {
 				if(getPrefix(qseq->seq, j) == prefix) {
-					thisKlen--;
+					--thisKlen;
 				}
 			}
 			j = qseq->N[i] + 1;
@@ -2257,7 +2260,7 @@ int queryCheck(struct compDNA *qseq) {
 	
 	/* get scores */
 	bestTemplates[0] = 0;
-	for(rc = 0; rc < 2; rc++) {
+	for(rc = 0; rc < 2; ++rc) {
 		/* revers complement */
 		if(rc) {
 			rcComp(qseq);
@@ -2266,13 +2269,13 @@ int queryCheck(struct compDNA *qseq) {
 		/* iterate seq */
 		qseq->N[0]++;
 		qseq->N[qseq->N[0]] = qseq->seqlen;
-		for(i = 1, j = 0; i <= qseq->N[0]; i++) {
+		for(i = 1, j = 0; i <= qseq->N[0]; ++i) {
 			end = qseq->N[i] - prefix_len - kmersize + 1;
-			for(;j < end; j++) {
+			for(;j < end; ++j) {
 				if(getPrefix(qseq->seq, j) == prefix) {
-					thisKlen++;
+					++thisKlen;
 					if((values = hashMap_get(getKmer(qseq->seq, j + prefix_len)))) {
-						for(k = 1; k <= *values; k++) {
+						for(k = 1; k <= *values; ++k) {
 							Scores_tot[values[k]]++;
 							if(Scores_tot[values[k]] == 1) {
 								bestTemplates[0]++;
@@ -2289,7 +2292,7 @@ int queryCheck(struct compDNA *qseq) {
 	
 	/* get query cov */
 	bestQ = 0;
-	for(i = 1; i <= *bestTemplates; i++) {
+	for(i = 1; i <= *bestTemplates; ++i) {
 		thisQ = 1.0 * Scores_tot[bestTemplates[i]] / thisKlen;
 		if(thisQ > bestQ) {
 			bestQ = thisQ;
@@ -2333,7 +2336,7 @@ int templateCheck(struct compDNA *qseq) {
 	
 	/* get scores */
 	bestTemplates[0] = 0;
-	for(rc = 0; rc < 2; rc++) {
+	for(rc = 0; rc < 2; ++rc) {
 		/* revers complement */
 		if(rc) {
 			rcComp(qseq);
@@ -2342,14 +2345,14 @@ int templateCheck(struct compDNA *qseq) {
 		/* iterate seq */
 		qseq->N[0]++;
 		qseq->N[qseq->N[0]] = qseq->seqlen;
-		for(i = 1, j = 0; i <= qseq->N[0]; i++) {
+		for(i = 1, j = 0; i <= qseq->N[0]; ++i) {
 			end = qseq->N[i] - prefix_len - kmersize + 1;
-			for(;j < end; j++) {
+			for(;j < end; ++j) {
 				if(getPrefix(qseq->seq, j) == prefix) {
-					thisKlen++;
+					++thisKlen;
 					key = getKmer(qseq->seq, j + prefix_len);
 					if((values = hashMap_get(key))) {
-						for(k = 1; k <= *values; k++) {
+						for(k = 1; k <= *values; ++k) {
 							Scores_tot[values[k]]++;
 							if(Scores_tot[values[k]] == 1) {
 								bestTemplates[0]++;
@@ -2357,7 +2360,7 @@ int templateCheck(struct compDNA *qseq) {
 							}
 						}
 						if(hashMap_CountKmer(foundKmers, key)) {
-							for(k = 1; k <= *values; k++) {
+							for(k = 1; k <= *values; ++k) {
 								Scores[values[k]]++;
 							}
 						}
@@ -2372,7 +2375,7 @@ int templateCheck(struct compDNA *qseq) {
 	/* get query cov */
 	bestQ = 0;
 	bestT = 0;
-	for(i = 1; i <= *bestTemplates; i++) {
+	for(i = 1; i <= *bestTemplates; ++i) {
 		thisQ = 1.0 * Scores_tot[bestTemplates[i]] / thisKlen;
 		if(thisQ > bestQ) {
 			bestQ = thisQ;
@@ -2417,7 +2420,7 @@ int updateDBs_sparse(struct compDNA *qseq) {
 	if(QualCheck(qseq)) {
 		template_slengths[DB_size] = 0;
 		template_ulengths[DB_size] = 0;
-		for(rc = 0; rc < 2; rc++) {
+		for(rc = 0; rc < 2; ++rc) {
 			/* revers complement */
 			if(rc) {
 				rcComp(qseq);
@@ -2430,9 +2433,9 @@ int updateDBs_sparse(struct compDNA *qseq) {
 			qseq->N[0]++;
 			qseq->N[qseq->N[0]] = qseq->seqlen;
 			j = 0;
-			for(i = 1; i <= qseq->N[0]; i++) {
+			for(i = 1; i <= qseq->N[0]; ++i) {
 				end = qseq->N[i] - prefix_len - kmersize + 1;
-				for(;j < end; j++) {
+				for(;j < end; ++j) {
 					if(getPrefix(qseq->seq, j) == prefix) {
 						/* add kmer */
 						extend = kmersize < (j - last) ? kmersize : (j - last);
@@ -2469,7 +2472,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 		OOM();
 	}
 	table = 0;
-	for(i = 0; i < templates->size; i++) {
+	for(i = 0; i < templates->size; ++i) {
 		for(node = templates->table[i]; node != 0; node = next) {
 			next = node->next;
 			node->next = table;
@@ -2507,12 +2510,12 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	
 	/* mv table to finalDB */
 	fprintf(stderr, "# Initialize cp of DB.\n");
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		finalDB->exist[i] = null_index;
 	}
 	fprintf(stderr, "# Initial cp of DB.\n");
 	node = table;
-	finalDB->size--;
+	--finalDB->size;
 	t_index = 0;
 	while(node != 0) {
 		/* get index */
@@ -2527,7 +2530,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 			finalDB->key_index[t_index] = node->key;
 			finalDB->value_index[t_index] = node->values;
 			tmp[t_index] = node->values;
-			t_index++;
+			++t_index;
 			
 			/* clean */
 			free(node);
@@ -2540,7 +2543,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	v_index = 0;
 	c_index = 0;
 	shmValues = initialize_hashValues(null_index);
-	for(i = 0; i < null_index; i++) {
+	for(i = 0; i < null_index; ++i) {
 		/* potential increase */
 		v_update = templates->values[finalDB->value_index[i]][0] + 1;
 		
@@ -2571,11 +2574,11 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	if(!finalDB->values) {
 		OOM();
 	}
-	for(i = 0; i < finalDB->n; i++) {
+	for(i = 0; i < finalDB->n; ++i) {
 		if(finalDB->values[finalDB->value_index[i]] == 0) {
 			values = templates->values[tmp[i]];
 			v_index = finalDB->value_index[i];
-			for(j = 0; j <= values[0]; j++) {
+			for(j = 0; j <= values[0]; ++j) {
 				finalDB->values[v_index + j] = values[j];
 			}
 		}
@@ -2585,13 +2588,13 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	i = 0;
 	j = getKmerP(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
 	while(j == (getKmerP(templates->seq, i) & finalDB->size)) {
-		i++;
+		++i;
 	}
 	finalDB->key_index[finalDB->n] = i;
 	
 	/* dump final DB */
 	fprintf(stderr, "# Dumping compressed DB\n");	
-	finalDB->size++;
+	++finalDB->size;
 	hashMapKMA_dump(finalDB, out);
 	
 	/* clean */
@@ -2620,7 +2623,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 		OOM();
 	}
 	table = 0;
-	for(i = 0; i < templates->size; i++) {
+	for(i = 0; i < templates->size; ++i) {
 		for(node = templates->table[i]; node != 0; node = next) {
 			next = node->next;
 			node->next = table;
@@ -2658,12 +2661,12 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	
 	/* mv table to finalDB */
 	fprintf(stderr, "# Initialize cp of DB.\n");
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		finalDB->exist[i] = null_index;
 	}
 	fprintf(stderr, "# Initial cp of DB.\n");
 	node = table;
-	finalDB->size--;
+	--finalDB->size;
 	t_index = 0;
 	while(node != 0) {
 		/* get index */
@@ -2678,7 +2681,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 			finalDB->key_index[t_index] = node->key;
 			finalDB->value_index[t_index] = node->values;
 			tmp[t_index] = node->values;
-			t_index++;
+			++t_index;
 			
 			/* clean */
 			free(node);
@@ -2691,7 +2694,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	v_index = 0;
 	c_index = 0;
 	shmValues = initialize_hashValues(null_index);
-	for(i = 0; i < null_index; i++) {
+	for(i = 0; i < null_index; ++i) {
 		/* potential increase */
 		v_update = templates->values[finalDB->value_index[i]][0] + 1;
 		
@@ -2722,11 +2725,11 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	if(!finalDB->values) {
 		OOM();
 	}
-	for(i = 0; i < finalDB->n; i++) {
+	for(i = 0; i < finalDB->n; ++i) {
 		if(finalDB->values[finalDB->value_index[i]] == 0) {
 			values = templates->values[tmp[i]];
 			v_index = finalDB->value_index[i];
-			for(j = 0; j <= values[0]; j++) {
+			for(j = 0; j <= values[0]; ++j) {
 				finalDB->values[v_index + j] = values[j];
 			}
 		}
@@ -2736,13 +2739,13 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	i = 0;
 	j = getKmerP(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
 	while(j == (getKmerP(templates->seq, i) & finalDB->size)) {
-		i++;
+		++i;
 	}
 	finalDB->key_index[finalDB->n] = i;
 	
 	/* dump final DB */
 	fprintf(stderr, "# Dumping compressed DB\n");	
-	finalDB->size++;
+	++finalDB->size;
 	hashMapKMA_dump(finalDB, out);
 	
 	/* clean */
@@ -2783,19 +2786,19 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	}
 	null_index = finalDB->n;
 	finalDB->null_index = null_index;
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		finalDB->exist[i] = null_index;
 	}
 	v_index = 0;
 	while(templates->values[v_index] != 0) {
-		v_index++;
+		++v_index;
 	}
-	for(i = v_index; i < finalDB->size; i++) {
+	for(i = v_index; i < finalDB->size; ++i) {
 		if(templates->values[i] != 0) {
 			finalDB->exist[i] = v_index;
 			templates->values[v_index] = templates->values[i];
 			templates->values[i] = 0;
-			v_index++;
+			++v_index;
 		}
 	}
 	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
@@ -2809,7 +2812,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	if(!tmp) {
 		OOM();
 	}
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		tmp[i] = finalDB->exist[i];
 	}
 	
@@ -2818,7 +2821,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	v_index = 0;
 	c_index = 0;
 	shmValues = initialize_hashValues(null_index);
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		if(finalDB->exist[i] != null_index) {
 			/* potential increase */
 			v_update = templates->values[finalDB->exist[i]][0] + 1;
@@ -2854,11 +2857,11 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	if(!finalDB->values) {
 		OOM();
 	}
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		if(finalDB->exist[i] != finalDB->null_index && finalDB->values[finalDB->exist[i]] == 0) {
 			values = templates->values[tmp[i]];
 			v_index = finalDB->exist[i];
-			for(j = 0; j <= values[0]; j++) {
+			for(j = 0; j <= values[0]; ++j) {
 				finalDB->values[v_index + j] = values[j];
 			}
 		}
@@ -2890,7 +2893,7 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 	v_index = 0;
 	c_index = 0;
 	shmValues = initialize_hashValues(finalDB->n);
-	for(i = 0; i < finalDB->n; i++) {
+	for(i = 0; i < finalDB->n; ++i) {
 		/* potential increase */
 		v_update = templates->values[finalDB->value_index[i]][0] + 1;
 		
@@ -2922,11 +2925,11 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 	if(!finalDB->values) {
 		OOM();
 	}
-	for(i = 0; i < finalDB->n; i++) {
+	for(i = 0; i < finalDB->n; ++i) {
 		if(finalDB->values[finalDB->value_index[i]] == 0) {
 			values = templates->values[tmp[i]];
 			v_index = finalDB->value_index[i];
-			for(j = 0; j <= values[0]; j++) {
+			for(j = 0; j <= values[0]; ++j) {
 				finalDB->values[v_index + j] = values[j];
 			}
 			free(templates->values[tmp[i]]);
@@ -2954,7 +2957,7 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 	v_index = 0;
 	c_index = 0;
 	shmValues = initialize_hashValues(finalDB->n);
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		if(finalDB->exist[i] != finalDB->n) {
 			/* potential increase */
 			v_update = templates->values[finalDB->exist[i]][0] + 1;
@@ -2992,12 +2995,12 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 	if(!finalDB->values) {
 		OOM();
 	}
-	for(i = 0; i < finalDB->size; i++) {
+	for(i = 0; i < finalDB->size; ++i) {
 		if(finalDB->exist[i] != finalDB->n) {
 			if(finalDB->values[finalDB->exist[i]] == 0) {
 				values = templates->values[tmp[i]];
 				v_index = finalDB->exist[i];
-				for(j = 0; j <= values[0]; j++) {
+				for(j = 0; j <= values[0]; ++j) {
 					finalDB->values[v_index + j] = values[j];
 				}
 				free(templates->values[tmp[i]]);
@@ -3040,7 +3043,7 @@ void updateAnnots(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	makeIndexing(qseq, seq_out, index_out);
 	
 	template_lengths[DB_size] = qseq->seqlen;
-	DB_size++;
+	++DB_size;
 	if(DB_size >= template_lengths[0]) {
 		template_lengths[0] *= 2;
 		template_lengths = realloc(template_lengths, template_lengths[0] * sizeof(unsigned));
@@ -3057,7 +3060,7 @@ void updateAnnots_sparse(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	fwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
 	
 	template_lengths[DB_size] = qseq->seqlen;
-	DB_size++;
+	++DB_size;
 	if(DB_size >= template_ulengths[0]) {
 		template_ulengths[0] *= 2;
 		template_slengths = realloc(template_slengths, template_ulengths[0] * sizeof(unsigned));
@@ -3083,9 +3086,9 @@ int deConNode(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 	qseq->N[0]++;
 	qseq->N[qseq->N[0]] = qseq->seqlen;
 	j = 0;
-	for(i = 1; i <= qseq->N[0]; i++) {
+	for(i = 1; i <= qseq->N[0]; ++i) {
 		end = qseq->N[i] - kmersize + 1;
-		for(;j < end; j++) {
+		for(;j < end; ++j) {
 			mapped_cont += addCont(finalDB, getKmer(qseq->seq, j), DB_size);
 		}
 		j = qseq->N[i] + 1;
@@ -3106,9 +3109,9 @@ int deConNode_sparse(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 	qseq->N[0]++;
 	qseq->N[qseq->N[0]] = qseq->seqlen;
 	j = 0;
-	for(i = 1; i <= qseq->N[0]; i++) {
+	for(i = 1; i <= qseq->N[0]; ++i) {
 		end = qseq->N[i] - prefix_len - kmersize + 1;
-		for(;j < end; j++) {
+		for(;j < end; ++j) {
 			if(getPrefix(qseq->seq, j) == prefix) {
 				mapped_cont += addCont(finalDB, getKmer(qseq->seq, j + prefix_len), DB_size);
 			}
@@ -3143,7 +3146,7 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	
 	/* set variables */
 	mapped_cont = 0;
-	finalDB->size--;
+	--finalDB->size;
 	
 	/* open files */
 	file_len = strlen(outputfilename);
@@ -3156,17 +3159,17 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	}
 	
 	/* iterate inputfiles */
-	for(fileCounter = 0; fileCounter < fileCount; fileCounter++) {
+	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		/* open file */
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
 		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
+			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 4));
 			if(!cmd) {
 				fprintf(stderr, "OOM\n");
 				exit(-1);
 			}
-			sprintf(cmd, "gunzip -c %s", filename);
+			sprintf(cmd, "gunzip -c \"%s\"", filename);
 			popenFileBuff(inputfile, cmd, "r");
 		} else if(strncmp(filename, "--", 2) == 0) {
 			inputfile->file = stdin;
@@ -3207,7 +3210,7 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 			closeFileBuff(inputfile);
 		}
 	}
-	finalDB->size++;
+	++finalDB->size;
 	
 	/* dump DB */
 	fprintf(stderr, "# Dumping DeCon DB.\n");
@@ -3320,17 +3323,17 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	
 	fprintf(stderr, "# Updating DBs\n");
 	/* iterate inputfiles */
-	for(fileCounter = 0; fileCounter < fileCount; fileCounter++) {
+	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		/* open file */
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
 		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
+			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 4));
 			if(!cmd) {
 				fprintf(stderr, "OOM\n");
 				exit(-1);
 			}
-			sprintf(cmd, "gunzip -c %s", filename);
+			sprintf(cmd, "gunzip -c \"%s\"", filename);
 			popenFileBuff(inputfile, cmd, "r");
 		} else if(strncmp(filename, "--", 2) == 0) {
 			inputfile->file = stdin;
@@ -3491,7 +3494,7 @@ int main(int argc, char *argv[]) {
 		exit(-1);
 	}
 	/* set to2Bit */
-	for(i = 0; i < 384; i++) {
+	for(i = 0; i < 384; ++i) {
 		to2Bit[i] = 5;
 	}
 	to2Bit += 128;
@@ -3564,10 +3567,10 @@ int main(int argc, char *argv[]) {
 	while(args < argc) {
 		if(strcmp(argv[args], "-i") == 0) {
 			stop = 0;
-			args++;
+			++args;
 			while(stop == 0 && args < argc) {
 				if(strncmp(argv[args], "-", 1) != 0 || strcmp(argv[args], "--") == 0) {
-					filecount++;
+					++filecount;
 					inputfiles = realloc(inputfiles, filecount * sizeof(char*));
 					if(inputfiles == NULL) {
 						fprintf(stderr, "OOM\n");
@@ -3578,14 +3581,14 @@ int main(int argc, char *argv[]) {
 						fprintf(stderr, "OOM\n");
 						exit(-1);
 					}
-					args++;
+					++args;
 				} else {
 					stop = 1;
 				}
 			}
-			args--;
+			--args;
 		} else if(strcmp(argv[args], "-o") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				outputfilename = malloc(strlen(argv[args]) + 64);
 				if(!outputfilename) {
@@ -3596,7 +3599,7 @@ int main(int argc, char *argv[]) {
 			}
 		} else if(strcmp(argv[args], "-deCon") == 0) {
 			stop = 0;
-			args++;
+			++args;
 			while(stop == 0 && args < argc) {
 				if(strncmp(argv[args], "-", 1) != 0 || strcmp(argv[args], "--") == 0) {
 					deconfiles = realloc(deconfiles, (deconcount + 1) * sizeof(char*));
@@ -3609,8 +3612,8 @@ int main(int argc, char *argv[]) {
 						fprintf(stderr, "OOM\n");
 						exit(-1);
 					}
-					deconcount++;
-					args++;
+					++deconcount;
+					++args;
 				} else {
 					stop = 1;
 				}
@@ -3619,9 +3622,9 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "No deCon file specified.\n");
 				exit(-1);
 			}
-			args--;
+			--args;
 		} else if(strcmp(argv[args], "-t_db") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				templatefilename = malloc(strlen(argv[args]) + 64);
 				if(!templatefilename) {
@@ -3631,7 +3634,7 @@ int main(int argc, char *argv[]) {
 				strcpy(templatefilename, argv[args]);
 			}
 		} else if(strcmp(argv[args], "-k") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				kmersize = atoi(argv[args]);
 				if(kmersize == 0) {
@@ -3643,7 +3646,7 @@ int main(int argc, char *argv[]) {
 				kmerindex = kmersize;
 			}
 		} else if(strcmp(argv[args], "-k_t") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				kmersize = atoi(argv[args]);
 				if(kmersize == 0) {
@@ -3654,7 +3657,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-k_i") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				kmerindex = atoi(argv[args]);
 				if(kmerindex == 0) {
@@ -3665,7 +3668,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-CS") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				
 				INITIAL_SIZE = pow(2, ceil(log(atoi(argv[args]))/log(2))) + 0.5;
@@ -3678,7 +3681,7 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-and") == 0) {
 			homcmp = &homcmp_and;
 		} else if(strcmp(argv[args], "-ML") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				MinLen = atoi(argv[args]);
 				if(MinLen <= 0) {
@@ -3686,7 +3689,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-hq") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				homQ = atof(argv[args]);
 				if(homQ < 0) {
@@ -3695,7 +3698,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-ht") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				homT = atof(argv[args]);
 				if(homT < 0) {
@@ -3704,7 +3707,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-batch") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				inputfile = fopen(argv[args], "r");
 				if(!inputfile) {
@@ -3713,7 +3716,7 @@ int main(int argc, char *argv[]) {
 				}
 				while(!feof(inputfile) && *(line = fget_line(line, &line_size, &l_len, inputfile))) {
 					if(l_len != 0) {
-						filecount++;
+						++filecount;
 						inputfiles = realloc(inputfiles, filecount * sizeof(char*));
 						if(inputfiles == NULL) {
 							fprintf(stderr, "OOM\n");
@@ -3729,7 +3732,7 @@ int main(int argc, char *argv[]) {
 				fclose(inputfile);
 			}
 		} else if(strcmp(argv[args], "-batchD") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				inputfile = fopen(argv[args], "r");
 				if(!inputfile) {
@@ -3738,7 +3741,7 @@ int main(int argc, char *argv[]) {
 				}
 				while(!feof(inputfile) && *(line = fget_line(line, &line_size, &l_len, inputfile))) {
 					if(l_len != 0) {
-						deconcount++;
+						++deconcount;
 						deconfiles = realloc(deconfiles, deconcount * sizeof(char*));
 						if(deconfiles == NULL) {
 							fprintf(stderr, "OOM\n");
@@ -3755,7 +3758,7 @@ int main(int argc, char *argv[]) {
 			}
 		} else if(strcmp(argv[args], "-Sparse") == 0) {
 			sparse_run = 1;
-			args++;
+			++args;
 			if(args < argc) {
 				if(strcmp(argv[args], "-") == 0) {
 					prefix_len = 0;
@@ -3763,7 +3766,7 @@ int main(int argc, char *argv[]) {
 				} else {
 					prefix_len = strlen(argv[args]);
 					prefix = 0;
-					for(i = 0; i < prefix_len; i++) {
+					for(i = 0; i < prefix_len; ++i) {
 						prefix = (prefix << 2) | to2Bit[argv[args][i]];
 						if(to2Bit[argv[args][i]] > 3) {
 							fprintf(stderr, "Invalid prefix.\n");
@@ -3785,7 +3788,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "# Printing help message:\n");
 			helpMessage(-1);
 		}
-		args++;
+		++args;
 	}
 	
 	/* check for sufficient input */
@@ -3807,7 +3810,7 @@ int main(int argc, char *argv[]) {
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
 	if(megaDB) {
 		INITIAL_SIZE = mask;
-		INITIAL_SIZE++;
+		++INITIAL_SIZE;
 	}
 	/* load or allocate DB */
 	if(templatefilename != 0) {
@@ -3899,7 +3902,7 @@ int main(int argc, char *argv[]) {
 	/* set homology check */
 	if(MinLen > (kmersize + prefix_len + 1)) {
 		MinKlen = 2 * (MinLen - kmersize - prefix_len + 1);
-		for(i = 0; i < prefix_len; i++) {
+		for(i = 0; i < prefix_len; ++i) {
 			MinKlen /= 4;
 		}
 	}

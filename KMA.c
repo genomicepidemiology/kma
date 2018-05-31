@@ -463,7 +463,6 @@ void openFileBuff(struct FileBuff *dest, char *filename, char *mode) {
 	if(!dest->file) {
 		ERROR();
 	}
-	
 }
 
 void popenFileBuff(struct FileBuff *dest, char *filename, char *mode) {
@@ -472,7 +471,6 @@ void popenFileBuff(struct FileBuff *dest, char *filename, char *mode) {
 	if(!dest->file) {
 		ERROR();
 	}
-	
 }
 
 void closeFileBuff(struct FileBuff *dest) {
@@ -504,7 +502,7 @@ int openAndDetermine(struct FileBuff *inputfile, char *filename, char *cmd) {
 	/* determine filetype and open it */
 	FASTQ = 0;
 	if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
-		sprintf(cmd, "gunzip -c %s", filename);
+		sprintf(cmd, "gunzip -c \"%s\"", filename);
 		popenFileBuff(inputfile, cmd, "r");
 		FASTQ = 4;
 	} else if(strncmp(filename, "--", 2) == 0) {
@@ -518,7 +516,7 @@ int openAndDetermine(struct FileBuff *inputfile, char *filename, char *cmd) {
 		check = (short unsigned *) inputfile->buffer;
 		if(*check == 35615) {
 			closeFileBuff(inputfile);
-			sprintf(cmd, "gunzip -c %s", filename);
+			sprintf(cmd, "gunzip -c \"%s\"", filename);
 			popenFileBuff(inputfile, cmd, "r");
 			buffFileBuff(inputfile);
 			FASTQ = 4;
@@ -5757,34 +5755,6 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
 		
-		/*
-		// determine filetype and open it
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
-			if(!cmd) {
-				ERROR();
-			}
-			sprintf(cmd, "gunzip -c %s", filename);
-			popenFileBuff(inputfile, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile->file = stdin;
-		} else {
-			openFileBuff(inputfile, filename, "rb");
-		}
-		fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
-		
-		// Get first char and determine the format
-		buffFileBuff(inputfile);
-		FASTQ = 0;
-		FASTA = 0;
-		if(inputfile->buffer[0] == '@') { //FASTQ
-			FASTQ = 1;
-		} else if(inputfile->buffer[0] == '>') { //FASTA
-			FASTA = 1;
-		} else {
-			fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
-		}
-		*/
 		/* determine filetype and open it */
 		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
 			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
@@ -5911,50 +5881,6 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 			fprintf(stderr, "Inputfiles:\t%s %s\nAre in different format.\n", inputfiles[fileCounter-1], filename);
 			FASTQ = 0;
 		}
-		
-		/*
-		if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
-			if(!cmd) {
-				ERROR();
-			}
-			sprintf(cmd, "gunzip -c %s", filename);
-			popenFileBuff(inputfile, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile->file = stdin;
-		} else {
-			openFileBuff(inputfile, filename, "rb");
-		}
-		
-		++fileCounter;
-		filename = inputfiles[fileCounter];
-		
-		if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
-			if(!cmd) {
-				ERROR();
-			}
-			sprintf(cmd, "gunzip -c %s", filename);
-			popenFileBuff(inputfile2, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile2->file = stdin;
-		} else {
-			openFileBuff(inputfile2, filename, "rb");
-		}
-		
-		// Get first char and determine the format
-		buffFileBuff(inputfile);
-		buffFileBuff(inputfile2);
-		FASTQ = 0;
-		FASTA = 0;
-		if(inputfile->buffer[0] == '@') { //FASTQ
-			FASTQ = 1;
-		} else if(inputfile->buffer[0] == '>') { //FASTA
-			FASTA = 1;
-		} else {
-			fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
-		}
-		*/
 		
 		/* parse the file */
 		if(FASTQ & 1) {
@@ -6274,15 +6200,22 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 
 void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	
-	int FASTA, FASTQ, fileCounter, phredCut, start, end;
+	int FASTQ, fileCounter, phredCut, start, end;
 	char *filename, *cmd, *zipped, *seq;
 	struct qseqs *qseq, *qual;
 	struct FileBuff *inputfile;
 	struct compKmers *Kmers;
 	freopen(NULL, "wb", stdout);
 	
+	start = strlen(*inputfiles);
+	for(fileCounter = 1; fileCounter < fileCount; ++fileCounter) {
+		end = strlen(inputfiles[fileCounter]);
+		if(start < end) {
+			start = end;
+		}
+	}
+	cmd = malloc(start + 16);
 	Kmers = malloc(sizeof(struct compKmers));
-	cmd = malloc(1);
 	zipped = strdup(".gz");
 	if(!cmd || !zipped || !Kmers) {
 		ERROR();
@@ -6296,35 +6229,13 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 		filename = (char*)(inputfiles[fileCounter]);
 		
 		/* determine filetype and open it */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 1));
-			if(!cmd) {
-				ERROR();
-			}
-			sprintf(cmd, "gunzip -c %s", filename);
-			popenFileBuff(inputfile, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile->file = stdin;
-		} else {
-			openFileBuff(inputfile, filename, "rb");
-		}
-		fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
-		
-		/* Get first char and determine the format */
-		buffFileBuff(inputfile);
-		FASTQ = 0;
-		FASTA = 0;
-		if(inputfile->buffer[0] == '@') { //FASTQ
-			FASTQ = 1;
-		} else if(inputfile->buffer[0] == '>') { //FASTA
-			FASTA = 1;
-		} else {
-			fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
+		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
+			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 		}
 		
 		/* parse the file */
 		Kmers->n = 0;
-		if(FASTQ) {
+		if(FASTQ & 1) {
 			/* get phred scale */
 			phredCut = getPhredFileBuff(inputfile);
 			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
@@ -6355,7 +6266,7 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 				fwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
 				Kmers->n = 0;
 			}
-		} else if(FASTA) {
+		} else if(FASTQ & 2) {
 			while(FileBuffgetFsaSeq(inputfile, qseq)) {
 				if(qseq->len > kmersize) {
 					/* translate to kmers */
@@ -6368,14 +6279,13 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 			}
 		}
 		
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
+		if(FASTQ & 4) {
 			pcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
 		
 	}
-	fwrite(&(int){0}, sizeof(int), 1, stdout);
 	
 	free(cmd);
 	free(zipped);
@@ -10491,7 +10401,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
-	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len);
+	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len + 4);
 	qseq_comp = malloc(sizeof(struct compDNA));
 	qseq_r_comp = malloc(sizeof(struct compDNA));
 	index_indexes = malloc((DB_size + 1) * sizeof(long));
@@ -10539,8 +10449,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		res_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
-		//sprintf(outZipped, "gzip -c > %s", outputfilename);
-		sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+		sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 		frag_out = popen(outZipped, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
@@ -10554,8 +10463,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		outputfilename[file_len] = 0;
 		if(print_matrix) {
 			strcat(outputfilename, ".mat.gz");
-			//sprintf(outZipped, "gzip -c > %s", outputfilename);
-			sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 			matrix_out = popen(outZipped, "w");
 			if(!matrix_out) {
 				ERROR();
@@ -10566,8 +10474,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 		if(print_all) {
 			strcat(outputfilename, ".frag_raw.gz");
-			//sprintf(outZipped, "gzip -c > %s", outputfilename);
-			sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 			frag_out_all = popen(outZipped, "w");
 			if(!frag_out_all) {
 				ERROR();
@@ -11055,7 +10962,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
-	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len);
+	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len + 4);
 	qseq_comp = malloc(sizeof(struct compDNA));
 	qseq_r_comp = malloc(sizeof(struct compDNA));
 	if(!qseq_comp || !qseq_r_comp || !outZipped) {
@@ -11076,8 +10983,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		res_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
-		//sprintf(outZipped, "gzip -c > %s", outputfilename);
-		sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+		sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 		frag_out = popen(outZipped, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
@@ -11091,8 +10997,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		outputfilename[file_len] = 0;
 		if(print_matrix) {
 			strcat(outputfilename, ".mat.gz");
-			//sprintf(outZipped, "gzip -c > %s", outputfilename);
-			sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 			matrix_out = popen(outZipped, "w");
 			if(!matrix_out) {
 				ERROR();
@@ -11103,8 +11008,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 		if(print_all) {
 			strcat(outputfilename, ".frag_raw.gz");
-			//sprintf(outZipped, "gzip -c > %s", outputfilename);
-			sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 			frag_out_all = popen(outZipped, "w");
 			if(!frag_out_all) {
 				ERROR();
@@ -11542,7 +11446,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	}
 	
 	file_len = strlen(outputfilename);
-	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len);
+	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len + 4);
 	if(!outZipped) {
 		ERROR();
 	}
@@ -11557,8 +11461,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		res_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
-		//sprintf(outZipped, "gzip -c > %s", outputfilename);
-		sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+		sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 		frag_out = popen(outZipped, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
@@ -11569,8 +11472,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		outputfilename[file_len] = 0;
 		if(print_matrix) {
 			strcat(outputfilename, ".mat.gz");
-			//sprintf(outZipped, "gzip -c > %s", outputfilename);
-			sprintf(outZipped, "gzip --fast -c > %s", outputfilename);
+			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
 			matrix_out = popen(outZipped, "w");
 			if(!matrix_out) {
 				ERROR();
@@ -12272,6 +12174,7 @@ int main(int argc, char *argv[]) {
 		}
 		++args;
 	}
+	
 	if(outputfilename == 0 || templatefilename == 0) {
 		fprintf(stderr, " Too few arguments handed\n");
 		fprintf(stderr, " Printing help message:\n");
@@ -12484,12 +12387,27 @@ int main(int argc, char *argv[]) {
 		for(args = 0; args < argc; ++args) {
 			exe_len += strlen(argv[args]) + 1;
 		}
+		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
+		
 		exeBasic = calloc((exe_len + 1), sizeof(char));
 		if(!exeBasic) {
 			ERROR();
 		}
+		fileCounter = 0;
 		for(args = 0; args < argc; ++args) {
-			strcat(exeBasic, argv[args]);
+			if(*argv[args] == '-') {
+				fileCounter = 0;
+			}
+			if(fileCounter) {
+				strcat(exeBasic, "\"");
+				strcat(exeBasic, argv[args]);
+				strcat(exeBasic, "\"");
+			} else {
+				strcat(exeBasic, argv[args]);
+			}
+			if(strncmp(argv[args], "-i", 2) == 0) {
+				fileCounter = 1;
+			}
 			strcat(exeBasic, " ");
 		}
 		strcat(exeBasic, "-step1");
@@ -12501,12 +12419,27 @@ int main(int argc, char *argv[]) {
 		for(args = 0; args < argc; ++args) {
 			exe_len += strlen(argv[args]) + 1;
 		}
+		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
+		
 		exeBasic = calloc((exe_len + 1), sizeof(char));
 		if(!exeBasic) {
 			ERROR();
 		}
+		fileCounter = 0;
 		for(args = 0; args < argc; ++args) {
-			strcat(exeBasic, argv[args]);
+			if(*argv[args] == '-') {
+				fileCounter = 0;
+			}
+			if(fileCounter) {
+				strcat(exeBasic, "\"");
+				strcat(exeBasic, argv[args]);
+				strcat(exeBasic, "\"");
+			} else {
+				strcat(exeBasic, argv[args]);
+			}
+			if(strncmp(argv[args], "-i", 2) == 0) {
+				fileCounter = 1;
+			}
 			strcat(exeBasic, " ");
 		}
 		strcat(exeBasic, "-step1");
@@ -12517,13 +12450,28 @@ int main(int argc, char *argv[]) {
 		for(args = 0; args < argc; ++args) {
 			exe_len += strlen(argv[args]) + 1;
 		}
+		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
+		
 		exeBasic = calloc((exe_len + 1), sizeof(char));
 		if(!exeBasic) {
 			ERROR();
 		}
 		
+		fileCounter = 0;
 		for(args = 0; args < argc; ++args) {
-			strcat(exeBasic, argv[args]);
+			if(*argv[args] == '-') {
+				fileCounter = 0;
+			}
+			if(fileCounter) {
+				strcat(exeBasic, "\"");
+				strcat(exeBasic, argv[args]);
+				strcat(exeBasic, "\"");
+			} else {
+				strcat(exeBasic, argv[args]);
+			}
+			if(strncmp(argv[args], "-i", 2) == 0) {
+				fileCounter = 1;
+			}
 			strcat(exeBasic, " ");
 		}
 		strcat(exeBasic, "-step1");
@@ -12536,13 +12484,28 @@ int main(int argc, char *argv[]) {
 		for(args = 0; args < argc; ++args) {
 			exe_len += strlen(argv[args]) + 1;
 		}
+		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
+		
 		exeBasic = calloc((exe_len + 1), sizeof(char));
 		if(!exeBasic) {
 			ERROR();
 		}
 		
+		fileCounter = 0;
 		for(args = 0; args < argc; ++args) {
-			strcat(exeBasic, argv[args]);
+			if(*argv[args] == '-') {
+				fileCounter = 0;
+			}
+			if(fileCounter) {
+				strcat(exeBasic, "\"");
+				strcat(exeBasic, argv[args]);
+				strcat(exeBasic, "\"");
+			} else {
+				strcat(exeBasic, argv[args]);
+			}
+			if(strncmp(argv[args], "-i", 2) == 0) {
+				fileCounter = 1;
+			}
 			strcat(exeBasic, " ");
 		}
 		strcat(exeBasic, "-step2");
@@ -12555,13 +12518,28 @@ int main(int argc, char *argv[]) {
 		for(args = 0; args < argc; ++args) {
 			exe_len += strlen(argv[args]) + 1;
 		}
+		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
+		
 		exeBasic = calloc((exe_len + 1), sizeof(char));
 		if(!exeBasic) {
 			ERROR();
 		}
 		
+		fileCounter = 0;
 		for(args = 0; args < argc; ++args) {
-			strcat(exeBasic, argv[args]);
+			if(*argv[args] == '-') {
+				fileCounter = 0;
+			}
+			if(fileCounter) {
+				strcat(exeBasic, "\"");
+				strcat(exeBasic, argv[args]);
+				strcat(exeBasic, "\"");
+			} else {
+				strcat(exeBasic, argv[args]);
+			}
+			if(strncmp(argv[args], "-i", 2) == 0) {
+				fileCounter = 1;
+			}
 			strcat(exeBasic, " ");
 		}
 		strcat(exeBasic, "-step2");
