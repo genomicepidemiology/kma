@@ -27,6 +27,12 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <zlib.h>
+
+#define CHUNK 1048576
+#define windowBits 31
+#define GZIP_ENCODING 16
+#define ENABLE_ZLIB_GZIP 32
 #define getNuc(Comp,pos) ((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
 //#define cpu_relax() asm volatile("pause\n": : :"memory")
 //#define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(&sleepTimer, NULL);}}
@@ -104,11 +110,13 @@ struct qseqs {
 };
 
 struct FileBuff {
-	int pos;
 	int bytes;
 	int buffSize;
 	char *buffer;
+	char *inBuffer;
+	char *next;
 	FILE *file;
+	z_stream *strm;
 };
 
 struct compDNA {
@@ -174,7 +182,7 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 3};
+int version[3] = {0, 14, 4};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -214,7 +222,7 @@ long unsigned (*getKmerP)(long unsigned *, unsigned);
 int (*cmp)(int, int);
 int (*significantBase)(int, int);
 char (*baseCall)(char, int, int, int, struct assem*, short unsigned*);
-
+int (*buffFileBuff)(struct FileBuff *);
 
 /*
  FUNCTIONS
@@ -437,6 +445,89 @@ void destroyQseqs(struct qseqs *dest) {
 	free(dest);
 }
 
+int BuffgzFileBuff(struct FileBuff *dest) {
+	
+	int status;
+	z_stream *strm;
+	
+	/* check compressed buffer, and load it */
+	strm = dest->strm;
+	if(strm->avail_out != 0) {
+		strm->avail_in = fread(dest->inBuffer, 1, dest->buffSize, dest->file);
+		strm->next_in = (unsigned char*) dest->inBuffer;
+		if(strm->avail_in == 0) {
+			inflateEnd(strm);
+			dest->bytes = 0;
+			dest->next = dest->buffer;
+			return 0;
+		}
+	}
+	
+	/* reset uncompressed buffer */
+	strm->avail_out = dest->buffSize;
+	strm->next_out = (unsigned char*) dest->buffer;
+	
+	/* uncompress buffer */
+	status = inflate(strm, Z_NO_FLUSH);
+	
+	switch(status) {
+	case Z_OK:
+	case Z_STREAM_END:
+	case Z_BUF_ERROR:
+		break;
+	default:
+		inflateEnd(strm);
+		fprintf(stderr, "Gzip error %d\n", status);
+	}
+	
+	dest->bytes = dest->buffSize - strm->avail_out;
+	dest->next = dest->buffer;
+	
+	return dest->bytes;
+	
+}
+
+void init_gzFile(struct FileBuff *inputfile) {
+	
+	int status;
+	char *tmp;
+	z_stream *strm;
+	
+	/* set inBuffer, for compressed format */
+	if(inputfile->inBuffer) {
+		tmp = inputfile->buffer;
+		inputfile->buffer = inputfile->inBuffer;
+		inputfile->inBuffer = tmp;
+	} else {
+		inputfile->inBuffer = inputfile->buffer;
+		inputfile->buffer = malloc(CHUNK);
+		if(!inputfile->buffer) {
+			ERROR();
+		}
+	}
+	inputfile->next = inputfile->buffer;
+	
+	/* set the compressed stream */
+	strm = inputfile->strm;
+	if(!strm && !(strm = malloc(sizeof(z_stream)))) {
+		ERROR();
+	}
+	strm->zalloc = Z_NULL;
+	strm->zfree  = Z_NULL;
+	strm->opaque = Z_NULL;
+	status = inflateInit2(strm, 15 | ENABLE_ZLIB_GZIP);
+	if(status < 0) {
+		fprintf(stderr, "Gzip error %d\n", status);
+		exit(1);
+	}
+	strm->next_in = (unsigned char*) inputfile->inBuffer;
+	strm->avail_in = inputfile->bytes;
+	
+	inputfile->strm = strm;
+	
+	inputfile->bytes = BuffgzFileBuff(inputfile);
+}
+
 struct FileBuff * setFileBuff(int buffSize) {
 	
 	struct FileBuff *dest;
@@ -446,10 +537,12 @@ struct FileBuff * setFileBuff(int buffSize) {
 		ERROR();
 	}
 	
-	dest->pos = 0;
 	dest->file = 0;
+	dest->inBuffer = 0;
+	dest->strm = 0;
 	dest->buffSize = buffSize;
 	dest->buffer = malloc(buffSize);
+	dest->next = dest->buffer;
 	if(!dest->buffer) {
 		ERROR();
 	}
@@ -463,14 +556,7 @@ void openFileBuff(struct FileBuff *dest, char *filename, char *mode) {
 	if(!dest->file) {
 		ERROR();
 	}
-}
-
-void popenFileBuff(struct FileBuff *dest, char *filename, char *mode) {
-	
-	dest->file = popen(filename, mode);
-	if(!dest->file) {
-		ERROR();
-	}
+	setvbuf(dest->file, NULL, _IOFBF, CHUNK);
 }
 
 void closeFileBuff(struct FileBuff *dest) {
@@ -478,57 +564,49 @@ void closeFileBuff(struct FileBuff *dest) {
 	dest->file = 0;
 }
 
-void pcloseFileBuff(struct FileBuff *dest) {
-	pclose(dest->file);
+void gzcloseFileBuff(struct FileBuff *dest) {
+	
+	inflateEnd(dest->strm);
+	fclose(dest->file);
 	dest->file = 0;
+	dest->strm->avail_out = 0;
 }
 
 void destroyFileBuff(struct FileBuff *dest) {
 	free(dest->buffer);
+	free(dest->inBuffer);
+	free(dest->strm);
 	free(dest);
 }
 
-int buffFileBuff(struct FileBuff *dest) {
-	dest->pos = 0;
+int buff_FileBuff(struct FileBuff *dest) {
 	dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file);
+	dest->next = dest->buffer;
 	return dest->bytes;
 }
 
-int openAndDetermine(struct FileBuff *inputfile, char *filename, char *cmd) {
+int openAndDetermine(struct FileBuff *inputfile, char *filename) {
 	
 	unsigned FASTQ;
 	short unsigned *check;
 	
 	/* determine filetype and open it */
 	FASTQ = 0;
-	if(strncmp(filename + (strlen(filename) - 3), ".gz", 3) == 0) {
-		sprintf(cmd, "gunzip -c \"%s\"", filename);
-		popenFileBuff(inputfile, cmd, "r");
-		FASTQ = 4;
-	} else if(strncmp(filename, "--", 2) == 0) {
+	if(*filename == '-' && strcmp(filename + 1, "-") == 0) {
 		inputfile->file = stdin;
 	} else {
 		openFileBuff(inputfile, filename, "rb");
 	}
-	
-	/* Get first char and determine the format */
-	if(buffFileBuff(inputfile)) {
+	if(buff_FileBuff(inputfile)) {
 		check = (short unsigned *) inputfile->buffer;
 		if(*check == 35615) {
-			closeFileBuff(inputfile);
-			sprintf(cmd, "gunzip -c \"%s\"", filename);
-			popenFileBuff(inputfile, cmd, "r");
-			buffFileBuff(inputfile);
 			FASTQ = 4;
+			init_gzFile(inputfile);
+			buffFileBuff = &BuffgzFileBuff;
+		} else {
+			buffFileBuff = &buff_FileBuff;
 		}
-	} else if(FASTQ & 4) {
-		pcloseFileBuff(inputfile);
-		openFileBuff(inputfile, filename, "rb");
-		buffFileBuff(inputfile);
-		FASTQ = 0;
-	}
-	
-	if(!inputfile->bytes) {
+	} else {
 		inputfile->buffer[0] = 0;
 	}
 	
@@ -538,539 +616,502 @@ int openAndDetermine(struct FileBuff *inputfile, char *filename, char *cmd) {
 		FASTQ |= 2;
 	} else {
 		fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
+		fprintf(stderr, "%-.100s\n", inputfile->buffer);
 	}
 	
 	return FASTQ;
 }
 
-int chunkPos(char* seq, int start, int end) {
+int chunkPos(char *seq, int start, int end) {
 	
-	int i;
-	
-	for(i = start; i < end; ++i) {
-		if(seq[i] == '\n') {
-			return i;
+	while(start != end) {
+		if(seq[start] == '\n') {
+			return start;
 		}
+		++start;
 	}
-	
 	return end;
 }
 
-int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq) {
+int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq) {
 	
-	char *seq_ptr, *buff_ptr;
-	int seqlen, seqsize, destpos, destbytes;
+	char *buff, *seq;
+	int size, avail;
+	
+	/* init */
+	avail = src->bytes;
+	buff = src->next;
+	if(avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
 	
 	/* get header */
-	header->len = 0;
-	while((seqlen = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		seqsize = seqlen - dest->pos;
-		if(header->size < (seqsize + header->len)) {
-			header->size = seqsize + header->len;
+	seq = header->seq;
+	size = header->size;
+	while((*seq++ = *buff++) != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+		if(--size == 0) {
+			size = header->size;
+			header->size <<= 1;
 			header->seq = realloc(header->seq, header->size);
 			if(!header->seq) {
 				ERROR();
 			}
+			seq = header->seq + size;
 		}
-		strncpy(header->seq + header->len, dest->buffer + dest->pos, seqsize);
-		header->len += seqsize;
-		if(!buffFileBuff(dest)) {
-			seq->len = 0;
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
 	}
-	seqsize = seqlen - dest->pos;
-	if(header->size < (seqsize + header->len)) {
-		header->size = seqsize + header->len;
-		header->seq = realloc(header->seq, header->size);
-		if(!header->seq) {
-			ERROR();
-		}
-	}
-	strncpy(header->seq + header->len, dest->buffer + dest->pos, seqsize);
-	header->len += seqsize;
 	/* chomp header */
-	--header->len;
-	while(isspace(header->seq[header->len])) {
-		--header->len;
+	while(isspace(*--seq)) {
+		++size;
 	}
-	++header->len;
-	header->seq[header->len] = 0;
-	dest->pos = seqlen + 1;
+	*++seq = 0;
+	header->len = header->size - size + 1;
 	
-	/* get seq */
-	seqlen = 0;
-	seqsize = seq->size;
-	seq_ptr = seq->seq;
-	if(dest->pos == dest->bytes && !buffFileBuff(dest)) {
-		seq->len = 0;
-		return 0;
-	}
-	destpos = dest->pos;
-	destbytes = dest->bytes;
-	buff_ptr = dest->buffer;
-	
-	while(buff_ptr[destpos] != '>') {
-		/* accept char */
-		seq_ptr[seqlen] = to2Bit[buff_ptr[destpos]];
-		if(seq_ptr[seqlen] < 5) {
-			++seqlen;
-			if(seqlen == seqsize) {
-				seq->size <<= 1;
-				seq->seq = realloc(seq->seq, seq->size);
-				if(!seq->seq) {
+	/* get qseq */
+	seq = qseq->seq;
+	size = qseq->size;
+	while(*buff != '>') {
+		*seq = to2Bit[*buff++];
+		if(((*seq) >> 3) == 0) {
+			if(--size == 0) {
+				size = qseq->size;
+				qseq->size <<= 1;
+				qseq->seq = realloc(qseq->seq, qseq->size);
+				if(!qseq->seq) {
 					ERROR();
 				}
-				seqsize = seq->size;
-				seq_ptr = seq->seq;
+				seq = qseq->seq + size;
+			} else {
+				++seq;
 			}
 		}
-		++destpos;
-		
-		if(destpos == destbytes) {
-			if(!buffFileBuff(dest)) {
-				/* last seq */
-				dest->pos = 0;
-				seq->len = seqlen;
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				/* chomp header */
+				while(*--seq == 8) {
+					++size;
+				}
+				*++seq = 0;
+				qseq->len = qseq->size - size;
+				
+				src->bytes = 0;
+				src->next = buff;
 				return 1;
 			}
-			destpos = 0;
-			destbytes = dest->bytes;
+			buff = src->buffer;
 		}
-		
 	}
-	dest->pos = destpos;
-	seq->len = seqlen;
+	
+	/* chomp header */
+	while(*--seq == 8) {
+		++size;
+	}
+	*++seq = 0;
+	qseq->len = qseq->size - size;
+	
+	src->bytes = avail;
+	src->next = buff;
 	
 	return 1;
 }
 
-int FileBuffgetFsaSeq(struct FileBuff *dest, struct qseqs *seq) {
+int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq) {
 	
-	char *seq_ptr, *buff_ptr;
-	int seqlen, seqsize, destpos, destbytes;
+	char *buff, *seq;
+	int size, avail;
+	
+	/* init */
+	avail = src->bytes;
+	buff = src->next;
+	if(avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
 	
 	/* skip header */
-	while((dest->pos = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		if(!buffFileBuff(dest)) {
+	while(*buff++ != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
 	}
-	++dest->pos;
 	
-	/* get seq */
-	seqlen = 0;
-	seqsize = seq->size;
-	seq_ptr = seq->seq;
-	if(dest->pos == dest->bytes && !buffFileBuff(dest)) {
-		return 0;
-	}
-	destpos = dest->pos;
-	destbytes = dest->bytes;
-	buff_ptr = dest->buffer;
-	
-	while(buff_ptr[destpos] != '>') {
-		/* accept char */
-		seq_ptr[seqlen] = to2Bit[buff_ptr[destpos]];
-		if(seq_ptr[seqlen] < 5) {
-			++seqlen;
-			if(seqlen == seqsize) {
-				seq->size <<= 1;
-				seq->seq = realloc(seq->seq, seq->size);
-				if(!seq->seq) {
+	/* get qseq */
+	seq = qseq->seq;
+	size = qseq->size;
+	while(*buff != '>') {
+		*seq = to2Bit[*buff++];
+		if(((*seq) >> 3) == 0) {
+			if(--size == 0) {
+				size = qseq->size;
+				qseq->size <<= 1;
+				qseq->seq = realloc(qseq->seq, qseq->size);
+				if(!qseq->seq) {
 					ERROR();
 				}
-				seqsize = seq->size;
-				seq_ptr = seq->seq;
+				seq = qseq->seq + size;
+			} else {
+				++seq;
 			}
 		}
-		++destpos;
-		
-		if(destpos == destbytes) {
-			if(!buffFileBuff(dest)) {
-				dest->pos = 0;
-				seq->len = seqlen;
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				/* chomp header */
+				while(*--seq == 8) {
+					++size;
+				}
+				*++seq = 0;
+				qseq->len = qseq->size - size;
+				
+				src->bytes = 0;
+				src->next = buff;
 				return 1;
 			}
-			destpos = 0;
-			destbytes = dest->bytes;
+			buff = src->buffer;
 		}
 	}
-	dest->pos = destpos;
-	seq->len = seqlen;
+	
+	/* chomp header */
+	while(*--seq == 8) {
+		++size;
+	}
+	*++seq = 0;
+	qseq->len = qseq->size - size;
+	
+	src->bytes = avail;
+	src->next = buff;
 	
 	return 1;
 }
 
-int FileBuffgetFq(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq, struct qseqs *qual) {
+int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, struct qseqs *qual) {
 	
+	char *buff, *seq;
+	int size, avail;
 	
-	int i, buff_end, seq_end;
-	char *seq_ptr, *buff_ptr;
+	/* init */
+	avail = src->bytes;
+	buff = src->next;
+	if(avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
 	
 	/* get header */
-	header->len = 0;
-	while((seq_end = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		buff_end = seq_end - dest->pos;
-		if(header->size < (buff_end + header->len)) {
-			header->size = buff_end + header->len;
+	seq = header->seq;
+	size = header->size;
+	while((*seq++ = *buff++) != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+		if(--size == 0) {
+			size = header->size;
+			header->size <<= 1;
 			header->seq = realloc(header->seq, header->size);
 			if(!header->seq) {
 				ERROR();
 			}
+			seq = header->seq + size;
 		}
-		strncpy(header->seq + header->len, dest->buffer + dest->pos, buff_end);
-		header->len += buff_end;
-		if(!buffFileBuff(dest)) {
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
 	}
-	buff_end = seq_end - dest->pos;
-	if(header->size < (buff_end + header->len)) {
-		header->size = buff_end + header->len;
-		header->seq = realloc(header->seq, header->size);
-		if(!header->seq) {
-			ERROR();
-		}
-	}
-	strncpy(header->seq + header->len, dest->buffer + dest->pos, buff_end);
-	header->len += buff_end;
 	/* chomp header */
-	--header->len;
-	while(isspace(header->seq[header->len])) {
-		--header->len;
+	while(isspace(*--seq)) {
+		++size;
 	}
-	++header->len;
-	header->seq[header->len] = 0;
-	dest->pos = seq_end + 1;
+	*++seq = 0;
+	header->len = header->size - size + 1;
 	
-	
-	
-	/* get seq */
-	buff_ptr = (dest->buffer + dest->pos);
-	seq_ptr = seq->seq;
-	
-	buff_end = dest->bytes - dest->pos;
-	seq_end = seq->size;
-	i = 0;
-	seq->len = 0;
-	if(!buff_end) {
-		/* buff buffer and sync with seq*/
-		if(!(buff_end = buffFileBuff(dest))) {
-			seq->len = 0;
-			return 0;
-		}
-		buff_ptr = dest->buffer;
-	}
-	
-	while(buff_ptr[i] != '\n') {
-		/* accept char */
-		seq_ptr[i] = to2Bit[buff_ptr[i]];
-		++i;
-		
-		/* check seq */
-		if(i == seq_end) {
-			seq_end += seq->size;
-			seq->size <<= 1;
-			seq->seq = realloc(seq->seq, seq->size);
-			if(!seq->seq) {
-				ERROR();
-			}
-			seq_ptr = seq->seq + seq->len;
-		}
-		
-		/* check buffer */
-		if(i == buff_end) {
-			/* move seq offset */
-			seq->len += i;
-			seq_ptr += i;
-			seq_end -= i;
-			
-			/* buff buffer and sync with seq*/
-			if(!(buff_end = buffFileBuff(dest))) {
-				seq->len = 0;
+	/* get qseq */
+	seq = qseq->seq;
+	size = qseq->size;
+	while((*seq++ = to2Bit[*buff++]) != 16) {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
 				return 0;
 			}
-			buff_ptr = dest->buffer;
-			i = 0;
+			buff = src->buffer;
+		}
+		if(--size == 0) {
+			size = qseq->size;
+			qseq->size <<= 1;
+			qseq->seq = realloc(qseq->seq, qseq->size);
+			if(!qseq->seq) {
+				ERROR();
+			}
+			seq = qseq->seq + size;
 		}
 	}
-	seq->len += i;
-	dest->pos += (i + 1);
-	
-	/* skip info */
-	while((dest->pos = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		if(!buffFileBuff(dest)) {
-			seq->len = 0;
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
 	}
-	++dest->pos;
+	/* chomp header */
+	while(*--seq == 8) {
+		++size;
+	}
+	*++seq = 0;
+	qseq->len = qseq->size - size;
 	
-	/* get qual */
-	if(qual->size < seq->size) {
+	/* skip info */
+	while(*buff++ != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
+	
+	/* get quality */
+	if(qual->size != qseq->size) {
+		qual->size = qseq->size;
 		free(qual->seq);
-		qual->size = seq->size;
 		qual->seq = malloc(qual->size);
 		if(!qual->seq) {
 			ERROR();
 		}
 	}
-	
-	qual->len = 0;
-	seq_end = dest->pos + seq->len;
-	while(seq_end >= dest->bytes) {
-		buff_end = dest->bytes - dest->pos;
-		strncpy(qual->seq + qual->len, dest->buffer + dest->pos, buff_end);
-		qual->len += buff_end;
-		seq_end -= dest->bytes;
-		if(!buffFileBuff(dest)) {
-			seq->len = 0;
+	qual->len = qseq->len;
+	if(qual->len < avail) {
+		memcpy(qual->seq, buff, qual->len);
+		avail -= qual->len;
+		buff += qual->len;
+	} else {
+		seq = qual->seq;
+		memcpy(seq, buff, avail);
+		seq += avail;
+		size = qual->len - avail;
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
+		memcpy(seq, buff, size);
 	}
-	buff_end = seq_end - dest->pos;
-	strncpy(qual->seq + qual->len, dest->buffer + dest->pos, buff_end);
-	qual->len = seq->len;
-	dest->pos = seq_end + 1;
+	qual->seq[qual->len] = 0;
+	
+	/* skip newline */
+	while(*buff++ != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
+	
+	src->bytes = avail;
+	src->next = buff;
 	
 	return 1;
 }
 
-int FileBuffgetFqSeq2(struct FileBuff *dest, struct qseqs *seq, struct qseqs *qual) {
+int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qual) {
 	
-	int seqlen, seqsize, destpos, destbytes, chunk, increase;
-	char *seq_ptr, *buff_ptr;
+	char *buff, *seq;
+	int size, avail;
+	
+	/* init */
+	avail = src->bytes;
+	buff = src->next;
+	if(avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
 	
 	/* skip header */
-	while((dest->pos = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		if(!buffFileBuff(dest)) {
-			return 0;
-		}
-	}
-	++dest->pos;
-	
-	/* get seq */
-	seqlen = 0;
-	seqsize = seq->size;
-	seq_ptr = seq->seq;
-	if(dest->pos == dest->bytes && !buffFileBuff(dest)) {
-		return 0;
-	}
-	destpos = dest->pos;
-	destbytes = dest->bytes;
-	buff_ptr = dest->buffer;
-	
-	while(buff_ptr[destpos] != '\n') {
-		/* accept char */
-		seq_ptr[seqlen] = to2Bit[buff_ptr[destpos]];
-		++seqlen;
-		++destpos;
-		
-		if(seqlen == seqsize) {
-			seq->size <<= 1;
-			seq->seq = realloc(seq->seq, seq->size);
-			if(!seq->seq) {
-				ERROR();
-			}
-			seqsize = seq->size;
-			seq_ptr = seq->seq;
-		}
-		
-		if(destpos == destbytes) {
-			if(!buffFileBuff(dest)) {
+	while(*buff++ != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
 				return 0;
 			}
-			destpos = 0;
-			destbytes = dest->bytes;
+			buff = src->buffer;
 		}
-		
 	}
-	dest->pos = destpos + 1;
-	seq->len = seqlen;
-	
-	/* skip info */
-	while((dest->pos = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		if(!buffFileBuff(dest)) {
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
 	}
-	++dest->pos;
 	
-	/* get qual */
-	if(qual->size < seq->size) {
+	/* get qseq */
+	seq = qseq->seq;
+	size = qseq->size;
+	while((*seq++ = to2Bit[*buff++]) != 16) {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+		if(--size == 0) {
+			size = qseq->size;
+			qseq->size <<= 1;
+			qseq->seq = realloc(qseq->seq, qseq->size);
+			if(!qseq->seq) {
+				ERROR();
+			}
+			seq = qseq->seq + size;
+		}
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
+	/* chomp header */
+	while(*--seq == 8) {
+		++size;
+	}
+	*++seq = 0;
+	qseq->len = qseq->size - size;
+	
+	/* skip info */
+	while(*buff++ != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+	}
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
+	}
+	
+	/* get quality */
+	if(qual->size != qseq->size) {
+		qual->size = qseq->size;
 		free(qual->seq);
-		qual->size = seq->size;
 		qual->seq = malloc(qual->size);
 		if(!qual->seq) {
 			ERROR();
 		}
 	}
-	
-	qual->len = 0;
-	chunk = dest->pos + seq->len;
-	while(chunk >= dest->bytes) {
-		increase = dest->bytes - dest->pos;
-		strncpy(qual->seq + qual->len, dest->buffer + dest->pos, increase);
-		qual->len += increase;
-		chunk -= dest->bytes;
-		if(!buffFileBuff(dest)) {
+	qual->len = qseq->len;
+	if(qual->len < avail) {
+		memcpy(qual->seq, buff, qual->len);
+		avail -= qual->len;
+		buff += qual->len;
+	} else {
+		seq = qual->seq;
+		memcpy(seq, buff, avail);
+		seq += avail;
+		size = qual->len - avail;
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
+		memcpy(seq, buff, size);
 	}
-	increase = chunk - dest->pos;
-	strncpy(qual->seq + qual->len, dest->buffer + dest->pos, increase);
-	qual->len = seq->len;
-	dest->pos = chunk + 1;
+	qual->seq[qual->len] = 0;
 	
-	return 1;
-}
-
-
-int FileBuffgetFqSeq(struct FileBuff *dest, struct qseqs *seq, struct qseqs *qual) {
-	
-	int i, buff_end, seq_end;
-	char *seq_ptr, *buff_ptr;
-	
-	/* skip header */
-	while((dest->pos = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		if(!buffFileBuff(dest)) {
-			return 0;
-		}
-	}
-	++dest->pos;
-	
-	
-	/* get seq */
-	buff_ptr = (dest->buffer + dest->pos);
-	seq_ptr = seq->seq;
-	
-	buff_end = dest->bytes - dest->pos;
-	seq_end = seq->size;
-	i = 0;
-	seq->len = 0;
-	if(!buff_end) {
-		/* buff buffer and sync with seq*/
-		if(!(buff_end = buffFileBuff(dest))) {
-			return 0;
-		}
-		buff_ptr = dest->buffer;
-	}
-	
-	while(buff_ptr[i] != '\n') {
-		/* accept char */
-		seq_ptr[i] = to2Bit[buff_ptr[i]];
-		++i;
-		
-		/* check seq */
-		if(i == seq_end) {
-			seq_end += seq->size;
-			seq->size <<= 1;
-			seq->seq = realloc(seq->seq, seq->size);
-			if(!seq->seq) {
-				ERROR();
-			}
-			seq_ptr = seq->seq + seq->len;
-		}
-		
-		/* check buffer */
-		if(i == buff_end) {
-			/* move seq offset */
-			seq->len += i;
-			seq_ptr += i;
-			seq_end -= i;
-			
-			/* buff buffer and sync with seq*/
-			if(!(buff_end = buffFileBuff(dest))) {
+	/* skip newline */
+	while(*buff++ != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
 				return 0;
 			}
-			buff_ptr = dest->buffer;
-			i = 0;
+			buff = src->buffer;
 		}
 	}
-	seq->len += i;
-	dest->pos += (i + 1);
-	
-	/* skip info */
-	while((dest->pos = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		if(!buffFileBuff(dest)) {
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
-	}
-	++dest->pos;
-	
-	/* get qual */
-	if(qual->size < seq->size) {
-		free(qual->seq);
-		qual->size = seq->size;
-		qual->seq = malloc(qual->size);
-		if(!qual->seq) {
-			ERROR();
-		}
+		buff = src->buffer;
 	}
 	
-	qual->len = 0;
-	seq_end = dest->pos + seq->len;
-	while(seq_end >= dest->bytes) {
-		strncpy(qual->seq + qual->len, dest->buffer + dest->pos, (buff_end = dest->bytes - dest->pos));
-		qual->len += buff_end;
-		seq_end -= dest->bytes;
-		if(!buffFileBuff(dest)) {
-			return 0;
-		}
-	}
-	strncpy(qual->seq + qual->len, dest->buffer + dest->pos, seq_end - dest->pos);
-	qual->len = seq->len;
-	dest->pos = seq_end + 1;
+	src->bytes = avail;
+	src->next = buff;
 	
 	return 1;
 }
 
 int getPhredFileBuff(struct FileBuff *dest) {
 	
-	int i, seek;
+	int seek;
+	char *buff;
 	
-	while(dest->pos < dest->bytes) {
-		/* skip header, seq and info */
-		for(i = 0; i < 3; ++i) {
-			seek = 1;
-			while(seek) {
-				if(dest->pos < dest->bytes) {
-					if(dest->buffer[dest->pos] == '\n') {
-						seek = 0;
-					}
-					++dest->pos;
-				} else {
-					dest->pos = 0;
-					return 0;
-				}
+	buff = dest->next;
+	
+	while(*buff != 0) {
+		seek = 3;
+		while(seek && *buff != 0) {
+			if(*++buff == '\n') {
+				--seek;
 			}
 		}
-		/* get Phred scale */
+		
 		seek = 1;
 		while(seek) {
-			if(dest->pos < dest->bytes) {
-				if(dest->buffer[dest->pos] == '\n') {
-					seek = 0;
-				} else if(dest->buffer[dest->pos] < 33) {
-					dest->pos = 0;
-					return 0;
-				} else if(53 < dest->buffer[dest->pos] && dest->buffer[dest->pos] < 59) {
-					dest->pos = 0;
-					return 33;
-				} else if(dest->buffer[dest->pos] > 84) {
-					dest->pos = 0;
-					return 64;
-				}
-				++dest->pos;
-			} else {
-				dest->pos = 0;
+			if(*++buff == '\n') {
+				seek = 0;
+			} else if(*buff < 33) {
 				return 0;
+			} else if(53 < *buff && *buff < 59) {
+				return 33;
+			} else if(*buff > 84) {
+				return 64;
 			}
 		}
 	}
 	
-	dest->pos = 0;
 	return 0;
 }
 
@@ -1193,7 +1234,9 @@ int find_contamination(int *out_Tem) {
 }
 
 int find_contamination2(int *out_Tem, int contamination_s) {
+	
 	int i;
+	
 	for(i = *out_Tem; i != 0; --i) {
 		if(out_Tem[i] == contamination_s) {
 			return i;
@@ -1204,9 +1247,8 @@ int find_contamination2(int *out_Tem, int contamination_s) {
 
 void strrc(char *qseq, int q_len) {
 	
-	static char comp[6] = {3, 2, 1, 0, 4, 5};
-	char carry;
 	int i, j, seqlen;
+	char carry, comp[6] = {3, 2, 1, 0, 4, 5};
 	
 	seqlen = q_len >> 1;
 	
@@ -2625,7 +2667,7 @@ void load_DBs_Sparse(char *templatefilename) {
 /* METHOD SPECIFIC METHODS */
 void print_ankers(int *out_Tem, struct compDNA *qseq, int rc_flag, struct qseqs *header) {
 	
-	static int infoSize[6];
+	int infoSize[6];
 	
 	infoSize[0] = qseq->seqlen;
 	infoSize[1] = qseq->complen;
@@ -2644,7 +2686,7 @@ void print_ankers(int *out_Tem, struct compDNA *qseq, int rc_flag, struct qseqs 
 
 int get_ankers(int *out_Tem, struct compDNA *qseq, struct qseqs *header, FILE *inputfile) {
 	
-	static int infoSize[6];
+	int infoSize[6];
 	
 	if(fread(infoSize, sizeof(int), 6, inputfile)) {
 		qseq->seqlen = infoSize[0];
@@ -2988,7 +3030,7 @@ FILE * printFrags(char *filename, struct frag **alignFrags) {
 
 void bootFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compressor) {
 	
-	static int i, end, buffer[4];
+	int i, end, buffer[4];
 	
 	/* bootstrap in pieces of 1024 */
 	buffer[3] = header->len;
@@ -3021,7 +3063,7 @@ void bootFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compresso
 
 void printFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compressor) {
 	
-	static int buffer[4];
+	int buffer[4];
 	
 	/* translate to 2bit */
 	if(qseq->len >= compressor->size) {
@@ -3062,7 +3104,7 @@ void printFsa_pairMt1(struct qseqs *header, struct qseqs *qseq, struct qseqs *he
 }
 void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *header_r, struct qseqs *qseq_r, struct compDNA *compressor) {
 	
-	static int buffer[4];
+	int buffer[4];
 	
 	/* translate to 2bit */
 	if(qseq->len >= compressor->size) {
@@ -3102,7 +3144,8 @@ void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *heade
 }
 
 int loadFsa(struct compDNA *qseq, struct qseqs *header, FILE *inputfile) {
-	static int buffer[4];
+	
+	int buffer[4];
 	
 	if(fread(buffer, sizeof(int), 4, inputfile)) {
 		qseq->seqlen = buffer[0];
@@ -5728,35 +5771,27 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	
 	int fileCounter, phredCut, start, end;
 	unsigned FASTQ;
-	char *filename, *cmd, *seq;
+	char *filename, *seq;
 	struct qseqs *header, *qseq, *qual;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
 	freopen(NULL, "wb", stdout);
 	
-	start = strlen(*inputfiles);
-	for(fileCounter = 1; fileCounter < fileCount; ++fileCounter) {
-		end = strlen(inputfiles[fileCounter]);
-		if(start < end) {
-			start = end;
-		}
-	}
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(start + 16);
-	if(!cmd || !compressor) {
+	if(!compressor) {
 		ERROR();
 	}
 	allocComp(compressor, 1024);
 	header = setQseqs(256);
 	qseq = setQseqs(delta);
 	qual = setQseqs(1024);
-	inputfile = setFileBuff(1048576);
+	inputfile = setFileBuff(CHUNK);
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
 		
 		/* determine filetype and open it */
-		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
+		if((FASTQ = openAndDetermine(inputfile, filename)) & 3) {
 			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 		}
 		
@@ -5820,13 +5855,12 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 		}
 		
 		if(FASTQ & 4) {
-			pcloseFileBuff(inputfile);
+			gzcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
 	}
 	
-	free(cmd);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -5839,22 +5873,14 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
-	char *filename, *cmd, *seq;
+	char *filename, *seq;
 	struct qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	struct FileBuff *inputfile, *inputfile2;
 	struct compDNA *compressor;
 	freopen(NULL, "wb", stdout);
 	
-	start = strlen(*inputfiles);
-	for(fileCounter = 1; fileCounter < fileCount; ++fileCounter) {
-		end = strlen(inputfiles[fileCounter]);
-		if(start < end) {
-			start = end;
-		}
-	}
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(start + 16);
-	if(!cmd || !compressor) {
+	if(!compressor) {
 		ERROR();
 	}
 	allocComp(compressor, 1024);
@@ -5864,18 +5890,18 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 	header2 = setQseqs(256);
 	qseq2 = setQseqs(delta);
 	qual2 = setQseqs(1024);
-	inputfile = setFileBuff(1048576);
-	inputfile2 = setFileBuff(1048576);
+	inputfile = setFileBuff(CHUNK);
+	inputfile2 = setFileBuff(CHUNK);
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
-		FASTQ = openAndDetermine(inputfile, filename, cmd);
+		FASTQ = openAndDetermine(inputfile, filename);
 		++fileCounter;
 		filename = inputfiles[fileCounter];
-		FASTQ2 = openAndDetermine(inputfile2, filename, cmd);
-		if((FASTQ & 3) && (FASTQ & 3) == (FASTQ2 & 3)) {
+		FASTQ2 = openAndDetermine(inputfile2, filename);
+		if(FASTQ == FASTQ2) {
 			fprintf(stderr, "# Reading inputfile:\t%s %s\n", inputfiles[fileCounter-1], filename);
 		} else {
 			fprintf(stderr, "Inputfiles:\t%s %s\nAre in different format.\n", inputfiles[fileCounter-1], filename);
@@ -6001,20 +6027,19 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 		
 		--fileCounter;
 		if(FASTQ & 4) {
-			pcloseFileBuff(inputfile);
+			gzcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
 		++fileCounter;
 		if(FASTQ2 & 4) {
-			pcloseFileBuff(inputfile2);
+			gzcloseFileBuff(inputfile2);
 		} else {
 			closeFileBuff(inputfile2);
 		}
 		
 	}
 	
-	free(cmd);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -6031,22 +6056,14 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ;
-	char *filename, *cmd, *seq;
+	char *filename, *seq;
 	struct qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
 	freopen(NULL, "wb", stdout);
 	
-	start = strlen(*inputfiles);
-	for(fileCounter = 1; fileCounter < fileCount; ++fileCounter) {
-		end = strlen(inputfiles[fileCounter]);
-		if(start < end) {
-			start = end;
-		}
-	}
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(start + 16);
-	if(!cmd || !compressor) {
+	if(!compressor) {
 		ERROR();
 	}
 	allocComp(compressor, 1024);
@@ -6056,13 +6073,13 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 	header2 = setQseqs(256);
 	qseq2 = setQseqs(delta);
 	qual2 = setQseqs(1024);
-	inputfile = setFileBuff(1048576);
+	inputfile = setFileBuff(CHUNK);
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
 		
 		/* determine filetype and open it */
-		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
+		if((FASTQ = openAndDetermine(inputfile, filename)) & 3) {
 			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 		}
 		
@@ -6179,14 +6196,13 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 		}
 		
 		if(FASTQ & 4) {
-			pcloseFileBuff(inputfile);
+			gzcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
 		
 	}
 	
-	free(cmd);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -6201,35 +6217,26 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	
 	int FASTQ, fileCounter, phredCut, start, end;
-	char *filename, *cmd, *zipped, *seq;
+	char *filename, *seq;
 	struct qseqs *qseq, *qual;
 	struct FileBuff *inputfile;
 	struct compKmers *Kmers;
 	freopen(NULL, "wb", stdout);
 	
-	start = strlen(*inputfiles);
-	for(fileCounter = 1; fileCounter < fileCount; ++fileCounter) {
-		end = strlen(inputfiles[fileCounter]);
-		if(start < end) {
-			start = end;
-		}
-	}
-	cmd = malloc(start + 16);
 	Kmers = malloc(sizeof(struct compKmers));
-	zipped = strdup(".gz");
-	if(!cmd || !zipped || !Kmers) {
+	if(!Kmers) {
 		ERROR();
 	}
 	allocCompKmers(Kmers, delta);
 	qseq = setQseqs(delta);
 	qual = setQseqs(1024);
-	inputfile = setFileBuff(1048576);
+	inputfile = setFileBuff(CHUNK);
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
 		
 		/* determine filetype and open it */
-		if((FASTQ = openAndDetermine(inputfile, filename, cmd)) & 3) {
+		if((FASTQ = openAndDetermine(inputfile, filename)) & 3) {
 			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 		}
 		
@@ -6280,15 +6287,13 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 		}
 		
 		if(FASTQ & 4) {
-			pcloseFileBuff(inputfile);
+			gzcloseFileBuff(inputfile);
 		} else {
 			closeFileBuff(inputfile);
 		}
 		
 	}
 	
-	free(cmd);
-	free(zipped);
 	free(Kmers->kmers);
 	free(Kmers);
 	destroyQseqs(qseq);
@@ -9090,9 +9095,8 @@ char nanoCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct asse
 
 void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
 	
-	static int buffer[7];
 	int i, j, t_len, aln_len, asm_len, start, end, bias, myBias, gaps;
-	int read_score, depthUpdate, bestBaseScore, pos, bestScore;
+	int read_score, depthUpdate, bestBaseScore, pos, bestScore, buffer[7];
 	int nextTemplate, file_i, max_asmlen, nextGap, stats[4], *assemNext;
 	unsigned depth, coverScore;
 	short unsigned (*assembly)[6];
@@ -9391,8 +9395,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 
 void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
 	
-	static int buffer[7];
-	int i, j, t_len, aln_len, start, end, file_i, stats[4];
+	int i, j, t_len, aln_len, start, end, file_i, stats[4], buffer[7];
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
 	unsigned depth, coverScore;
 	short unsigned (*assembly)[6];
@@ -9608,8 +9611,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 
 void update_Scores(char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, struct qseqs *header, FILE *frag_out_raw) {
 	
-	static int buffer[4];
-	int i;
+	int i, buffer[4];
 	
 	/* print frag */
 	buffer[0] = q_len;
@@ -11736,6 +11738,60 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 }
 
+char * strjoin(char **strings, int len) {
+	
+	int i, new_len, escape;
+	char *newStr, *stringPtr;
+	
+	new_len = len + 16;
+	escape = 0;
+	for(i = 0; i < len; ++i) {
+		if(*strings[i] == '-') {
+			escape = 0;
+		} else if(escape) {
+			new_len += 2;
+		}
+		new_len += strlen(strings[i]);
+		if(strncmp(strings[i], "-i", 2) == 0) {
+			escape = 1;
+		}
+	}
+	
+	newStr = malloc(new_len);
+	if(!newStr) {
+		ERROR();
+	}
+	
+	*newStr = 0;
+	escape = 0;
+	stringPtr = newStr;
+	for(i = 0; i < len; ++i) {
+		if(*strings[i] == '-') {
+			escape = 0;
+		}
+		
+		if(escape) {
+			*stringPtr = '\"';
+			++stringPtr;
+		}
+		new_len = strlen(strings[i]);
+		strcpy(stringPtr, strings[i]);
+		stringPtr += new_len;
+		if(escape) {
+			*stringPtr = '\"';
+			++stringPtr;
+		}
+		*stringPtr = ' ';
+		++stringPtr;
+		
+		if(*strings[i] == '-' && (strings[i][1] == 'i' || strings[i][1] == 'o')) {
+			escape = 1;
+		}
+	}
+	
+	return newStr;
+}
+
 void helpMessage(int exeStatus) {
 	FILE *helpOut;
 	if(exeStatus == 0) {
@@ -11988,8 +12044,8 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-delta") == 0) {
 			++args;
 			if(args < argc) {
-				delta = atoi(argv[args]);
-				if(delta == 0) {
+				delta = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
 					fprintf(stderr, " Invalid delta specified.\n");
 					exit(4);
 				}
@@ -12010,7 +12066,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-shm") == 0) {
 			++args;
 			if(args < argc && argv[args][0] != '-') {
-				shm = atoi(argv[args]);
+				shm = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid shm-lvl specified.\n");
+					exit(4);
+				}
 			} else {
 				--args;
 				shm = 3;
@@ -12018,7 +12078,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-t") == 0) {
 			++args;
 			if(args < argc && argv[args][0] != '-') {
-				thread_num = atoi(argv[args]);
+				thread_num = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid number of threads specified.\n");
+					exit(4);
+				}
 			} else {
 				--args;
 			}
@@ -12028,7 +12092,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-swap") == 0) {
 			++args;
 			if(args < argc && argv[args][0] != '-') {
-				diskDB = atoi(argv[args]);
+				diskDB = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-swap\".\n");
+					exit(4);
+				}
 			} else {
 				--args;
 				diskDB = 1;
@@ -12055,21 +12123,29 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-k") == 0) {
 			++args;
 			if(args < argc) {
-				kmersize = atoi(argv[args]);
-				if(kmersize == 0) {
+				kmersize = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
-					kmersize = 16;
+					exit(4);
 				}
 			}
 		} else if(strcmp(argv[args], "-mp") == 0) {
 			++args;
 			if(args < argc) {
-				minPhred = atoi(argv[args]);	
+				minPhred = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid minimum phred score parsed\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-5p") == 0) {
 			++args;
 			if(args < argc) {
-				fiveClip = atoi(argv[args]);	
+				fiveClip = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-5p\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-dense") == 0) {
 			assemblyPtr = &assemble_KMA_dense;
@@ -12100,7 +12176,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-e") == 0) {
 			++args;
 			if(args < argc) {
-				evalue = atof(argv[args]);
+				evalue = strtod(argv[args], &exeBasic);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-e\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-bc") == 0) {
 			significantBase = &significantNuc;
@@ -12112,40 +12192,70 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-ID") == 0) {
 			++args;
 			if(args < argc) {
-				ID_t = atof(argv[args]);
+				ID_t = strtod(argv[args], &exeBasic);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-ID\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-mrs") == 0) {
 			++args;
 			if(args < argc) {
-				scoreT = atof(argv[args]);
+				scoreT = strtod(argv[args], &exeBasic);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-mrs\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-reward") == 0) {
 			++args;
 			if(args < argc) {
-				M = abs(atoi(argv[args]));
+				M = strtol(argv[args], &exeBasic, 10);
+				M = abs(M);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-reward\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-penalty") == 0) {
 			++args;
 			if(args < argc) {
-				MM = atoi(argv[args]);
+				MM = strtol(argv[args], &exeBasic, 10);
 				MM = MIN(-MM, MM);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-penalty\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-gapopen") == 0) {
 			++args;
 			if(args < argc) {
-				W1 = atoi(argv[args]);
+				W1 = strtol(argv[args], &exeBasic, 10);
 				W1 = MIN(-W1, W1);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-gapopen\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-gapextend") == 0) {
 			++args;
 			if(args < argc) {
-				U = atoi(argv[args]);
+				U = strtol(argv[args], &exeBasic, 10);
 				U = MIN(-U, U);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-gapextend\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-per") == 0) {
 			++args;
 			if(args < argc) {
-				PE = abs(atoi(argv[args]));
+				PE = strtol(argv[args], &exeBasic, 10);
+				PE = abs(PE);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-per\".\n");
+					exit(4);
+				}
 			}
 		} else if(strcmp(argv[args], "-and") == 0) {
 			cmp = &cmp_and;
@@ -12154,7 +12264,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-Mt1") == 0) {
 			++args;
 			if(args < argc) {
-				Mt1 = atoi(argv[args]);
+				Mt1 = strtol(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
+					exit(4);
+				}
 			}
 			if(Mt1 < 1) {
 				fprintf(stderr, "Invalid template specified at \"-Mt1\"\n");
@@ -12205,6 +12319,7 @@ int main(int argc, char *argv[]) {
 		d[i][4] = U;
 	}
 	d[4][4] = 0;
+	setvbuf(stdout, NULL, _IOFBF, CHUNK);
 	
 	if(step1) {
 		t0 = clock();
@@ -12214,9 +12329,11 @@ int main(int argc, char *argv[]) {
 			ERROR();
 		}
 		for(i = 0; i < 384; ++i) {
-			to2Bit[i] = 5;
+			to2Bit[i] = 8;
 		}
 		to2Bit += 128;
+		to2Bit['\n'] = 16;
+		
 		to2Bit['A'] = 0;
 		to2Bit['C'] = 1;
 		to2Bit['G'] = 2;
@@ -12383,166 +12500,36 @@ int main(int argc, char *argv[]) {
 		t1 = clock();
 		fprintf(stderr, "#\n# Total time used for converting query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 	} else if(Mt1) {
-		exe_len = strlen("-step1");
-		for(args = 0; args < argc; ++args) {
-			exe_len += strlen(argv[args]) + 1;
-		}
-		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
-		
-		exeBasic = calloc((exe_len + 1), sizeof(char));
-		if(!exeBasic) {
-			ERROR();
-		}
-		fileCounter = 0;
-		for(args = 0; args < argc; ++args) {
-			if(*argv[args] == '-') {
-				fileCounter = 0;
-			}
-			if(fileCounter) {
-				strcat(exeBasic, "\"");
-				strcat(exeBasic, argv[args]);
-				strcat(exeBasic, "\"");
-			} else {
-				strcat(exeBasic, argv[args]);
-			}
-			if(strncmp(argv[args], "-i", 2) == 0) {
-				fileCounter = 1;
-			}
-			strcat(exeBasic, " ");
-		}
+		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-step1");
+		
 		runKMA_Mt1(templatefilename, outputfilename, exeBasic, Mt1);
 		fprintf(stderr, "# Closing files\n");
 		fflush(stdout);
 	} else if(step2) {
-		exe_len = strlen("-step1");
-		for(args = 0; args < argc; ++args) {
-			exe_len += strlen(argv[args]) + 1;
-		}
-		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
-		
-		exeBasic = calloc((exe_len + 1), sizeof(char));
-		if(!exeBasic) {
-			ERROR();
-		}
-		fileCounter = 0;
-		for(args = 0; args < argc; ++args) {
-			if(*argv[args] == '-') {
-				fileCounter = 0;
-			}
-			if(fileCounter) {
-				strcat(exeBasic, "\"");
-				strcat(exeBasic, argv[args]);
-				strcat(exeBasic, "\"");
-			} else {
-				strcat(exeBasic, argv[args]);
-			}
-			if(strncmp(argv[args], "-i", 2) == 0) {
-				fileCounter = 1;
-			}
-			strcat(exeBasic, " ");
-		}
+		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-step1");
+		
 		save_kmers_batch(templatefilename, exeBasic);
 		fflush(stdout);
 	} else if(sparse_run) {
-		exe_len = strlen("-step1");
-		for(args = 0; args < argc; ++args) {
-			exe_len += strlen(argv[args]) + 1;
-		}
-		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
-		
-		exeBasic = calloc((exe_len + 1), sizeof(char));
-		if(!exeBasic) {
-			ERROR();
-		}
-		
-		fileCounter = 0;
-		for(args = 0; args < argc; ++args) {
-			if(*argv[args] == '-') {
-				fileCounter = 0;
-			}
-			if(fileCounter) {
-				strcat(exeBasic, "\"");
-				strcat(exeBasic, argv[args]);
-				strcat(exeBasic, "\"");
-			} else {
-				strcat(exeBasic, argv[args]);
-			}
-			if(strncmp(argv[args], "-i", 2) == 0) {
-				fileCounter = 1;
-			}
-			strcat(exeBasic, " ");
-		}
+		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-step1");
 		
 		save_kmers_sparse_batch(templatefilename, outputfilename, exeBasic, ss);
 		fprintf(stderr, "# Closing files\n");
 		fflush(stdout);
 	} else if(mem_mode) {
-		exe_len = strlen("-step2");
-		for(args = 0; args < argc; ++args) {
-			exe_len += strlen(argv[args]) + 1;
-		}
-		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
-		
-		exeBasic = calloc((exe_len + 1), sizeof(char));
-		if(!exeBasic) {
-			ERROR();
-		}
-		
-		fileCounter = 0;
-		for(args = 0; args < argc; ++args) {
-			if(*argv[args] == '-') {
-				fileCounter = 0;
-			}
-			if(fileCounter) {
-				strcat(exeBasic, "\"");
-				strcat(exeBasic, argv[args]);
-				strcat(exeBasic, "\"");
-			} else {
-				strcat(exeBasic, argv[args]);
-			}
-			if(strncmp(argv[args], "-i", 2) == 0) {
-				fileCounter = 1;
-			}
-			strcat(exeBasic, " ");
-		}
+		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-step2");
 		
 		runKMA_MEM(templatefilename, outputfilename, exeBasic);
 		fprintf(stderr, "# Closing files\n");
 		fflush(stdout);
 	} else {
-		exe_len = strlen("-step2");
-		for(args = 0; args < argc; ++args) {
-			exe_len += strlen(argv[args]) + 1;
-		}
-		exe_len += ((fileCounter + fileCounter_PE + fileCounter_INT) << 1);
-		
-		exeBasic = calloc((exe_len + 1), sizeof(char));
-		if(!exeBasic) {
-			ERROR();
-		}
-		
-		fileCounter = 0;
-		for(args = 0; args < argc; ++args) {
-			if(*argv[args] == '-') {
-				fileCounter = 0;
-			}
-			if(fileCounter) {
-				strcat(exeBasic, "\"");
-				strcat(exeBasic, argv[args]);
-				strcat(exeBasic, "\"");
-			} else {
-				strcat(exeBasic, argv[args]);
-			}
-			if(strncmp(argv[args], "-i", 2) == 0) {
-				fileCounter = 1;
-			}
-			strcat(exeBasic, " ");
-		}
+		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-step2");
+		
 		runKMA(templatefilename, outputfilename, exeBasic);
 		fprintf(stderr, "# Closing files\n");
 		fflush(stdout);

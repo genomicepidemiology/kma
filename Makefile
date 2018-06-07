@@ -4,7 +4,7 @@ BINS = kma kma_index kma_shm
 all: $(BINS)
 
 kma: KMA.c
-	$(CC) $(CFLAGS) -o $@ $< -lm -lpthread
+	$(CC) $(CFLAGS) -o $@ $< -lm -lpthread -lz
 
 kma_index: KMA_index.c
 	$(CC) $(CFLAGS) -o $@ $< -lm

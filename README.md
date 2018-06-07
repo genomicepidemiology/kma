@@ -36,8 +36,7 @@ This is done with “kma_index”, the most important options are described belo
 -i Input fasta file(s), space separated. By default kma_index reads from stdin.
 -o Output name, the name given to the database.
 -k kmersize used for indexing the database.
--k_t kmersize used to identify template candidates when running
-KMA.
+-k_t kmersize used to identify template candidates when running KMA.
 -k_i kmersize used when performing alignments between two sequences.
 ```
 
