@@ -124,6 +124,12 @@ Example of taking it down again, always remember to do this then it is no longer
 kma_shm –t_db database/name –shmLvl 1 –destroy
 ```
 
+# Installation Requirements #
+In order to install KMA, you need to have a C-compiler and zlib development files installed.
+Zlib development files can be installed on unix systems with:
+```
+sudo apt-get install libz-dev
+```
 
 # Help #
 Usage and options are available with the "-h" option on all three programs.
