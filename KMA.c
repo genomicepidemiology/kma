@@ -23,6 +23,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <sys/ipc.h>
 #include <sys/shm.h>
 #include <errno.h>
 #include <pthread.h>
@@ -66,7 +67,6 @@ struct assem {
 };
 
 struct frag {
-	
 	int buffer[6];
 	char *qseq;
 	char *header;
@@ -182,11 +182,11 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 4};
+int version[3] = {0, 14, 5};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
-char **template_names, *to2Bit;
+char **template_names;
 int *template_lengths, *template_ulengths;
 int **RegionTemplates, *Score, *Score_r, **TmpNs, exhaustive, minLen, ref_fsa;
 int **tScore, **tScore_r, **BestTemplates, **BestTemplates_r, one2one, diskDB;
@@ -209,7 +209,7 @@ void (*printPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*printPairPtr)(int*, struct compDNA*, int, struct qseqs*, struct compDNA*, int, struct qseqs*);
 void (*deConPrintPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*ankerPtr)(int*, int*, int*, int**, int**, int*, struct compDNA*, int, int, int, int, struct qseqs*);
-void (*assemblyPtr)(struct assem*, int, FILE**, int, FILE*, FILE*, char*, struct aln*, struct aln*, struct qseqs*, struct qseqs*);
+void (*assemblyPtr)(struct assem*, int, FILE**, int, struct FileBuff *, struct FileBuff*, char*, struct aln*, struct aln*, struct qseqs*, struct qseqs*);
 void (*destroyPtr)(int);
 struct hashMap_index * (*alignLoadPtr)(FILE*, FILE*, int, long unsigned, long unsigned);
 int * (*hashMap_get)(long unsigned);
@@ -456,7 +456,6 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 		strm->avail_in = fread(dest->inBuffer, 1, dest->buffSize, dest->file);
 		strm->next_in = (unsigned char*) dest->inBuffer;
 		if(strm->avail_in == 0) {
-			inflateEnd(strm);
 			dest->bytes = 0;
 			dest->next = dest->buffer;
 			return 0;
@@ -470,18 +469,13 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	/* uncompress buffer */
 	status = inflate(strm, Z_NO_FLUSH);
 	
-	switch(status) {
-	case Z_OK:
-	case Z_STREAM_END:
-	case Z_BUF_ERROR:
-		break;
-	default:
-		inflateEnd(strm);
-		fprintf(stderr, "Gzip error %d\n", status);
+	if(status == Z_OK || status == Z_STREAM_END || status == Z_BUF_ERROR) {
+		dest->bytes = dest->buffSize - strm->avail_out;
+		dest->next = dest->buffer;
+	} else {
+		dest->bytes = 0;
+		dest->next = dest->buffer;
 	}
-	
-	dest->bytes = dest->buffSize - strm->avail_out;
-	dest->next = dest->buffer;
 	
 	return dest->bytes;
 	
@@ -518,7 +512,7 @@ void init_gzFile(struct FileBuff *inputfile) {
 	status = inflateInit2(strm, 15 | ENABLE_ZLIB_GZIP);
 	if(status < 0) {
 		fprintf(stderr, "Gzip error %d\n", status);
-		exit(1);
+		exit(status);
 	}
 	strm->next_in = (unsigned char*) inputfile->inBuffer;
 	strm->avail_in = inputfile->bytes;
@@ -556,7 +550,6 @@ void openFileBuff(struct FileBuff *dest, char *filename, char *mode) {
 	if(!dest->file) {
 		ERROR();
 	}
-	setvbuf(dest->file, NULL, _IOFBF, CHUNK);
 }
 
 void closeFileBuff(struct FileBuff *dest) {
@@ -566,8 +559,10 @@ void closeFileBuff(struct FileBuff *dest) {
 
 void gzcloseFileBuff(struct FileBuff *dest) {
 	
-	inflateEnd(dest->strm);
-	fclose(dest->file);
+	int status;
+	if((status = inflateEnd(dest->strm)) != Z_OK) {
+		fprintf(stderr, "Gzip error %d\n", status);
+	}
 	dest->file = 0;
 	dest->strm->avail_out = 0;
 }
@@ -583,6 +578,311 @@ int buff_FileBuff(struct FileBuff *dest) {
 	dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file);
 	dest->next = dest->buffer;
 	return dest->bytes;
+}
+
+z_stream * strm_init() {
+	
+	z_stream *strm;
+	int status;
+	
+	strm = malloc(sizeof(z_stream));
+	if(!strm) {
+		ERROR();
+	}
+	
+	strm->zalloc = Z_NULL;
+	strm->zfree  = Z_NULL;
+	strm->opaque = Z_NULL;
+	
+	status = deflateInit2(strm, 1, Z_DEFLATED, 31 | GZIP_ENCODING, 9, Z_FILTERED);
+	if(status < 0) {
+		fprintf(stderr, "Gzip error %d\n", status);
+		exit(status);
+	}
+	
+	return strm;
+}
+
+struct FileBuff * gzInitFileBuff(int size) {
+	
+	struct FileBuff *dest;
+	
+	dest = malloc(sizeof(struct FileBuff));
+	if(!dest) {
+		ERROR();
+	}
+	
+	dest->file = 0;
+	dest->bytes = size;
+	dest->buffSize = size;
+	dest->strm = strm_init();
+	dest->buffer = malloc(size);
+	dest->inBuffer = malloc(size);
+	dest->next = dest->buffer;
+	if(!dest->buffer || !dest->inBuffer) {
+		ERROR();
+	}
+	
+	return dest;
+}
+
+void resetGzFileBuff(struct FileBuff *dest, int size) {
+	
+	dest->bytes = size;
+	dest->buffSize = size;
+	free(dest->buffer);
+	free(dest->inBuffer);
+	dest->buffer = malloc(size);
+	dest->inBuffer = malloc(size);
+	dest->next = dest->buffer;
+	if(!dest->buffer || !dest->inBuffer) {
+		ERROR();
+	}
+}
+
+void writeGzFileBuff(struct FileBuff *dest) {
+	
+	int check = Z_OK;
+	z_stream *strm = dest->strm;
+	strm->avail_in = dest->buffSize - dest->bytes;
+	strm->next_in = (unsigned char *) dest->buffer;
+	strm->avail_out = 0;
+	
+	while(strm->avail_out == 0 && check != Z_STREAM_END) {
+		strm->avail_out = dest->buffSize;
+		strm->next_out = (unsigned char *) dest->inBuffer;
+		check = deflate(strm, Z_NO_FLUSH);
+		fwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
+	}
+	dest->bytes = dest->buffSize;
+	dest->next = dest->buffer;
+}
+
+void closeGzFileBuff(struct FileBuff *dest) {
+	
+	int check = Z_OK;
+	z_stream *strm = dest->strm;
+	strm->avail_in = dest->buffSize - dest->bytes;
+	strm->next_in = (unsigned char *) dest->buffer;
+	strm->avail_out = 0;
+	
+	while(strm->avail_out == 0 && check != Z_STREAM_END) {
+		strm->avail_out = dest->buffSize;
+		strm->next_out = (unsigned char *) dest->inBuffer;
+		check = deflate(strm, Z_FINISH);
+		fwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
+	}
+	deflateEnd(strm);
+	fclose(dest->file);
+}
+
+void destroyGzFileBuff(struct FileBuff *dest) {
+	
+	closeGzFileBuff(dest);
+	free(dest->strm);
+	free(dest->buffer);
+	free(dest->inBuffer);
+	free(dest);
+}
+
+void updateMatrix(struct FileBuff *dest, char *template_name, char *template_seq, short unsigned (*assembly)[6], int *assemNext, int asm_len) {
+	
+	int i, pos, check, avail;
+	char *update;
+	
+	/* check buffer capacity */
+	check = strlen(template_name) + 2;
+	if(dest->bytes < check) {
+		writeGzFileBuff(dest);
+	}
+	update = dest->next;
+	avail = dest->bytes - check;
+	
+	/* fill in header */
+	check -= 2;
+	*update++ = '#';
+	memcpy(update, template_name, check);
+	update += check;
+	*update++ = '\n';
+	
+	/* fill in rows */
+	if(assemNext) {
+		for(i = 0, pos = 0; i < asm_len; ++i, pos = assemNext[pos]) {
+			/* check buffer capacity */
+			if(dest->bytes < 38) {
+				writeGzFileBuff(dest);
+				avail = dest->bytes;
+				update = dest->next;
+			}
+			
+			/* update with row */
+			check = sprintf(update, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", template_seq[i], assembly[pos][0], assembly[pos][1], assembly[pos][2], assembly[pos][3], assembly[pos][4], assembly[pos][5]);
+			avail -= check;
+			update += check;
+		}
+	} else {
+		for(i = 0; i < asm_len; ++i) {
+			/* check buffer capacity */
+			if(dest->bytes < 38) {
+				writeGzFileBuff(dest);
+				avail = dest->bytes;
+				update = dest->next;
+			}
+			
+			/* update with row */
+			check = sprintf(update, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", template_seq[i], assembly[i][0], assembly[i][1], assembly[i][2], assembly[i][3], assembly[i][4], assembly[i][5]);
+			avail -= check;
+			update += check;
+		}
+	}
+	
+	/* update with last newline */
+	if(avail == 0) {
+		writeGzFileBuff(dest);
+		avail = dest->bytes;
+		update = dest->next;
+	}
+	*update++ = '\n';
+	dest->next = update;
+	dest->bytes = avail - 1;
+}
+
+void updateFrags(struct FileBuff *dest, struct qseqs *qseq, struct qseqs *header, char *template_name, int *stats) {
+	
+	int check, avail;
+	
+	avail = dest->bytes;
+	check = 47 + qseq->len + header->len + strlen(template_name);
+	
+	/* flush buffer */
+	if(avail < check) {
+		writeGzFileBuff(dest);
+		
+		/* seq is too big, reallocate buffer */
+		if(dest->bytes < check) {
+			resetGzFileBuff(dest, check << 1);
+		}
+		avail = dest->bytes;
+	}
+	
+	/* update buffer with fragment */
+	memcpy(dest->next, qseq->seq, qseq->len);
+	dest->next += qseq->len;
+	avail -= qseq->len;
+	/* stats */
+	check = sprintf(dest->next, "\t%d\t%d\t%d\t%d\t%s\t", stats[0], stats[1], stats[2], stats[3], template_name);
+	dest->next += check;
+	avail -= check;
+	/* header */
+	header->seq[header->len - 1] = '\n';
+	memcpy(dest->next, header->seq, header->len);
+	dest->next += header->len;
+	avail -= header->len;
+	
+	dest->bytes = avail;
+	
+	/* equivalent with:
+	fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+	*/
+}
+
+void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, struct qseqs *header, struct FileBuff *dest) {
+	
+	int i, check, avail;
+	char *update;
+	
+	check = q_len;
+	avail = dest->bytes;
+	
+	if(avail < check) {
+		writeGzFileBuff(dest);
+		
+		/* seq is too big, reallocate buffer */
+		if(dest->bytes < check) {
+			resetGzFileBuff(dest, check << 1);
+		}
+		avail = dest->bytes;
+	}
+	
+	/* copy seq */
+	update = dest->next;
+	++q_len;
+	while(--q_len) {
+		*update++ = bases[*qseq++];
+	}
+	avail -= check;
+	
+	check = 33;
+	if(avail < check) {
+		writeGzFileBuff(dest);
+		avail = dest->bytes;
+		update = dest->next;
+	}
+	check = sprintf(update, "\t%d\t%d\t%d", bestHits, best_read_score, *best_start_pos);
+	avail -= check;
+	update += check;
+	
+	for(i = 1; i < bestHits; ++i) {
+		if(avail < 11) {
+			writeGzFileBuff(dest);
+			avail = dest->bytes;
+			update = dest->next;
+		}
+		check = sprintf(update, ",%d", best_start_pos[i]);
+		avail -= check;
+		update += check;
+	}
+	
+	if(avail < 11) {
+		writeGzFileBuff(dest);
+		avail = dest->bytes;
+		update = dest->next;
+	}
+	check = sprintf(update, "\t%d", *best_end_pos);
+	avail -= check;
+	update += check;
+	for(i = 1; i < bestHits; ++i) {
+		if(avail < 11) {
+			writeGzFileBuff(dest);
+			avail = dest->bytes;
+			update = dest->next;
+		}
+		check = sprintf(update, ",%d", best_end_pos[i]);
+		avail -= check;
+		update += check;
+	}
+	
+	if(avail < 11) {
+		writeGzFileBuff(dest);
+		avail = dest->bytes;
+		update = dest->next;
+	}
+	check = sprintf(update, "\t%d", *bestTemplates);
+	avail -= check;
+	update += check;
+	for(i = 1; i < bestHits; ++i) {
+		if(avail < 11) {
+			writeGzFileBuff(dest);
+			avail = dest->bytes;
+			update = dest->next;
+		}
+		check = sprintf(update, ",%d", bestTemplates[i]);
+		avail -= check;
+		update += check;
+	}
+	
+	check = header->len + 1;
+	if(avail < check) {
+		writeGzFileBuff(dest);
+		avail = dest->bytes;
+		update = dest->next;
+	}
+	*update++ = '\t';
+	header->seq[header->len - 1] = '\n';
+	memcpy(update, header->seq, header->len);
+	
+	dest->bytes = avail - check;
+	dest->next = update + header->len;
 }
 
 int openAndDetermine(struct FileBuff *inputfile, char *filename) {
@@ -633,7 +933,7 @@ int chunkPos(char *seq, int start, int end) {
 	return end;
 }
 
-int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq) {
+int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, char *trans) {
 	
 	char *buff, *seq;
 	int size, avail;
@@ -685,7 +985,7 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 	seq = qseq->seq;
 	size = qseq->size;
 	while(*buff != '>') {
-		*seq = to2Bit[*buff++];
+		*seq = trans[*buff++];
 		if(((*seq) >> 3) == 0) {
 			if(--size == 0) {
 				size = qseq->size;
@@ -729,7 +1029,7 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 	return 1;
 }
 
-int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq) {
+int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq, char *trans) {
 	
 	char *buff, *seq;
 	int size, avail;
@@ -764,7 +1064,7 @@ int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq) {
 	seq = qseq->seq;
 	size = qseq->size;
 	while(*buff != '>') {
-		*seq = to2Bit[*buff++];
+		*seq = trans[*buff++];
 		if(((*seq) >> 3) == 0) {
 			if(--size == 0) {
 				size = qseq->size;
@@ -808,7 +1108,7 @@ int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq) {
 	return 1;
 }
 
-int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, struct qseqs *qual) {
+int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, struct qseqs *qual, char *trans) {
 	
 	char *buff, *seq;
 	int size, avail;
@@ -859,7 +1159,7 @@ int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq
 	/* get qseq */
 	seq = qseq->seq;
 	size = qseq->size;
-	while((*seq++ = to2Bit[*buff++]) != 16) {
+	while((*seq++ = trans[*buff++]) != 16) {
 		if(--avail == 0) {
 			if((avail = buffFileBuff(src)) == 0) {
 				return 0;
@@ -954,7 +1254,7 @@ int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq
 	return 1;
 }
 
-int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qual) {
+int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qual, char *trans) {
 	
 	char *buff, *seq;
 	int size, avail;
@@ -988,7 +1288,7 @@ int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qua
 	/* get qseq */
 	seq = qseq->seq;
 	size = qseq->size;
-	while((*seq++ = to2Bit[*buff++]) != 16) {
+	while((*seq++ = trans[*buff++]) != 16) {
 		if(--avail == 0) {
 			if((avail = buffFileBuff(src)) == 0) {
 				return 0;
@@ -1263,13 +1563,6 @@ void strrc(char *qseq, int q_len) {
 	
 }
 
-void convertToNum(char *qseq, int q_len) {
-	int i;
-	for(i = 0; i < q_len; ++i) {
-		qseq[i] = to2Bit[qseq[i]];
-	}
-}
-
 /*
 	COMPRESSION FUNCTIONS
 */
@@ -1350,6 +1643,7 @@ void resetComp(struct compDNA *compressor) {
 }
 
 void strtranslate(const char *qseq, char *trans) {
+	
 	char *strp;
 	
 	for(strp = (char*) qseq; *strp; ++strp) {
@@ -2994,17 +3288,18 @@ void printPair(int *out_Tem, struct compDNA *qseq, int bestScore, struct qseqs *
 	printPtr(out_Tem, qseq_r, bestScore_r, header_r);
 }
 
-FILE * printFrags(char *filename, struct frag **alignFrags) {
+FILE * printFrags(struct frag **alignFrags) {
 	
 	int i;
 	FILE *OUT;
 	struct frag *alignFrag, *next;
 	
-	OUT = fopen(filename, "wb");
+	OUT = tmpfile();
 	if(!OUT) {
-		fprintf(stderr, "File coruption: %s\n", filename);
+		fprintf(stderr, "Could not create tmp files.\n");
 		ERROR();
 	}
+	setvbuf(OUT, NULL, _IOFBF, CHUNK);
 	for(i = 0; i < DB_size; ++i) {
 		if(alignFrags[i] != 0) {
 			for(alignFrag = alignFrags[i]; alignFrag != 0; alignFrag = next) {
@@ -3023,9 +3318,9 @@ FILE * printFrags(char *filename, struct frag **alignFrags) {
 		}
 	}
 	fwrite(&(int){-1}, sizeof(int), 1, OUT);
-	fclose(OUT);
+	rewind(OUT);
 	
-	return fopen(filename, "rb");
+	return OUT;
 }
 
 void bootFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compressor) {
@@ -5767,7 +6062,7 @@ struct Hit withDraw_Contamination(int *Scores, int *Scores_tot, struct hashTable
 	return hits;
 }
 
-void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
+void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, char *trans) {
 	
 	int fileCounter, phredCut, start, end;
 	unsigned FASTQ;
@@ -5803,7 +6098,7 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 			phredCut += minPhred;
 			
 			/* parse reads */
-			while(FileBuffgetFq(inputfile, header, qseq, qual)) {
+			while(FileBuffgetFq(inputfile, header, qseq, qual, trans)) {
 				/* trim */
 				seq = qual->seq;
 				start = fiveClip;
@@ -5832,7 +6127,7 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 				}
 			}
 		} else if(FASTQ & 2) {
-			while(FileBuffgetFsa(inputfile, header, qseq)) {
+			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
 				/* remove leading and trailing N's */
 				start = 0;
 				end = qseq->len - 1;
@@ -5869,7 +6164,7 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
 	destroyFileBuff(inputfile);
 }
 
-void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
+void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, char *trans) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
@@ -5921,7 +6216,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 			/* parse reads */
 			//while(FileBuffgetFq(inputfile, header, qseq, qual) && FileBuffgetFq(inputfile2, header2, qseq2, qual2)) {
 			/* this ensures reading of truncated files */
-			while((FileBuffgetFq(inputfile, header, qseq, qual) | FileBuffgetFq(inputfile2, header2, qseq2, qual2))) {
+			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile2, header2, qseq2, qual2, trans))) {
 				/* trim forward */
 				seq = qual->seq;
 				start = fiveClip;
@@ -5980,7 +6275,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 				}
 			}
 		} else if(FASTQ & 2) {
-			while((FileBuffgetFsa(inputfile, header, qseq) | FileBuffgetFsa(inputfile2, header2, qseq2))) {
+			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile2, header2, qseq2, trans))) {
 				/* remove leading and trailing N's */
 				start = 0;
 				end = qseq->len - 1;
@@ -6052,7 +6347,7 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip) 
 	destroyFileBuff(inputfile2);
 }
 
-void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
+void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, char *trans) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ;
@@ -6091,7 +6386,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 			phredCut += minPhred;
 			
 			/* parse reads */
-			while((FileBuffgetFq(inputfile, header, qseq, qual) | FileBuffgetFq(inputfile, header2, qseq2, qual2))) {
+			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile, header2, qseq2, qual2, trans))) {
 				/* trim forward */
 				seq = qual->seq;
 				start = fiveClip;
@@ -6150,7 +6445,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 				}
 			}
 		} else if(FASTQ & 2) {
-			while((FileBuffgetFsa(inputfile, header, qseq) | FileBuffgetFsa(inputfile, header2, qseq2))) {
+			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile, header2, qseq2, trans))) {
 				/* remove leading and trailing N's */
 				start = 0;
 				end = qseq->len - 1;
@@ -6214,7 +6509,7 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip)
 	destroyFileBuff(inputfile);
 }
 
-void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveClip) {
+void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveClip, char *trans) {
 	
 	int FASTQ, fileCounter, phredCut, start, end;
 	char *filename, *seq;
@@ -6249,7 +6544,7 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 			phredCut += minPhred;
 			
 			/* parse reads */
-			while(FileBuffgetFqSeq(inputfile, qseq, qual)) {
+			while(FileBuffgetFqSeq(inputfile, qseq, qual, trans)) {
 				/* trim */
 				seq = qual->seq;
 				start = fiveClip;
@@ -6274,7 +6569,7 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 				Kmers->n = 0;
 			}
 		} else if(FASTQ & 2) {
-			while(FileBuffgetFsaSeq(inputfile, qseq)) {
+			while(FileBuffgetFsaSeq(inputfile, qseq, trans)) {
 				if(qseq->len > kmersize) {
 					/* translate to kmers */
 					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq, qseq->len, templates->prefix, templates->prefix_len);
@@ -9093,7 +9388,7 @@ char nanoCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct asse
 	return bestNuc;
 }
 
-void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
+void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, struct FileBuff *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
 	
 	int i, j, t_len, aln_len, asm_len, start, end, bias, myBias, gaps;
 	int read_score, depthUpdate, bestBaseScore, pos, bestScore, buffer[7];
@@ -9267,7 +9562,9 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 						qseq->seq[qseq->len] = 0;
 						
 						/* Save fragment */
-						fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+						/* here */
+						updateFrags(frag_out, qseq, header, template_names[template], stats);
+						//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 					}
 				}
 			} else if(nextTemplate == -1) {
@@ -9358,11 +9655,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	
 	/* print matrix */
 	if(print_matrix) {
-		fprintf(matrix_out, "#%s\n", template_names[template]);
-		for(i = 0, pos = 0; i < asm_len; ++i, pos = assemNext[pos]) {
-			fprintf(matrix_out, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", aligned_assem->t[i], assembly[pos][0], assembly[pos][1], assembly[pos][2], assembly[pos][3], assembly[pos][4], assembly[pos][5]);
-		}
-		fprintf(matrix_out, "\n");
+		updateMatrix(matrix_out, template_names[template], aligned_assem->t, assembly, assemNext, asm_len);
 	}
 	
 	/* Trim alignment on consensus */
@@ -9393,7 +9686,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	free(assemNext);
 }
 
-void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, FILE *frag_out, FILE *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
+void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, struct FileBuff *matrix_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header) {
 	
 	int i, j, t_len, aln_len, start, end, file_i, stats[4], buffer[7];
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
@@ -9514,7 +9807,9 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 						}
 						qseq->seq[qseq->len] = 0;
 						
-						fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+						/* here */
+						updateFrags(frag_out, qseq, header, template_names[template], stats);
+						//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 					}
 				}
 			} else if (nextTemplate == -1) {
@@ -9598,11 +9893,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	
 	/* print matrix */
 	if(print_matrix && coverScore > 0) {
-		fprintf(matrix_out, "#%s\n", template_names[template]);
-		for(i = 0; i < t_len; ++i) {
-			fprintf(matrix_out, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", aligned_assem->t[i], assembly[i][0], assembly[i][1], assembly[i][2], assembly[i][3], assembly[i][4], assembly[i][5]);
-		}
-		fprintf(matrix_out, "\n");
+		updateMatrix(matrix_out, template_names[template], aligned_assem->t, assembly, 0, t_len);
 	}
 	
 	/* clean */
@@ -9640,29 +9931,6 @@ void update_Scores(char *qseq, int q_len, int counter, int score, int *start, in
 			alignment_scores[template[i]] += score;
 		}
 	}
-}
-
-void printFrag(char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, struct qseqs *header, FILE *frag_out_all) {
-	
-	int i;
-	
-	for(i = 0; i < q_len; ++i) {
-		qseq[i] = bases[qseq[i]];
-	}
-	qseq[i] = 0;
-	fprintf(frag_out_all, "%s\t%d\t%d\t%d", qseq, bestHits, best_read_score, *best_start_pos);
-	for(i = 1; i < bestHits; ++i) {
-		fprintf(frag_out_all, ",%d", best_start_pos[i]);
-	}
-	fprintf(frag_out_all, "\t%d", *best_end_pos);
-	for(i = 1; i < bestHits; ++i) {
-		fprintf(frag_out_all, ",%d", best_end_pos[i]);
-	}
-	fprintf(frag_out_all, "\t%d", *bestTemplates);
-	for(i = 1; i < bestHits; ++i) {
-		fprintf(frag_out_all, ",%d", bestTemplates[i]);
-	}
-	fprintf(frag_out_all, "\t%s\n", header->seq);
 }
 
 void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, char *qseq, char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
@@ -10357,13 +10625,12 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
 	long *index_indexes, *seq_indexes;
-	char *outZipped;
 	double etta, tmp_score, bestScore, depth, id, q_id, cover, q_cover;
 	double expected, q_value, p_value;
-	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out, *matrix_out;
-	FILE *alignment_out, *consensus_out, *frag_out, *frag_out_all;
-	FILE *frag_out_raw, **template_fragments;
+	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out;
+	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
 	time_t t0, t1;
+	struct FileBuff *frag_out, *frag_out_all, *matrix_out;
 	struct aln *aligned, *gap_align;
 	struct assem *aligned_assem;
 	struct frag **alignFrags, *alignFrag;
@@ -10374,6 +10641,8 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	inputfile = popen(exePrev, "r");
 	if(!inputfile) {
 		ERROR();
+	} else {
+		setvbuf(inputfile, NULL, _IOFBF, CHUNK);
 	}
 	
 	/* load databases */
@@ -10403,12 +10672,11 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
-	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len + 4);
 	qseq_comp = malloc(sizeof(struct compDNA));
 	qseq_r_comp = malloc(sizeof(struct compDNA));
 	index_indexes = malloc((DB_size + 1) * sizeof(long));
 	seq_indexes = malloc((DB_size + 1) * sizeof(long));
-	if(!qseq_comp || !qseq_r_comp || !outZipped || !index_indexes || !seq_indexes) {
+	if(!qseq_comp || !qseq_r_comp || !index_indexes || !seq_indexes) {
 		ERROR();
 	}
 	qseq = setQseqs(delta);
@@ -10451,36 +10719,27 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		res_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
-		sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-		frag_out = popen(outZipped, "w");
+		frag_out = gzInitFileBuff(CHUNK);
+		openFileBuff(frag_out, outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
 		alignment_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".fsa");
 		consensus_out = fopen(outputfilename, "w");
-		outputfilename[file_len] = 0;
-		strcat(outputfilename, ".frag_raw.b");
-		frag_out_raw = fopen(outputfilename, "wb");
-		outputfilename[file_len] = 0;
+		frag_out_raw = tmpfile();
 		if(print_matrix) {
+			matrix_out = gzInitFileBuff(CHUNK);
 			strcat(outputfilename, ".mat.gz");
-			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-			matrix_out = popen(outZipped, "w");
-			if(!matrix_out) {
-				ERROR();
-			}
+			openFileBuff(matrix_out, outputfilename, "wb");
 			outputfilename[file_len] = 0;
 		} else {
 			matrix_out = 0;
 		}
 		if(print_all) {
 			strcat(outputfilename, ".frag_raw.gz");
-			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-			frag_out_all = popen(outZipped, "w");
-			if(!frag_out_all) {
-				ERROR();
-			}
+			frag_out_all = gzInitFileBuff(CHUNK);
+			openFileBuff(frag_out_all, outputfilename, "wb");
 			outputfilename[file_len] = 0;
 		} else {
 			frag_out_all = 0;
@@ -10489,7 +10748,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		fprintf(stderr, " No output file specified!\n");
 		exit(2);
 	}
-	if(!res_out || !frag_out || !consensus_out || !frag_out_raw || !alignment_out) {
+	if(!res_out || !consensus_out || !frag_out_raw || !alignment_out) {
 		ERROR();
 	}
 	fprintf(stderr, "# Running KMA.\n");
@@ -10543,7 +10802,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	}
 	pclose(inputfile);
-	fclose(frag_out_raw);
+	rewind(frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
@@ -10562,11 +10821,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		ERROR();
 	}
 	outputfilename[file_len] = 0;
-	strcat(outputfilename, ".frag_raw.b");
-	frag_in_raw = fopen(outputfilename, "rb");
-	if(!frag_in_raw) {
-		ERROR();
-	}
+	frag_in_raw = frag_out_raw;
 	outputfilename[file_len] = 0;
 	template_fragments = calloc(DB_size, sizeof(FILE*));
 	if(!template_fragments) {
@@ -10680,12 +10935,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			++fragCount;
 			if(fragCount >= maxFrag) {
-				sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
-				template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
-				if(!template_fragments[fileCount]) {
-					ERROR();
-				}
-				outputfilename[file_len] = 0;
+				template_fragments[fileCount] = printFrags(alignFrags);
 				++fileCount;
 				fragCount = 0;
 				/* control fileamount */
@@ -10699,21 +10949,15 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			/* dump seq to all */
 			if(frag_out_all) {
-				printFrag(qseq->seq, qseq->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
+				updateAllFrag(qseq->seq, qseq->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			}
 		} else {
 			fseek(frag_in_raw, qseq->len + header->len + 3 * bestHits * sizeof(int), SEEK_CUR);
 		}
 	}
-	sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
-	template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
-	if(!template_fragments[fileCount]) {
-		ERROR();
-	}
-	outputfilename[file_len] = 0;
+	template_fragments[fileCount] = printFrags(alignFrags);
 	++fileCount;
 	fragCount = 0;
-	fclose(frag_in_raw);
 	free(alignFrags);
 	free(best_start_pos);
 	free(best_end_pos);
@@ -10721,7 +10965,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	free(bestTemplates);
 	destroyQseqs(qseq_r);
 	if(frag_out_all) {
-		pclose(frag_out_all);
+		destroyGzFileBuff(frag_out_all);
 	}
 	/* remove frag_raw */
 	strcat(outputfilename, ".frag_raw.b");
@@ -10895,17 +11139,11 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	fclose(res_out);
 	fclose(alignment_out);
 	fclose(consensus_out);
-	pclose(frag_out);
+	destroyGzFileBuff(frag_out);
 	if(matrix_out) {
-		pclose(matrix_out);
+		destroyGzFileBuff(matrix_out);
 	}
 	
-	/* remove tmp files */
-	for(i = 0; i < fileCount; ++i) {
-		sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", i);
-		remove(outputfilename);
-		outputfilename[file_len] = 0;
-	}
 	t1 = clock();
 	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 }
@@ -10917,18 +11155,17 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	   instead of alignment score. */
 	
 	int i, tmp_template, tmp_tmp_template, file_len, best_read_score;
-	int template, bestHits, t_len, start, end, aln_len;
-	int rc_flag, coverScore, bias, tmp_start, tmp_end, bestTemplate, fragCount;
+	int template, bestHits, t_len, start, end, aln_len, fragCount;
+	int rc_flag, coverScore, bias, tmp_start, tmp_end, bestTemplate;
 	int fileCount, maxFrag, read_score, stats[4];
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
 	double etta, tmp_score, bestScore, depth, id, cover, q_id, q_cover;
 	double expected, q_value, p_value;
-	char *outZipped;
-	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out, *matrix_out;
-	FILE *alignment_out, *consensus_out, *frag_out, *frag_out_all;
-	FILE *frag_out_raw, **template_fragments;
+	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out;
+	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
 	time_t t0, t1;
+	struct FileBuff *frag_out, *frag_out_all, *matrix_out;
 	struct aln *aligned, *gap_align;
 	struct assem *aligned_assem;
 	struct frag **alignFrags, *alignFrag;
@@ -10939,6 +11176,8 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	inputfile = popen(exePrev, "r");
 	if(!inputfile) {
 		ERROR();
+	} else {
+		setvbuf(inputfile, NULL, _IOFBF, CHUNK);
 	}
 	
 	/* load databases */
@@ -10964,10 +11203,9 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
-	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len + 4);
 	qseq_comp = malloc(sizeof(struct compDNA));
 	qseq_r_comp = malloc(sizeof(struct compDNA));
-	if(!qseq_comp || !qseq_r_comp || !outZipped) {
+	if(!qseq_comp || !qseq_r_comp) {
 		ERROR();
 	}
 	allocComp(qseq_comp, delta);
@@ -10985,8 +11223,8 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		res_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
-		sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-		frag_out = popen(outZipped, "w");
+		frag_out = gzInitFileBuff(CHUNK);
+		openFileBuff(frag_out, outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
 		alignment_out = fopen(outputfilename, "w");
@@ -10994,27 +11232,19 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		strcat(outputfilename, ".fsa");
 		consensus_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
-		strcat(outputfilename, ".frag_raw.b");
-		frag_out_raw = fopen(outputfilename, "wb");
-		outputfilename[file_len] = 0;
+		frag_out_raw = tmpfile();
 		if(print_matrix) {
+			matrix_out = gzInitFileBuff(CHUNK);
 			strcat(outputfilename, ".mat.gz");
-			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-			matrix_out = popen(outZipped, "w");
-			if(!matrix_out) {
-				ERROR();
-			}
+			openFileBuff(matrix_out, outputfilename, "wb");
 			outputfilename[file_len] = 0;
 		} else {
 			matrix_out = 0;
 		}
 		if(print_all) {
 			strcat(outputfilename, ".frag_raw.gz");
-			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-			frag_out_all = popen(outZipped, "w");
-			if(!frag_out_all) {
-				ERROR();
-			}
+			frag_out_all = gzInitFileBuff(CHUNK);
+			openFileBuff(frag_out_all, outputfilename, "wb");
 			outputfilename[file_len] = 0;
 		} else {
 			frag_out_all = 0;
@@ -11023,7 +11253,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		fprintf(stderr, " No output file specified!\n");
 		exit(2);
 	}
-	if(!res_out || !frag_out || !consensus_out || !frag_out_raw || !alignment_out) {
+	if(!res_out || !consensus_out || !frag_out_raw || !alignment_out) {
 		ERROR();
 	}
 	
@@ -11085,20 +11315,20 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		
 		/* dump seq to all */
 		if(frag_out_all) {
-			printFrag(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
+			updateAllFrag(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			if(read_score) {
-				printFrag(qseq_r->seq, qseq_r->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
+				updateAllFrag(qseq_r->seq, qseq_r->len, bestHits, read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
 			}
 		}
 	}
 	pclose(inputfile);
-	fclose(frag_out_raw);
+	rewind(frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
 	free(qseq_r_comp);
 	if(frag_out_all) {
-		pclose(frag_out_all);
+		destroyGzFileBuff(frag_out_all);
 	}
 	t1 = clock();
 	fprintf(stderr, "#\n# Time for score collecting:\t%.2f s.\n", difftime(t1, t0) / 1000000);
@@ -11113,12 +11343,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		ERROR();
 	}
 	outputfilename[file_len] = 0;
-	strcat(outputfilename, ".frag_raw.b");
-	frag_in_raw = fopen(outputfilename, "rb");
-	if(!frag_in_raw) {
-		ERROR();
-	}
-	outputfilename[file_len] = 0;
+	frag_in_raw = frag_out_raw;
 	template_fragments = calloc(DB_size, sizeof(FILE*));
 	if(!template_fragments) {
 		ERROR();
@@ -11229,12 +11454,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			++fragCount;
 			if(fragCount >= maxFrag) {
-				sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
-				template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
-				if(!template_fragments[fileCount]) {
-					ERROR();
-				}
-				outputfilename[file_len] = 0;
+				template_fragments[fileCount] = printFrags(alignFrags);
 				++fileCount;
 				fragCount = 0;
 				/* control fileamount */
@@ -11249,15 +11469,9 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			fseek(frag_in_raw, qseq->len + header->len + 3 * bestHits * sizeof(int), SEEK_CUR);
 		}
 	}
-	sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", fileCount);
-	template_fragments[fileCount] = printFrags(outputfilename, alignFrags);
-	if(!template_fragments[fileCount]) {
-		ERROR();
-	}
-	outputfilename[file_len] = 0;
+	template_fragments[fileCount] = printFrags(alignFrags);
 	++fileCount;
 	fragCount = 0;
-	fclose(frag_in_raw);
 	free(alignFrags);
 	free(best_start_pos);
 	free(best_end_pos);
@@ -11415,15 +11629,11 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	fclose(res_out);
 	fclose(alignment_out);
 	fclose(consensus_out);
-	pclose(frag_out);
+	destroyGzFileBuff(frag_out);
 	if(matrix_out) {
-		pclose(matrix_out);
+		destroyGzFileBuff(matrix_out);
 	}
-	for(i = 0; i < fileCount; ++i) {
-		sprintf(outputfilename, "%s%s%d", outputfilename, ".tmp_", i);
-		remove(outputfilename);
-		outputfilename[file_len] = 0;
-	}
+	
 	t1 = clock();
 	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 }
@@ -11433,10 +11643,10 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	int i, j, end, aln_len, t_len, bias, read_score, coverScore, file_len;
 	long unsigned seeker, *seq;
 	double etta, expected, q_value, p_value, id, q_id, cover, q_cover, depth;
-	char *outZipped;
-	FILE *res_out, *alignment_out, *consensus_out, *frag_out, *matrix_out;
-	FILE *template_fragments, *DB_file;
+	FILE *res_out, *alignment_out, *consensus_out, *template_fragments;
+	FILE *DB_file;
 	time_t t0, t1;
+	struct FileBuff *frag_out, *matrix_out;
 	struct aln *aligned, *gap_align;
 	struct assem *aligned_assem;
 	struct qseqs *qseq, *header;
@@ -11445,13 +11655,11 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	template_fragments = popen(exePrev, "r");
 	if(!template_fragments) {
 		ERROR();
+	} else {
+		setvbuf(template_fragments, NULL, _IOFBF, CHUNK);
 	}
 	
 	file_len = strlen(outputfilename);
-	outZipped = malloc(strlen("gunzip --fast -c .frag_raw.gz") + file_len + 4);
-	if(!outZipped) {
-		ERROR();
-	}
 	header = setQseqs(256);
 	qseq = setQseqs(delta);
 	
@@ -11463,8 +11671,8 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		res_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
-		sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-		frag_out = popen(outZipped, "w");
+		frag_out = gzInitFileBuff(CHUNK);
+		openFileBuff(frag_out, outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
 		alignment_out = fopen(outputfilename, "w");
@@ -11473,12 +11681,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		consensus_out = fopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		if(print_matrix) {
+			matrix_out = gzInitFileBuff(CHUNK);
 			strcat(outputfilename, ".mat.gz");
-			sprintf(outZipped, "gzip --fast -c > \"%s\"", outputfilename);
-			matrix_out = popen(outZipped, "w");
-			if(!matrix_out) {
-				ERROR();
-			}
+			openFileBuff(matrix_out, outputfilename, "wb");
 			outputfilename[file_len] = 0;
 		} else {
 			matrix_out = 0;
@@ -11487,7 +11692,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		fprintf(stderr, " No output file specified!\n");
 		exit(2);
 	}
-	if(!res_out || !frag_out || !consensus_out || !alignment_out) {
+	if(!res_out || !consensus_out || !alignment_out) {
 		ERROR();
 	}
 	
@@ -11729,9 +11934,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	fclose(res_out);
 	fclose(alignment_out);
 	fclose(consensus_out);
-	pclose(frag_out);
+	destroyGzFileBuff(frag_out);
 	if(matrix_out) {
-		pclose(matrix_out);
+		destroyGzFileBuff(matrix_out);
 	}
 	
 	t1 = clock();
@@ -11850,7 +12055,7 @@ int main(int argc, char *argv[]) {
 	
 	int i, j, args, exe_len, minPhred, fiveClip, sparse_run, mem_mode;
 	int step1, step2, fileCounter, fileCounter_PE, fileCounter_INT, Mt1;
-	char *exeBasic, *outputfilename, *templatefilename, ss;
+	char *exeBasic, *outputfilename, *templatefilename, *to2Bit, ss;
 	char **inputfiles, **inputfiles_PE, **inputfiles_INT;
 	FILE *templatefile;
 	time_t t0, t1;
@@ -12447,7 +12652,7 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "Interleaved information is not considered in Sparse mode.\n");
 			}
 			
-			run_input_sparse(inputfiles, fileCounter, minPhred, fiveClip);
+			run_input_sparse(inputfiles, fileCounter, minPhred, fiveClip, to2Bit);
 		} else {
 			
 			if(Mt1) {
@@ -12477,17 +12682,17 @@ int main(int argc, char *argv[]) {
 			
 			/* SE */
 			if(fileCounter > 0) {
-				run_input(inputfiles, fileCounter, minPhred, fiveClip);
+				run_input(inputfiles, fileCounter, minPhred, fiveClip, to2Bit);
 			}
 			
 			/* PE */
 			if(fileCounter_PE > 0) {
-				run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip);
+				run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip, to2Bit);
 			}
 			
 			/* INT */
 			if(fileCounter_INT > 0) {
-				run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip);
+				run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, to2Bit);
 			}
 			
 			if(Mt1) {

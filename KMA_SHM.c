@@ -23,8 +23,6 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <unistd.h>
@@ -49,6 +47,8 @@ struct hashMapKMA {
 	unsigned *key_index	;	// Relative
 	unsigned *value_index;	// Relative
 };
+
+int version[3] = {0, 14, 0};
 
 /*
  FUNCTIONS
@@ -354,7 +354,7 @@ char * name_setupSHM(FILE *file, const char *filename) {
 	} else {
 		template_names = shmat(shmid, NULL, 0);
 		fread(template_names, 1, size, file);
-		for(i = 0; i < size; i++) {
+		for(i = 0; i < size; ++i) {
 			if(template_names[i] == '\n') {
 				template_names[i] = 0;
 			}
@@ -395,6 +395,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-destroy\tDestroy shared DB\t\tFalse\n");
 	fprintf(helpOut, "#\t-shmLvl\t\tLevel of shared memory\t\t1\n");
 	fprintf(helpOut, "#\t-shm-h\t\tExplain shm levels\n");
+	fprintf(helpOut, "#\t-v\t\tVersion\n");
 	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
 	fprintf(helpOut, "#\n");
 	exit(exeStatus);
@@ -418,7 +419,7 @@ int main(int argc, char *argv[]) {
 	args = 1;
 	while(args < argc) {
 		if(strcmp(argv[args], "-t_db") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				templatefilename = malloc(strlen(argv[args]) + 64);
 				if(!templatefilename) {
@@ -430,7 +431,7 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-destroy") == 0) {
 			destroy = 1;
 		} else if(strcmp(argv[args], "-shmLvl") == 0) {
-			args++;
+			++args;
 			if(args < argc) {
 				shmLvl = atoi(argv[args]);
 				if(!shmLvl) {
@@ -438,6 +439,9 @@ int main(int argc, char *argv[]) {
 					exit(0);
 				}
 			}
+		} else if(strcmp(argv[args], "-v") == 0) {
+			fprintf(stdout, "KMA_SHM-%d.%d.%d\n", version[0], version[1], version[2]);
+			exit(0);
 		} else if(strcmp(argv[args], "-h") == 0) {
 			helpMessage(0);
 		} else if(strcmp(argv[args], "-shm-h") == 0) {
@@ -457,7 +461,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "# Printing help message:\n");
 			helpMessage(-1);
 		}
-		args++;
+		++args;
 	}
 	if(templatefilename == 0) {
 		fprintf(stderr, "# Too few arguments handed\n");

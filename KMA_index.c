@@ -23,12 +23,14 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <unistd.h>
 #include <errno.h>
+#include <zlib.h>
+
+#define CHUNK 1048576
+#define ENABLE_ZLIB_GZIP 32
 #define getNuc(Comp,pos)((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
 #define SetNuc(seq, nuc, pos)(seq[pos >> 5] |= (nuc << (62-((pos & 31) << 1))))
 
@@ -125,24 +127,26 @@ struct qseqs {
 };
 
 struct FileBuff {
-	int pos;
 	int bytes;
 	int buffSize;
 	char *buffer;
+	char *inBuffer;
+	char *next;
 	FILE *file;
+	z_stream *strm;
 };
 
 
 /*
 	GLOBAL VARIABLES
 */
+int version[3] = {0, 14, 1};
 struct hashMap *templates;
 struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
 unsigned shifterI, prefix_shifter, *Scores, *Scores_tot, *bestTemplates;
 unsigned *template_lengths, *template_slengths, *template_ulengths;
 long unsigned mask, INITIAL_SIZE, prefix;
-char *to2Bit;
 double homQ, homT;
 
 /* 
@@ -159,13 +163,14 @@ int (*hashMap_add)(long unsigned, int, int);
 int * (*hashMap_get)(long unsigned);
 long unsigned (*getKmerP)(long unsigned *, unsigned);
 unsigned (*addKmer)(long unsigned, int);
+int (*buffFileBuff)(struct FileBuff *);
 
 /*
 	FUNCTIONS
 */
 
-void OOM() {
-	fprintf(stderr, "OOM\n");
+void ERROR() {
+	fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 	exit(errno);
 }
 
@@ -195,8 +200,7 @@ char * fget_line(char *line, int *line_size, int *l_len, FILE *file) {
 			*line_size += grow;
 			line = realloc(line, *line_size);
 			if(line == NULL) {
-				fprintf(stderr, "OOM\n");
-				exit(-1);
+				ERROR();
 			}
 		} else {
 			return line;
@@ -230,13 +234,6 @@ int int_eq(const int *s1, const int *s2, int len) {
 		}
 	}
 	return 1;
-}
-
-void convertToNum(char *qseq, int q_len) {
-	int i;
-	for(i = 0; i < q_len; ++i) {
-		qseq[i] = to2Bit[qseq[i]];
-	}
 }
 
 void strrc(char *qseq, int q_len) {
@@ -275,8 +272,7 @@ void allocComp(struct compDNA *compressor, int size) {
 	compressor->N = malloc((compressor->size + 1) * sizeof(int));
 	
 	if(!compressor->seq || !compressor->N) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	compressor->N[0] = 0;
@@ -293,8 +289,7 @@ void reallocComp(struct compDNA *compressor, int size) {
 	compressor->seq = realloc(compressor->seq, (size >> 5) * sizeof(long unsigned));
 	compressor->N = realloc(compressor->N, (size + 1) * sizeof(int));
 	if(!compressor->seq || !compressor->N) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	} else {
 		memset(compressor->seq + (compressor->size >> 5), 0, ((size >> 5) - (compressor->size >> 5)) * sizeof(long unsigned));
 	}
@@ -590,16 +585,14 @@ struct qseqs * setQseqs(int size) {
 	
 	dest = malloc(sizeof(struct qseqs));
 	if(!dest) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	dest->len = 0;
 	dest->size = size;
 	dest->seq = malloc(size);
 	if(!dest->seq) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	return dest;
@@ -610,46 +603,103 @@ void destroyQseqs(struct qseqs *dest) {
 	free(dest);
 }
 
+int BuffgzFileBuff(struct FileBuff *dest) {
+	
+	int status;
+	z_stream *strm;
+	
+	/* check compressed buffer, and load it */
+	strm = dest->strm;
+	if(strm->avail_out != 0) {
+		strm->avail_in = fread(dest->inBuffer, 1, dest->buffSize, dest->file);
+		strm->next_in = (unsigned char*) dest->inBuffer;
+		if(strm->avail_in == 0) {
+			dest->bytes = 0;
+			dest->next = dest->buffer;
+			return 0;
+		}
+	}
+	
+	/* reset uncompressed buffer */
+	strm->avail_out = dest->buffSize;
+	strm->next_out = (unsigned char*) dest->buffer;
+	
+	/* uncompress buffer */
+	status = inflate(strm, Z_NO_FLUSH);
+	
+	if(status == Z_OK || status == Z_STREAM_END || status == Z_BUF_ERROR) {
+		dest->bytes = dest->buffSize - strm->avail_out;
+		dest->next = dest->buffer;
+	} else {
+		dest->bytes = 0;
+		dest->next = dest->buffer;
+	}
+	
+	return dest->bytes;
+	
+}
+
+void init_gzFile(struct FileBuff *inputfile) {
+	
+	int status;
+	char *tmp;
+	z_stream *strm;
+	
+	/* set inBuffer, for compressed format */
+	if(inputfile->inBuffer) {
+		tmp = inputfile->buffer;
+		inputfile->buffer = inputfile->inBuffer;
+		inputfile->inBuffer = tmp;
+	} else {
+		inputfile->inBuffer = inputfile->buffer;
+		inputfile->buffer = malloc(CHUNK);
+		if(!inputfile->buffer) {
+			ERROR();
+		}
+	}
+	inputfile->next = inputfile->buffer;
+	
+	/* set the compressed stream */
+	strm = inputfile->strm;
+	if(!strm && !(strm = malloc(sizeof(z_stream)))) {
+		ERROR();
+	}
+	strm->zalloc = Z_NULL;
+	strm->zfree  = Z_NULL;
+	strm->opaque = Z_NULL;
+	status = inflateInit2(strm, 15 | ENABLE_ZLIB_GZIP);
+	if(status < 0) {
+		fprintf(stderr, "Gzip error %d\n", status);
+		exit(status);
+	}
+	strm->next_in = (unsigned char*) inputfile->inBuffer;
+	strm->avail_in = inputfile->bytes;
+	
+	inputfile->strm = strm;
+	
+	inputfile->bytes = BuffgzFileBuff(inputfile);
+}
+
 struct FileBuff * setFileBuff(int buffSize) {
 	
 	struct FileBuff *dest;
 	
 	dest = malloc(sizeof(struct FileBuff));
 	if(!dest) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
-	dest->pos = 0;
 	dest->file = 0;
+	dest->inBuffer = 0;
+	dest->strm = 0;
 	dest->buffSize = buffSize;
 	dest->buffer = malloc(buffSize);
+	dest->next = dest->buffer;
 	if(!dest->buffer) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	return dest;
-}
-
-void openFileBuff(struct FileBuff *dest, char *filename, char *mode) {
-	
-	dest->file = fopen(filename, mode);
-	if(!dest->file) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
-	}
-	
-}
-
-void popenFileBuff(struct FileBuff *dest, char *filename, char *mode) {
-	
-	dest->file = popen(filename, mode);
-	if(!dest->file) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
-	}
-	
 }
 
 void closeFileBuff(struct FileBuff *dest) {
@@ -657,117 +707,175 @@ void closeFileBuff(struct FileBuff *dest) {
 	dest->file = 0;
 }
 
-void pcloseFileBuff(struct FileBuff *dest) {
-	pclose(dest->file);
+void gzcloseFileBuff(struct FileBuff *dest) {
+	
+	int status;
+	if((status = inflateEnd(dest->strm)) != Z_OK) {
+		fprintf(stderr, "Gzip error %d\n", status);
+	}
 	dest->file = 0;
+	dest->strm->avail_out = 0;
+}
+
+void openFileBuff(struct FileBuff *dest, char *filename, char *mode) {
+	
+	dest->file = fopen(filename, mode);
+	if(!dest->file) {
+		ERROR();
+	}
 }
 
 void destroyFileBuff(struct FileBuff *dest) {
 	free(dest->buffer);
+	free(dest->inBuffer);
+	free(dest->strm);
 	free(dest);
 }
 
-int buffFileBuff(struct FileBuff *dest) {
-	dest->pos = 0;
-	if((dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file)) == 0) {
-		dest->buffer[0] = 0;
-	}
-	
+int buff_FileBuff(struct FileBuff *dest) {
+	dest->bytes = fread(dest->buffer, 1, dest->buffSize, dest->file);
+	dest->next = dest->buffer;
 	return dest->bytes;
 }
 
-int chunkPos(char* seq, int start, int end) {
+int openAndDetermine(struct FileBuff *inputfile, char *filename) {
 	
-	int i;
+	int FASTQ;
+	short unsigned *check;
 	
-	for(i = start; i < end; ++i) {
-		if(seq[i] == '\n') {
-			return i;
+	/* determine filetype and open it */
+	FASTQ = 0;
+	if(*filename == '-' && strcmp(filename + 1, "-") == 0) {
+		inputfile->file = stdin;
+	} else {
+		openFileBuff(inputfile, filename, "rb");
+	}
+	if(buff_FileBuff(inputfile)) {
+		check = (short unsigned *) inputfile->buffer;
+		if(*check == 35615) {
+			FASTQ = 4;
+			init_gzFile(inputfile);
+			buffFileBuff = &BuffgzFileBuff;
+		} else {
+			buffFileBuff = &buff_FileBuff;
 		}
+	} else {
+		inputfile->buffer[0] = 0;
 	}
 	
+	if(inputfile->buffer[0] == '>') { //FASTA
+		FASTQ |= 2;
+	} else {
+		fprintf(stderr, "%s: is not in fasta format\n", filename);
+		fclose(inputfile->file);
+	}
+	
+	return FASTQ;
+}
+
+int chunkPos(char *seq, int start, int end) {
+	
+	while(start != end) {
+		if(seq[start] == '\n') {
+			return start;
+		}
+		++start;
+	}
 	return end;
 }
 
-int FileBuffgetFsa(struct FileBuff *dest, struct qseqs *header, struct qseqs *seq) {
+int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, char *trans) {
 	
-	char *seq_ptr, *buff_ptr;
-	int seqlen, seqsize, destpos, destbytes;
+	char *buff, *seq;
+	int size, avail;
 	
-	/* get header */
-	header->len = 0;
-	while((seqlen = chunkPos(dest->buffer, dest->pos, dest->bytes)) == dest->bytes) {
-		seqsize = seqlen - dest->pos;
-		if(seqsize + header->len > header->size) {
-			header->size = seqsize + header->len;
-			header->seq = realloc(header->seq, header->size);
-			if(!header->seq) {
-				fprintf(stderr, "OOM\n");
-				exit(-1);
-			}
-		}
-		strncpy(header->seq + header->len, dest->buffer + dest->pos, seqsize);
-		header->len += seqsize;
-		if(!buffFileBuff(dest)) {
+	/* init */
+	avail = src->bytes;
+	buff = src->next;
+	if(avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
 		}
+		buff = src->buffer;
 	}
-	seqsize = seqlen - dest->pos;
-	if(seqsize + header->len > header->size) {
-		header->size = seqsize + header->len;
-		header->seq = realloc(header->seq, header->size);
-		if(!header->seq) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+	
+	/* get header */
+	seq = header->seq;
+	size = header->size;
+	while((*seq++ = *buff++) != '\n') {
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				return 0;
+			}
+			buff = src->buffer;
+		}
+		if(--size == 0) {
+			size = header->size;
+			header->size <<= 1;
+			header->seq = realloc(header->seq, header->size);
+			if(!header->seq) {
+				ERROR();
+			}
+			seq = header->seq + size;
 		}
 	}
-	strncpy(header->seq + header->len, dest->buffer + dest->pos, seqsize);
-	header->len += seqsize;
-	header->seq[header->len] = 0;
-	dest->pos = seqlen + 1;
-	
-	/* get seq */
-	seqlen = 0;
-	seqsize = seq->size;
-	seq_ptr = seq->seq;
-	if(dest->pos == dest->bytes && !buffFileBuff(dest)) {
-		return 0;
+	if(--avail == 0) {
+		if((avail = buffFileBuff(src)) == 0) {
+			return 0;
+		}
+		buff = src->buffer;
 	}
-	destpos = dest->pos;
-	destbytes = dest->bytes;
-	buff_ptr = dest->buffer;
+	/* chomp header */
+	while(isspace(*--seq)) {
+		++size;
+	}
+	*++seq = 0;
+	header->len = header->size - size + 1;
 	
-	while(buff_ptr[destpos] != '>') {
-		/* accept char */
-		seq_ptr[seqlen] = to2Bit[buff_ptr[destpos]];
-		if(seq_ptr[seqlen] < 5) {
-			++seqlen;
-			if(seqlen == seqsize) {
-				seq->size <<= 1;
-				seq->seq = realloc(seq->seq, seq->size);
-				if(!seq->seq) {
-					fprintf(stderr, "OOM\n");
-					exit(-1);
+	/* get qseq */
+	seq = qseq->seq;
+	size = qseq->size;
+	while(*buff != '>') {
+		*seq = trans[*buff++];
+		if(((*seq) >> 3) == 0) {
+			if(--size == 0) {
+				size = qseq->size;
+				qseq->size <<= 1;
+				qseq->seq = realloc(qseq->seq, qseq->size);
+				if(!qseq->seq) {
+					ERROR();
 				}
-				seqsize = seq->size;
-				seq_ptr = seq->seq;
+				seq = qseq->seq + size;
+			} else {
+				++seq;
 			}
 		}
-		++destpos;
-		
-		if(destpos == destbytes) {
-			destpos = 0;
-			if(!buffFileBuff(dest)) {
-				dest->pos = destpos;
-				seq->len = seqlen;
+		if(--avail == 0) {
+			if((avail = buffFileBuff(src)) == 0) {
+				/* chomp header */
+				while(*--seq == 8) {
+					++size;
+				}
+				*++seq = 0;
+				qseq->len = qseq->size - size;
+				
+				src->bytes = 0;
+				src->next = buff;
 				return 1;
 			}
-			destbytes = dest->bytes;
+			buff = src->buffer;
 		}
-		
 	}
-	dest->pos = destpos;
-	seq->len = seqlen;
+	
+	/* chomp header */
+	while(*--seq == 8) {
+		++size;
+	}
+	*++seq = 0;
+	qseq->len = qseq->size - size;
+	
+	src->bytes = avail;
+	src->next = buff;
 	
 	return 1;
 }
@@ -782,7 +890,7 @@ struct hashMap * hashMap_initialize(long unsigned size) {
 	
 	src = malloc(sizeof(struct hashMap));
 	if(!src) {
-		OOM();
+		ERROR();
 	}
 	
 	src->kmersize = kmersize;
@@ -799,14 +907,14 @@ struct hashMap * hashMap_initialize(long unsigned size) {
 		src->seq = 0;
 		src->values = calloc(src->size, sizeof(unsigned *));
 		if(!src->values) {
-			OOM();
+			ERROR();
 		}
 	} else {
 		src->table = calloc(src->size, sizeof(struct hashTable *));
 		src->seq = calloc(src->seq_size, sizeof(long unsigned));
 		src->values = malloc(src->size * sizeof(unsigned *));
 		if(!src->table || !src->seq || !src->values) {
-			OOM();
+			ERROR();
 		}
 	}
 	
@@ -825,13 +933,12 @@ struct hashMap * hashMap_load(char *filename) {
 	
 	infile = fopen(filename, "rb");
 	if(!infile) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(errno);
+		ERROR();
 	}
 	
 	src = malloc(sizeof(struct hashMap));
 	if(!src) {
-		OOM();
+		ERROR();
 	}
 	
 	/* load content */
@@ -855,7 +962,7 @@ struct hashMap * hashMap_load(char *filename) {
 	if((src->size - 1) == mask) {
 		src->values = calloc(src->size, sizeof(unsigned *));
 		if(!src->values) {
-			OOM();
+			ERROR();
 		}
 		/* masking */
 		--src->size;
@@ -865,7 +972,7 @@ struct hashMap * hashMap_load(char *filename) {
 			fread(pos, sizeof(unsigned), 2, infile);
 			src->values[pos[0]] = malloc((pos[1] + 1) * sizeof(unsigned));
 			if(!src->values[pos[0]]) {
-				OOM();
+				ERROR();
 			}
 			src->values[pos[0]][0] = pos[1];
 			fread(src->values[pos[0]] + 1, sizeof(unsigned), pos[1], infile);
@@ -875,7 +982,7 @@ struct hashMap * hashMap_load(char *filename) {
 		src->seq = calloc(src->seq_size, sizeof(long unsigned));
 		src->values = malloc(src->size * sizeof(unsigned *));
 		if(!src->table || !src->seq || !src->values) {
-			OOM();
+			ERROR();
 		}
 		/* masking */
 		--src->size;
@@ -886,7 +993,7 @@ struct hashMap * hashMap_load(char *filename) {
 			fread(pos, sizeof(unsigned), 1, infile);
 			src->values[i] = malloc((pos[0] + 1) * sizeof(unsigned));
 			if(!src->values[i]) {
-				OOM();
+				ERROR();
 			}
 			src->values[i][0] = pos[0];
 			fread(src->values[i] + 1, sizeof(unsigned), pos[0], infile);
@@ -896,7 +1003,7 @@ struct hashMap * hashMap_load(char *filename) {
 			//fread(pos, sizeof(unsigned), 2, infile);
 			node = malloc(sizeof(struct hashTable));
 			if(!node) {
-				OOM();
+				ERROR();
 			}
 			/* push node */
 			//fread(&index, sizeof(unsigned), 1, infile);
@@ -1003,15 +1110,13 @@ int CP(char *templatefilename, char *outputfilename) {
 	file_in = fopen(templatefilename, "rb");
 	file_out = fopen(outputfilename, "wb");
 	if(!file_in || !file_out) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
+		ERROR();
 	}
 	
 	buffSize = 1024 * 1024;
 	buffer = malloc(buffSize);
 	if(!buffer) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	while((bytes = fread(buffer, 1, buffSize, file_in))) {
@@ -1046,8 +1151,7 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 	strcat(templatefilename, ".length.b");
 	infile = fopen(templatefilename, "rb");
 	if(!infile) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
+		ERROR();
 	}
 	templatefilename[file_len] = 0;
 	fread(&DB_size, sizeof(unsigned), 1, infile);
@@ -1057,7 +1161,7 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 		template_slengths = malloc((DB_size << 1) * sizeof(unsigned));
 		template_ulengths = malloc((DB_size << 1) * sizeof(unsigned));
 		if(!template_lengths || !template_slengths || !template_ulengths) {
-			OOM();
+			ERROR();
 		}
 		fread(template_slengths, sizeof(unsigned), DB_size, infile);
 		fread(template_ulengths, sizeof(unsigned), DB_size, infile);
@@ -1070,7 +1174,7 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 		template_slengths = 0;
 		template_ulengths = 0;
 		if(!template_lengths) {
-			OOM();
+			ERROR();
 		}
 		fread(template_lengths, sizeof(unsigned), DB_size, infile);
 		kmerindex = *template_lengths;
@@ -1120,7 +1224,7 @@ int megaMap_addKMA(long unsigned key, int value, int extend) {
 		values[0]++;
 		values = realloc(values, (values[0] + 1) * sizeof(int));
 		if(!values) {
-			OOM();
+			ERROR();
 		}
 		values[values[0]] = value;
 		templates->values[key] = values;
@@ -1146,7 +1250,7 @@ int megaMap_addKMA_sparse(long unsigned key, int value, int extend) {
 		values[0]++;
 		values = realloc(values, (values[0] + 1) * sizeof(int));
 		if(!values) {
-			OOM();
+			ERROR();
 		}
 		values[values[0]] = value;
 		templates->values[key] = values;
@@ -1185,7 +1289,7 @@ int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
 			values[0]++;
 			values = realloc(values, (values[0] + 1) * sizeof(unsigned));
 			if(!values) {
-				OOM();
+				ERROR();
 			}
 			values[values[0]] = value;
 			templates->values[dest->value_index[pos]] = values;
@@ -1206,7 +1310,7 @@ int megaMap_addCont(struct hashMapKMA *dest, long unsigned index, int value) {
 			values[0]++;
 			values = realloc(values, (values[0] + 1) * sizeof(unsigned));
 			if(!values) {
-				OOM();
+				ERROR();
 			}
 			values[values[0]] = value;
 			templates->values[dest->exist[index]] = values;
@@ -1225,7 +1329,7 @@ void hashMap2megaMap(struct hashTable *table) {
 	tmp = templates->values;
 	templates->values = calloc(templates->size, sizeof(unsigned *));
 	if(!templates->values) {
-		OOM();
+		ERROR();
 	}
 	--templates->size;
 	
@@ -1267,7 +1371,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 				values[0]++;
 				values = realloc(values, (values[0] + 1) * sizeof(unsigned));
 				if(!values) {
-					OOM();
+					ERROR();
 				}
 				values[*values] = value;
 				templates->values[node->values] = values;
@@ -1301,7 +1405,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 		templates->values = realloc(templates->values, templates->size * sizeof(unsigned *));
 		templates->table = calloc(templates->size, sizeof(struct hashTable));
 		if(!templates->values || !templates->table) {
-			OOM();
+			ERROR();
 		}
 		--templates->size;
 		
@@ -1319,7 +1423,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 		templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
 		
 		if(!templates->seq) {
-			OOM();
+			ERROR();
 		}
 		/* nullify new chunk */
 		for(; i < templates->seq_size; ++i) {
@@ -1329,7 +1433,7 @@ int hashMap_addKMA(long unsigned key, int value, int extend) {
 	/* add new value */
 	node = malloc(sizeof(struct hashTable));
 	if(!node) {
-		OOM();
+		ERROR();
 	}
 	/* key */
 	node->key = addKmer(key, extend);
@@ -1377,7 +1481,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 				values[0]++;
 				values = realloc(values, (values[0] + 1) * sizeof(unsigned));
 				if(!values) {
-					OOM();
+					ERROR();
 				}
 				values[*values] = value;
 				templates->values[node->values] = values;
@@ -1413,7 +1517,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		templates->values = realloc(templates->values, templates->size * sizeof(unsigned *));
 		templates->table = calloc(templates->size, sizeof(struct hashTable));
 		if(!templates->values || !templates->table) {
-			OOM();
+			ERROR();
 		}
 		--templates->size;
 		
@@ -1431,7 +1535,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
 		
 		if(!templates->seq) {
-			OOM();
+			ERROR();
 		}
 		/* nullify new chunk */
 		for(; i < templates->seq_size; ++i) {
@@ -1442,7 +1546,7 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 	/* add new value */
 	node = malloc(sizeof(struct hashTable));
 	if(!node) {
-		OOM();
+		ERROR();
 	}
 	/* key */
 	node->key = addKmer(key, extend);
@@ -1739,8 +1843,7 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 		/* not shared, load */
 		dest->exist = malloc(dest->size * sizeof(unsigned));
 		if(!dest->exist) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		fread(dest->exist, sizeof(unsigned), dest->size, file);
 	} else {
@@ -1755,8 +1858,7 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 		/* not shared, load */
 		dest->seq = malloc(dest->seqsize * sizeof(long unsigned));
 		if(!dest->seq) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		fseek(file, seekSize, SEEK_CUR);
 		seekSize = 0;
@@ -1773,8 +1875,7 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 		/* not shared, load */
 		dest->values = malloc(dest->v_index * sizeof(int));
 		if(!dest->values) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		fseek(file, seekSize, SEEK_CUR);
 		seekSize = 0;
@@ -1791,8 +1892,7 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 		/* not shared, load */
 		dest->key_index = malloc((dest->n + 1) * sizeof(unsigned));
 		if(!dest->key_index) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		fseek(file, seekSize, SEEK_CUR);
 		seekSize = 0;
@@ -1809,8 +1909,7 @@ void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) 
 		/* not shared, load */
 		dest->value_index = malloc(dest->n * sizeof(unsigned));
 		if(!dest->value_index) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		fseek(file, seekSize, SEEK_CUR);
 		seekSize = 0;
@@ -1840,8 +1939,7 @@ void hashMapKMA_load_old(struct hashMapKMA *dest, FILE *file, const char *filena
 	dest->key_index = malloc(dest->null_index * sizeof(unsigned));
 	dest->value_index = malloc(dest->null_index * sizeof(unsigned));
 	if(!dest->exist || !dest->seq || !dest->values || !dest->key_index || !dest->value_index) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	/* load arrays */
@@ -1861,8 +1959,7 @@ void hashMap_index_initialize(struct hashMap_index *dest, int len) {
 	dest->index = malloc(dest->size * sizeof(int));
 	dest->seq = malloc(((len >> 5) + 1) * sizeof(long unsigned));
 	if(!dest->index || !dest->seq) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 }
 
@@ -1989,8 +2086,7 @@ struct hashMap_index *hashMap_index_load(FILE *seq, FILE *index, int len) {
 	
 	src = malloc(sizeof(struct hashMap_index));
 	if(!src) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	hashMap_index_initialize(src, len);
 	
@@ -2015,14 +2111,14 @@ struct valuesHash * initialize_hashValues(unsigned size) {
 	
 	dest = malloc(sizeof(struct valuesHash));
 	if(!dest) {
-		OOM();
+		ERROR();
 	}
 	dest->n = 0;
 	dest->size = size;
 	
 	dest->table = calloc(size, sizeof(struct valuesTable *));
 	if(!dest->table) {
-		OOM();
+		ERROR();
 	}
 	
 	return dest;
@@ -2071,7 +2167,7 @@ unsigned valuesHash_add(struct valuesHash *dest, int *newValues, unsigned org_in
 	++dest->n;
 	node = malloc(sizeof(struct valuesTable));
 	if(!node) {
-		OOM();
+		ERROR();
 	}
 	node->value_index = v_index;
 	node->values = org_index;
@@ -2164,15 +2260,13 @@ void makeIndexing(struct compDNA *compressor, FILE *seq_out, FILE *index_out) {
 	/* allocate index */
 	template_index = malloc(sizeof(struct hashMap_index));
 	if(!template_index) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	template_index->len = compressor->seqlen;
 	template_index->size = compressor->seqlen << 1;
 	template_index->index = calloc(template_index->size, sizeof(int));
 	if(!template_index->index) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	/* load index */
@@ -2252,8 +2346,7 @@ int queryCheck(struct compDNA *qseq) {
 		free(bestTemplates);
 		bestTemplates = malloc(2 * DB_size * sizeof(unsigned));
 		if(!Scores_tot || !bestTemplates) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		Scores_tot[0] = 2 * DB_size;
 	}
@@ -2328,8 +2421,7 @@ int templateCheck(struct compDNA *qseq) {
 		free(bestTemplates);
 		bestTemplates = malloc(2 * DB_size * sizeof(unsigned));
 		if(!Scores || !Scores_tot || !bestTemplates) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		Scores_tot[0] = 2 * DB_size;
 	}
@@ -2398,8 +2490,7 @@ int templateCheck(struct compDNA *qseq) {
 			free(foundKmers->table);
 			foundKmers->table = calloc(foundKmers->size, sizeof(struct hashTable_kmers *));
 			if(!foundKmers->table) {
-				fprintf(stderr, "OOM\n");
-				exit(-1);
+				ERROR();
 			}
 		}
 		return 1;
@@ -2469,7 +2560,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
 	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
 	if(!templates->seq || !templates->values) {
-		OOM();
+		ERROR();
 	}
 	table = 0;
 	for(i = 0; i < templates->size; ++i) {
@@ -2486,7 +2577,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	fprintf(stderr, "# Preparing compressed DB.\n");
 	finalDB = malloc(sizeof(struct hashMapKMA));
 	if(!finalDB) {
-		OOM();
+		ERROR();
 	}
 	/* Fill in known values */
 	finalDB->size = templates->size + 1;
@@ -2503,7 +2594,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	finalDB->value_index = malloc(finalDB->n * sizeof(unsigned));
 	tmp = malloc(finalDB->n * sizeof(unsigned));
 	if(!finalDB->exist || !finalDB->key_index || !finalDB->value_index || !tmp) {
-		OOM();
+		ERROR();
 	}
 	null_index = finalDB->n;
 	finalDB->null_index = null_index;
@@ -2560,7 +2651,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 				v_index = c_index;
 			} else {
 				fprintf(stderr, "Compression overflow.\n");
-				exit(-1);
+				exit(1);
 			}
 		}
 	}
@@ -2572,7 +2663,7 @@ struct hashMapKMA * compressKMA_DB_old(FILE *out) {
 	finalDB->v_index = v_index;
 	finalDB->values = calloc(v_index, sizeof(unsigned));
 	if(!finalDB->values) {
-		OOM();
+		ERROR();
 	}
 	for(i = 0; i < finalDB->n; ++i) {
 		if(finalDB->values[finalDB->value_index[i]] == 0) {
@@ -2620,7 +2711,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
 	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
 	if(!templates->seq || !templates->values) {
-		OOM();
+		ERROR();
 	}
 	table = 0;
 	for(i = 0; i < templates->size; ++i) {
@@ -2637,7 +2728,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	fprintf(stderr, "# Preparing compressed DB.\n");
 	finalDB = malloc(sizeof(struct hashMapKMA));
 	if(!finalDB) {
-		OOM();
+		ERROR();
 	}
 	/* Fill in known values */
 	finalDB->size = templates->size + 1;
@@ -2654,7 +2745,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	finalDB->value_index = malloc(finalDB->n * sizeof(unsigned));
 	tmp = malloc(finalDB->n * sizeof(unsigned));
 	if(!finalDB->exist || !finalDB->key_index || !finalDB->value_index || !tmp) {
-		OOM();
+		ERROR();
 	}
 	null_index = finalDB->n;
 	finalDB->null_index = null_index;
@@ -2711,7 +2802,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 				v_index = c_index;
 			} else {
 				fprintf(stderr, "Compression overflow.\n");
-				exit(-1);
+				exit(1);
 			}
 		}
 	}
@@ -2723,7 +2814,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	finalDB->v_index = v_index;
 	finalDB->values = calloc(v_index, sizeof(unsigned));
 	if(!finalDB->values) {
-		OOM();
+		ERROR();
 	}
 	for(i = 0; i < finalDB->n; ++i) {
 		if(finalDB->values[finalDB->value_index[i]] == 0) {
@@ -2767,7 +2858,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	fprintf(stderr, "# Resizing DB.\n");
 	finalDB = malloc(sizeof(struct hashMapKMA));
 	if(!finalDB) {
-		OOM();
+		ERROR();
 	}
 	/* Fill in known values */
 	finalDB->size = templates->size + 1;
@@ -2782,7 +2873,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	finalDB->key_index = 0;
 	finalDB->value_index = 0;
 	if(!finalDB->exist) {
-		OOM();
+		ERROR();
 	}
 	null_index = finalDB->n;
 	finalDB->null_index = null_index;
@@ -2803,14 +2894,14 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	}
 	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
 	if(!templates->values) {
-		OOM();
+		ERROR();
 	}
 	
 	/* mv table to finalDB */
 	fprintf(stderr, "# Initial cp of DB.\n");
 	tmp = malloc(finalDB->size * sizeof(unsigned));
 	if(!tmp) {
-		OOM();
+		ERROR();
 	}
 	for(i = 0; i < finalDB->size; ++i) {
 		tmp[i] = finalDB->exist[i];
@@ -2839,7 +2930,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 					v_index = c_index;
 				} else {
 					fprintf(stderr, "Compression overflow.\n");
-					exit(-1);
+					exit(1);
 				}
 			}
 		} else {
@@ -2855,7 +2946,7 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	finalDB->null_index = 1;
 	finalDB->values = calloc(v_index, sizeof(unsigned));
 	if(!finalDB->values) {
-		OOM();
+		ERROR();
 	}
 	for(i = 0; i < finalDB->size; ++i) {
 		if(finalDB->exist[i] != finalDB->null_index && finalDB->values[finalDB->exist[i]] == 0) {
@@ -2888,7 +2979,7 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 	fprintf(stderr, "# Compressing indexes.\n");
 	tmp = malloc(finalDB->n * sizeof(unsigned));
 	if(!tmp) {
-		OOM();
+		ERROR();
 	}
 	v_index = 0;
 	c_index = 0;
@@ -2911,7 +3002,7 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 				v_index = c_index;
 			} else {
 				fprintf(stderr, "Compression overflow.\n");
-				exit(-1);
+				exit(1);
 			}
 		}
 	}
@@ -2923,7 +3014,7 @@ void compressKMA_deconDB(struct hashMapKMA *finalDB) {
 	finalDB->v_index = v_index;
 	finalDB->values = calloc(v_index, sizeof(unsigned));
 	if(!finalDB->values) {
-		OOM();
+		ERROR();
 	}
 	for(i = 0; i < finalDB->n; ++i) {
 		if(finalDB->values[finalDB->value_index[i]] == 0) {
@@ -2952,7 +3043,7 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 	fprintf(stderr, "# Compressing indexes.\n");
 	tmp = malloc(finalDB->size * sizeof(unsigned));
 	if(!tmp) {
-		OOM();
+		ERROR();
 	}
 	v_index = 0;
 	c_index = 0;
@@ -2976,7 +3067,7 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 					v_index = c_index;
 				} else {
 					fprintf(stderr, "Compression overflow.\n");
-					exit(-1);
+					exit(1);
 				}
 			} else {
 				free(templates->values[tmp[i]]);
@@ -2993,7 +3084,7 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
 	finalDB->v_index = v_index;
 	finalDB->values = calloc(v_index, sizeof(unsigned));
 	if(!finalDB->values) {
-		OOM();
+		ERROR();
 	}
 	for(i = 0; i < finalDB->size; ++i) {
 		if(finalDB->exist[i] != finalDB->n) {
@@ -3048,8 +3139,7 @@ void updateAnnots(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 		template_lengths[0] *= 2;
 		template_lengths = realloc(template_lengths, template_lengths[0] * sizeof(unsigned));
 		if(!template_lengths) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 	}
 }
@@ -3067,8 +3157,7 @@ void updateAnnots_sparse(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 		template_ulengths = realloc(template_ulengths, template_ulengths[0] * sizeof(unsigned));
 		template_lengths = realloc(template_lengths, template_ulengths[0] * sizeof(unsigned));
 		if(!template_lengths || !template_slengths || !template_ulengths) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 	}
 	
@@ -3122,10 +3211,11 @@ int deConNode_sparse(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 	return mapped_cont;
 }
 
-unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, char *outputfilename) {
+unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, char *outputfilename, char *trans) {
 	
+	int FASTQ;
 	unsigned fileCounter, mapped_cont, file_len;
-	char *filename, *zipped, *cmd;
+	char *filename;
 	FILE *DB_update;
 	struct qseqs *header, *qseq;
 	struct FileBuff *inputfile;
@@ -3133,11 +3223,8 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	
 	/* allocate */
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(1);
-	zipped = strdup(".gz");
-	if(!cmd || !zipped || !compressor) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+	if(!compressor) {
+		ERROR();
 	}
 	allocComp(compressor, 1024);
 	header = setQseqs(1024);
@@ -3154,8 +3241,7 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	DB_update = fopen(outputfilename, "wb");
 	outputfilename[file_len] = 0;
 	if(!DB_update) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
+		ERROR();
 	}
 	
 	/* iterate inputfiles */
@@ -3163,51 +3249,33 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 		/* open file */
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 4));
-			if(!cmd) {
-				fprintf(stderr, "OOM\n");
-				exit(-1);
-			}
-			sprintf(cmd, "gunzip -c \"%s\"", filename);
-			popenFileBuff(inputfile, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile->file = stdin;
-		} else {
-			openFileBuff(inputfile, filename, "rb");
-		}
-		
-		/* Get first char and determine the format */
-		buffFileBuff(inputfile);
-		if(inputfile->buffer[0] != '>') { //FASTA
-			fprintf(stderr, "Not Fasta format!!!\n");
-			exit(-1);
-		}
-		
-		/* parse the file */
-		while(FileBuffgetFsa(inputfile, header, qseq)) {
-			fprintf(stderr, "# Decon:\t%s\n", header->seq + 1);
-			if(qseq->len > kmersize) {
-				/* compress DNA */
-				if(qseq->len >= compressor->size) {
-					freeComp(compressor);
-					allocComp(compressor, qseq->len);
+		if((FASTQ = openAndDetermine(inputfile, filename)) & 3) {
+			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
+			/* parse the file */
+			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
+				fprintf(stderr, "# Decon:\t%s\n", header->seq + 1);
+				if(qseq->len > kmersize) {
+					/* compress DNA */
+					if(qseq->len >= compressor->size) {
+						freeComp(compressor);
+						allocComp(compressor, qseq->len);
+					}
+					compDNAref(compressor, qseq->seq, qseq->len);
+					
+					/* Add contamination */
+					mapped_cont += deConNode_ptr(compressor, finalDB);
+					/* rc */
+					rcComp(compressor);
+					mapped_cont += deConNode_ptr(compressor, finalDB);
 				}
-				compDNAref(compressor, qseq->seq, qseq->len);
-				
-				/* Add contamination */
-				mapped_cont += deConNode_ptr(compressor, finalDB);
-				/* rc */
-				rcComp(compressor);
-				mapped_cont += deConNode_ptr(compressor, finalDB);
 			}
-		}
-		
-		/* close file buffer */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			pcloseFileBuff(inputfile);
-		} else {
-			closeFileBuff(inputfile);
+			
+			/* close file buffer */
+			if(FASTQ & 4) {
+				gzcloseFileBuff(inputfile);
+			} else {
+				closeFileBuff(inputfile);
+			}
 		}
 	}
 	++finalDB->size;
@@ -3218,8 +3286,6 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	fclose(DB_update);
 	
 	/* clean */
-	free(cmd);
-	free(zipped);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -3237,10 +3303,10 @@ int homcmp_and(int t, int q) {
 	return (t && q);
 }
 
-void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender) {
+void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender, char *trans) {
 	
-	int fileCounter, file_len, bias;
-	char *filename, *zipped, *cmd;
+	int fileCounter, file_len, bias, FASTQ;
+	char *filename;
 	FILE *index_out, *seq_out, *length_out, *name_out, *DB_update;
 	struct qseqs *header, *qseq;
 	struct FileBuff *inputfile;
@@ -3248,11 +3314,8 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	
 	/* allocate */
 	compressor = malloc(sizeof(struct compDNA));
-	cmd = malloc(1);
-	zipped = strdup(".gz");
-	if(!cmd || !zipped || !compressor) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+	if(!compressor) {
+		ERROR();
 	}
 	allocComp(compressor, 1024);
 	header = setQseqs(1024);
@@ -3277,24 +3340,21 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 		outputfilename[file_len] = 0;
 	}
 	if(!DB_update || !length_out || !name_out) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
+		ERROR();
 	}
 	if(appender) {
 		strcat(outputfilename, ".seq.b");
 		seq_out = fopen(outputfilename, "ab");
 		outputfilename[file_len] = 0;
 		if(!seq_out) {
-			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-			exit(-1);
+			ERROR();
 		}
 	} else {
 		strcat(outputfilename, ".seq.b");
 		seq_out = fopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		if(!seq_out) {
-			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-			exit(-1);
+			ERROR();
 		}
 	}
 	
@@ -3304,16 +3364,14 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 			index_out = fopen(outputfilename, "ab");
 			outputfilename[file_len] = 0;
 			if(!index_out) {
-				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-				exit(-1);
+				ERROR();
 			}
 		} else {
 			strcat(outputfilename, ".index.b");
 			index_out = fopen(outputfilename, "wb");
 			outputfilename[file_len] = 0;
 			if(!index_out) {
-				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-				exit(-1);
+				ERROR();
 			}
 			fwrite(&kmerindex, sizeof(int), 1, index_out);
 		}
@@ -3327,57 +3385,49 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 		/* open file */
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			cmd = realloc(cmd, (strlen(filename) + strlen("gunzip -c ") + 4));
-			if(!cmd) {
-				fprintf(stderr, "OOM\n");
-				exit(-1);
-			}
-			sprintf(cmd, "gunzip -c \"%s\"", filename);
-			popenFileBuff(inputfile, cmd, "r");
-		} else if(strncmp(filename, "--", 2) == 0) {
-			inputfile->file = stdin;
-		} else {
-			openFileBuff(inputfile, filename, "rb");
-		}
-		
-		/* Get first char and determine the format */
-		buffFileBuff(inputfile);
-		if(inputfile->buffer[0] != '>') { //FASTA
-			fprintf(stderr, "Not Fasta format!!!\n");
-			exit(-1);
-		}
-		
-		/* parse the file */
-		while(FileBuffgetFsa(inputfile, header, qseq)) {
-			if(qseq->len >= compressor->size) {
-				freeComp(compressor);
-				allocComp(compressor, 2 * qseq->len);
-			}
-			bias = compDNAref(compressor, qseq->seq, qseq->len);
-			if(qseq->len > MinLen && update_DB(compressor)) {
-				/* Update annots */
-				chomp(header->seq);
-				if(bias > 0) {
-					fprintf(name_out, "%s B%d\n", header->seq + 1, bias);
-				} else {
-					fprintf(name_out, "%s\n", header->seq + 1);
+		if((FASTQ = openAndDetermine(inputfile, filename)) & 3) {
+			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
+			
+			/* parse the file */
+			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
+				if(qseq->len >= compressor->size) {
+					freeComp(compressor);
+					allocComp(compressor, 2 * qseq->len);
 				}
-				updateAnnotsPtr(compressor, seq_out, index_out);
-				fprintf(stderr, "# Added:\t%s\n", header->seq + 1);
+				bias = compDNAref(compressor, qseq->seq, qseq->len);
+				if(qseq->len > MinLen && update_DB(compressor)) {
+					/* Update annots */
+					chomp(header->seq);
+					if(bias > 0) {
+						fprintf(name_out, "%s B%d\n", header->seq + 1, bias);
+					} else {
+						fprintf(name_out, "%s\n", header->seq + 1);
+					}
+					updateAnnotsPtr(compressor, seq_out, index_out);
+					fprintf(stderr, "# Added:\t%s\n", header->seq + 1);
+				} else {
+					fprintf(stderr, "# Skipped:\t%s\n", header->seq + 1);
+				}
+			}
+			
+			/* close file buffer */
+			if(FASTQ & 4) {
+				gzcloseFileBuff(inputfile);
 			} else {
-				fprintf(stderr, "# Skipped:\t%s\n", header->seq + 1);
+				closeFileBuff(inputfile);
 			}
 		}
-		
-		/* close file buffer */
-		if(strncmp(filename + (strlen(filename) - 3), zipped, 3) == 0) {
-			pcloseFileBuff(inputfile);
-		} else if(strncmp(filename, "--", 2) != 0) {
-			closeFileBuff(inputfile);
-		}
-		
 	}
+	
+	char bases[] = "ACGTN-";
+	fprintf(stderr, "%s", header->seq);
+	for(int i = 0; i < qseq->len; ++i) {
+		if(i % 60 == 0) {
+			fprintf(stderr, "\n");
+		}
+		fprintf(stderr, "%c", bases[qseq->seq[i]]);
+	}
+	fprintf(stderr, "\n");
 	
 	/* Dump annots */
 	fwrite(&DB_size, sizeof(int), 1, length_out);
@@ -3403,8 +3453,6 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	fclose(DB_update);
 	
 	/* clean */
-	free(cmd);
-	free(zipped);
 	freeComp(compressor);
 	free(compressor);
 	destroyQseqs(header);
@@ -3439,6 +3487,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ht\t\tHomology template\t\t\t1.0\n");
 	fprintf(helpOut, "#\t-hq\t\tHomology query\t\t\t\t1.0\n");
 	fprintf(helpOut, "#\t-and\t\tBoth homolgy thresholds\n#\t\t\thas to be reached\t\t\tor\n");
+	fprintf(helpOut, "#\t-v\t\tVersion\n");
 	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
 	fprintf(helpOut, "#\n");
 	exit(exeStatus);
@@ -3449,7 +3498,8 @@ int main(int argc, char *argv[]) {
 	int i, args, stop, filecount, deconcount, sparse_run;
 	int line_size, l_len, mapped_cont, file_len, appender;
 	unsigned megaDB;
-	char **inputfiles, *outputfilename, *templatefilename, **deconfiles, *line;
+	char **inputfiles, *outputfilename, *templatefilename, **deconfiles;
+	char *line, *to2Bit;
 	struct hashMapKMA *finalDB;
 	FILE *inputfile, *out;
 	
@@ -3457,8 +3507,7 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "# Too few arguments handed.\n");
 		helpMessage(-1);
 	} else if(sizeof(long unsigned) != 8) {
-		fprintf(stderr, "Need a 64-bit system.\n");
-		exit(-1);
+		ERROR();
 	}
 	
 	/* set defaults */
@@ -3490,14 +3539,15 @@ int main(int argc, char *argv[]) {
 	line = malloc(line_size);
 	to2Bit = malloc(384);
 	if(!inputfiles || !deconfiles || !line || !to2Bit) {
-		fprintf(stderr, "OOM\n");
-		exit(-1);
+		ERROR();
 	}
 	/* set to2Bit */
 	for(i = 0; i < 384; ++i) {
 		to2Bit[i] = 5;
 	}
 	to2Bit += 128;
+	to2Bit['\n'] = 16;
+	
 	to2Bit['A'] = 0;
 	to2Bit['C'] = 1;
 	to2Bit['G'] = 2;
@@ -3573,13 +3623,11 @@ int main(int argc, char *argv[]) {
 					++filecount;
 					inputfiles = realloc(inputfiles, filecount * sizeof(char*));
 					if(inputfiles == NULL) {
-						fprintf(stderr, "OOM\n");
-						exit(-1);
+						ERROR();
 					}
 					inputfiles[filecount - 1] = strdup(argv[args]);
 					if(!inputfiles[filecount - 1]) {
-						fprintf(stderr, "OOM\n");
-						exit(-1);
+						ERROR();
 					}
 					++args;
 				} else {
@@ -3592,8 +3640,7 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				outputfilename = malloc(strlen(argv[args]) + 64);
 				if(!outputfilename) {
-					fprintf(stderr, "OOM\n");
-					exit(-1);
+					ERROR();
 				}
 				strcpy(outputfilename, argv[args]);
 			}
@@ -3604,13 +3651,11 @@ int main(int argc, char *argv[]) {
 				if(strncmp(argv[args], "-", 1) != 0 || strcmp(argv[args], "--") == 0) {
 					deconfiles = realloc(deconfiles, (deconcount + 1) * sizeof(char*));
 					if(deconfiles == NULL) {
-						fprintf(stderr, "OOM\n");
-						exit(-1);
+						ERROR();
 					}
 					deconfiles[deconcount] = strdup(argv[args]);
 					if(deconfiles[deconcount] == NULL) {
-						fprintf(stderr, "OOM\n");
-						exit(-1);
+						ERROR();
 					}
 					++deconcount;
 					++args;
@@ -3620,7 +3665,7 @@ int main(int argc, char *argv[]) {
 			}
 			if(deconcount == 0) {
 				fprintf(stderr, "No deCon file specified.\n");
-				exit(-1);
+				exit(1);
 			}
 			--args;
 		} else if(strcmp(argv[args], "-t_db") == 0) {
@@ -3628,8 +3673,7 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				templatefilename = malloc(strlen(argv[args]) + 64);
 				if(!templatefilename) {
-					fprintf(stderr, "OOM\n");
-					exit(-1);
+					ERROR();
 				}
 				strcpy(templatefilename, argv[args]);
 			}
@@ -3711,21 +3755,18 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				inputfile = fopen(argv[args], "r");
 				if(!inputfile) {
-					fprintf(stderr, "No such file:\t%s\n", argv[args]);
-					exit(-1);
+					ERROR();
 				}
 				while(!feof(inputfile) && *(line = fget_line(line, &line_size, &l_len, inputfile))) {
 					if(l_len != 0) {
 						++filecount;
 						inputfiles = realloc(inputfiles, filecount * sizeof(char*));
 						if(inputfiles == NULL) {
-							fprintf(stderr, "OOM\n");
-							exit(-1);
+							ERROR();
 						}
 						inputfiles[filecount - 1] = strdup(line);
 						if(inputfiles[filecount - 1] == NULL) {
-							fprintf(stderr, "OOM\n");
-							exit(-1);
+							ERROR();
 						}
 					}
 				}
@@ -3736,21 +3777,18 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				inputfile = fopen(argv[args], "r");
 				if(!inputfile) {
-					fprintf(stderr, "No such file:\t%s\n", argv[args]);
-					exit(-1);
+					ERROR();
 				}
 				while(!feof(inputfile) && *(line = fget_line(line, &line_size, &l_len, inputfile))) {
 					if(l_len != 0) {
 						++deconcount;
 						deconfiles = realloc(deconfiles, deconcount * sizeof(char*));
 						if(deconfiles == NULL) {
-							fprintf(stderr, "OOM\n");
-							exit(-1);
+							ERROR();
 						}
 						deconfiles[deconcount - 1] = strdup(line);
 						if(deconfiles[deconcount - 1] == NULL) {
-							fprintf(stderr, "OOM\n");
-							exit(-1);
+							ERROR();
 						}
 					}
 				}
@@ -3770,17 +3808,20 @@ int main(int argc, char *argv[]) {
 						prefix = (prefix << 2) | to2Bit[argv[args][i]];
 						if(to2Bit[argv[args][i]] > 3) {
 							fprintf(stderr, "Invalid prefix.\n");
-							exit(-1);
+							exit(1);
 						}
 					}
 					if(prefix_len == 0) {
 						fprintf(stderr, "Invalid prefix.\n");
-						exit(-1);
+						exit(1);
 					}
 				}
 			}
 		} else if(strcmp(argv[args], "-ME") == 0) {
 			megaDB = 1;
+		} else if(strcmp(argv[args], "-v") == 0) {
+			fprintf(stdout, "KMA_index-%d.%d.%d\n", version[0], version[1], version[2]);
+			exit(0);
 		} else if(strcmp(argv[args], "-h") == 0) {
 			helpMessage(0);
 		} else {
@@ -3801,8 +3842,7 @@ int main(int argc, char *argv[]) {
 	} else if(outputfilename == 0 && templatefilename != 0) {
 		outputfilename = malloc((strlen(templatefilename) + 64));
 		if(!outputfilename) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		strcpy(outputfilename, templatefilename);
 	}
@@ -3844,7 +3884,7 @@ int main(int argc, char *argv[]) {
 			template_slengths = malloc(1024 * sizeof(unsigned));
 			template_ulengths = malloc(1024 * sizeof(unsigned));
 			if(!template_lengths || !template_slengths || !template_ulengths) {
-				OOM();
+				ERROR();
 			}
 			*template_lengths = kmerindex;
 			template_slengths[0] = 1024;
@@ -3854,7 +3894,7 @@ int main(int argc, char *argv[]) {
 			template_slengths = 0;
 			template_ulengths = 0;
 			if(!template_lengths) {
-				OOM();
+				ERROR();
 			}
 			template_lengths[0] = 1024;
 		}
@@ -3910,8 +3950,7 @@ int main(int argc, char *argv[]) {
 		QualCheck = &templateCheck;
 		foundKmers = malloc(sizeof(struct hashMap_kmers));
 		if(!foundKmers) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		foundKmers->size = INITIAL_SIZE;
 		foundKmers->table = calloc(foundKmers->size, sizeof(struct hashTable_kmers *));
@@ -3919,8 +3958,7 @@ int main(int argc, char *argv[]) {
 		Scores_tot = calloc(1024, sizeof(unsigned));
 		bestTemplates = malloc(1024 * sizeof(unsigned));
 		if(!foundKmers->table || !Scores || !Scores_tot || !bestTemplates) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		Scores_tot[0] = 1024;
 	} else if(homQ < 1) {
@@ -3928,8 +3966,7 @@ int main(int argc, char *argv[]) {
 		Scores_tot = calloc(1024, sizeof(unsigned));
 		bestTemplates = malloc(1024 * sizeof(unsigned));
 		if(!Scores_tot || !bestTemplates) {
-			fprintf(stderr, "OOM\n");
-			exit(-1);
+			ERROR();
 		}
 		Scores_tot[0] = 1024;
 	} else {
@@ -3938,7 +3975,7 @@ int main(int argc, char *argv[]) {
 	
 	/* update DBs */
 	if(filecount != 0) {
-		makeDB(inputfiles, filecount, outputfilename, appender);	
+		makeDB(inputfiles, filecount, outputfilename, appender, to2Bit);	
 	}
 	
 	/* compress db */
@@ -3947,8 +3984,7 @@ int main(int argc, char *argv[]) {
 	strcat(outputfilename, ".comp.b");
 	out = fopen(outputfilename, "wb");
 	if(!out) {
-		fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-		exit(-1);
+		ERROR();
 	} else if(templates->table != 0) {
 		finalDB = compressKMA_DB(out);
 	} else {
@@ -3966,7 +4002,7 @@ int main(int argc, char *argv[]) {
 		
 		/* get decontamination info */
 		fprintf(stderr, "# Adding decontamination information\n");
-		mapped_cont = deConDB(finalDB, deconfiles, deconcount, outputfilename);
+		mapped_cont = deConDB(finalDB, deconfiles, deconcount, outputfilename, to2Bit);
 		fprintf(stderr, "# Contamination information added.\n");
 		fprintf(stderr, "# %d kmers mapped to the DB.\n", mapped_cont);
 		fprintf(stderr, "# Contamination mapped to %f %% of the DB.\n", 100.0 * mapped_cont / templates->n);
@@ -3985,8 +4021,7 @@ int main(int argc, char *argv[]) {
 		out = fopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		if(!out) {
-			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-			exit(-1);
+			ERROR();
 		}
 		if((finalDB->size - 1) != mask) {
 			hashMapKMA_dump(finalDB, out);
