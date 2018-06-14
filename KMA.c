@@ -15,18 +15,18 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 
-#include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
 #include <math.h>
+#include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <ctype.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <errno.h>
-#include <pthread.h>
+#include <time.h>
 #include <unistd.h>
 #include <zlib.h>
 
@@ -49,18 +49,18 @@
  STRUCTURES
 */
 struct aln {
-	char *t;  /* template */
+	unsigned char *t;  /* template */
 	char *s;  /* score */
-	char *q;  /* query */
+	unsigned char *q;  /* query */
 	unsigned pos; /* start of aln, relative to template */
 	int score; /* aln score */
 	/* start of aln, relative to query */
 };
 
 struct assem {
-	char *t;  /* template */
+	unsigned char *t;  /* template */
 	char *s;  /* score */
-	char *q;  /* query */
+	unsigned char *q;  /* query */
 	unsigned cover;
 	unsigned depth;
 	unsigned size;
@@ -68,8 +68,8 @@ struct assem {
 
 struct frag {
 	int buffer[6];
-	char *qseq;
-	char *header;
+	unsigned char *qseq;
+	unsigned char *header;
 	struct frag *next;
 };
 
@@ -106,15 +106,15 @@ struct Hit {
 struct qseqs {
 	int size;
 	int len;
-	char *seq;
+	unsigned char *seq;
 };
 
 struct FileBuff {
 	int bytes;
 	int buffSize;
-	char *buffer;
-	char *inBuffer;
-	char *next;
+	unsigned char *buffer;
+	unsigned char *inBuffer;
+	unsigned char *next;
 	FILE *file;
 	z_stream *strm;
 };
@@ -198,8 +198,7 @@ long unsigned mask;
 double evalue, ID_t, scoreT, HMM_param[8];
 int *D[2], *P[2], W1, U, d[5][5], M, MM, PE;
 long NW_s, NW_q;
-char *E;
-char bases[] = "ACGTN-";
+unsigned char *E;
 volatile int *excludeIn, *excludeOut;
 
 /*
@@ -217,11 +216,11 @@ void (*kmerScan)(int*, int*, int*, int*, struct compDNA*, struct compDNA*, struc
 void (*save_kmers_pair)(int*, int*, int*, int*, int*, int*, struct compDNA*, struct compDNA*, struct qseqs*, struct qseqs*, int*);
 void (*printFsa_ptr)(struct qseqs*, struct qseqs*, struct compDNA*);
 void (*printFsa_pair_ptr)(struct qseqs*, struct qseqs*, struct qseqs*, struct qseqs*, struct compDNA*);
-void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, char*, char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*);
+void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, unsigned char*, unsigned char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*);
 long unsigned (*getKmerP)(long unsigned *, unsigned);
 int (*cmp)(int, int);
 int (*significantBase)(int, int);
-char (*baseCall)(char, int, int, int, struct assem*, short unsigned*);
+char (*baseCall)(unsigned char, int, int, int, struct assem*, short unsigned*);
 int (*buffFileBuff)(struct FileBuff *);
 
 /*
@@ -254,7 +253,7 @@ long unsigned getK(long unsigned *compressor, unsigned pos) {
 	return pos;
 }
 
-long unsigned makeKmer(const char *qseq, unsigned pos, unsigned size) {
+long unsigned makeKmer(const unsigned char *qseq, unsigned pos, unsigned size) {
 	
 	long unsigned key = qseq[pos];
 	
@@ -266,7 +265,7 @@ long unsigned makeKmer(const char *qseq, unsigned pos, unsigned size) {
 	return key;
 }
 
-int charpos(const char *src, char target, int start, int len) {
+int charpos(const unsigned char *src, unsigned char target, int start, int len) {
 	
 	int i;
 	
@@ -279,7 +278,7 @@ int charpos(const char *src, char target, int start, int len) {
 	return -1;
 }
 
-int rcharpos(const char *src, char target, int start, int end) {
+int rcharpos(const unsigned char *src, unsigned char target, int start, int end) {
 	
 	int i;
 	
@@ -336,20 +335,22 @@ int strrpos(const char* str1, const char* str2) {
 	return -1;
 }
 
-unsigned countChar(const char* str, char target) {
+unsigned countChar(const unsigned char* str, unsigned char target) {
 	
 	char *strp;
 	unsigned count;
 	
 	count = 0;
 	for(strp = (char*)(str); *strp; ++strp) {
-		if(*strp == target) {
+		if(*strp != target) {
 			++count;
 		}
 	}
 	
 	return count;
 }
+
+
 
 int intpos_bin(const int *str1, const int str2) {
 	
@@ -484,7 +485,7 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 void init_gzFile(struct FileBuff *inputfile) {
 	
 	int status;
-	char *tmp;
+	unsigned char *tmp;
 	z_stream *strm;
 	
 	/* set inBuffer, for compressed format */
@@ -514,7 +515,7 @@ void init_gzFile(struct FileBuff *inputfile) {
 		fprintf(stderr, "Gzip error %d\n", status);
 		exit(status);
 	}
-	strm->next_in = (unsigned char*) inputfile->inBuffer;
+	strm->next_in = inputfile->inBuffer;
 	strm->avail_in = inputfile->bytes;
 	
 	inputfile->strm = strm;
@@ -645,12 +646,12 @@ void writeGzFileBuff(struct FileBuff *dest) {
 	int check = Z_OK;
 	z_stream *strm = dest->strm;
 	strm->avail_in = dest->buffSize - dest->bytes;
-	strm->next_in = (unsigned char *) dest->buffer;
+	strm->next_in = dest->buffer;
 	strm->avail_out = 0;
 	
 	while(strm->avail_out == 0 && check != Z_STREAM_END) {
 		strm->avail_out = dest->buffSize;
-		strm->next_out = (unsigned char *) dest->inBuffer;
+		strm->next_out = dest->inBuffer;
 		check = deflate(strm, Z_NO_FLUSH);
 		fwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
 	}
@@ -663,12 +664,12 @@ void closeGzFileBuff(struct FileBuff *dest) {
 	int check = Z_OK;
 	z_stream *strm = dest->strm;
 	strm->avail_in = dest->buffSize - dest->bytes;
-	strm->next_in = (unsigned char *) dest->buffer;
+	strm->next_in = dest->buffer;
 	strm->avail_out = 0;
 	
 	while(strm->avail_out == 0 && check != Z_STREAM_END) {
 		strm->avail_out = dest->buffSize;
-		strm->next_out = (unsigned char *) dest->inBuffer;
+		strm->next_out = dest->inBuffer;
 		check = deflate(strm, Z_FINISH);
 		fwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
 	}
@@ -685,7 +686,7 @@ void destroyGzFileBuff(struct FileBuff *dest) {
 	free(dest);
 }
 
-void updateMatrix(struct FileBuff *dest, char *template_name, char *template_seq, short unsigned (*assembly)[6], int *assemNext, int asm_len) {
+void updateMatrix(struct FileBuff *dest, char *template_name, unsigned char *template_seq, short unsigned (*assembly)[6], int *assemNext, int asm_len) {
 	
 	int i, pos, check, avail;
 	char *update;
@@ -695,7 +696,7 @@ void updateMatrix(struct FileBuff *dest, char *template_name, char *template_seq
 	if(dest->bytes < check) {
 		writeGzFileBuff(dest);
 	}
-	update = dest->next;
+	update = (char *) dest->next;
 	avail = dest->bytes - check;
 	
 	/* fill in header */
@@ -712,7 +713,7 @@ void updateMatrix(struct FileBuff *dest, char *template_name, char *template_seq
 			if(dest->bytes < 38) {
 				writeGzFileBuff(dest);
 				avail = dest->bytes;
-				update = dest->next;
+				update = (char *) dest->next;
 			}
 			
 			/* update with row */
@@ -726,7 +727,7 @@ void updateMatrix(struct FileBuff *dest, char *template_name, char *template_seq
 			if(dest->bytes < 38) {
 				writeGzFileBuff(dest);
 				avail = dest->bytes;
-				update = dest->next;
+				update = (char *) dest->next;
 			}
 			
 			/* update with row */
@@ -740,16 +741,17 @@ void updateMatrix(struct FileBuff *dest, char *template_name, char *template_seq
 	if(avail == 0) {
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
-		update = dest->next;
+		update = (char *) dest->next;
 	}
 	*update++ = '\n';
-	dest->next = update;
+	dest->next = (unsigned char *) update;
 	dest->bytes = avail - 1;
 }
 
 void updateFrags(struct FileBuff *dest, struct qseqs *qseq, struct qseqs *header, char *template_name, int *stats) {
 	
 	int check, avail;
+	char *update;
 	
 	avail = dest->bytes;
 	check = 47 + qseq->len + header->len + strlen(template_name);
@@ -770,7 +772,8 @@ void updateFrags(struct FileBuff *dest, struct qseqs *qseq, struct qseqs *header
 	dest->next += qseq->len;
 	avail -= qseq->len;
 	/* stats */
-	check = sprintf(dest->next, "\t%d\t%d\t%d\t%d\t%s\t", stats[0], stats[1], stats[2], stats[3], template_name);
+	update = (char *) dest->next;
+	check = sprintf(update, "\t%d\t%d\t%d\t%d\t%s\t", stats[0], stats[1], stats[2], stats[3], template_name);
 	dest->next += check;
 	avail -= check;
 	/* header */
@@ -786,10 +789,10 @@ void updateFrags(struct FileBuff *dest, struct qseqs *qseq, struct qseqs *header
 	*/
 }
 
-void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, struct qseqs *header, struct FileBuff *dest) {
+void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, struct qseqs *header, struct FileBuff *dest) {
 	
 	int i, check, avail;
-	char *update;
+	char *update, bases[] = "ACGTN-";
 	
 	check = q_len;
 	avail = dest->bytes;
@@ -805,7 +808,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 	}
 	
 	/* copy seq */
-	update = dest->next;
+	update = (char *) dest->next;
 	++q_len;
 	while(--q_len) {
 		*update++ = bases[*qseq++];
@@ -816,7 +819,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 	if(avail < check) {
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
-		update = dest->next;
+		update = (char *) dest->next;
 	}
 	check = sprintf(update, "\t%d\t%d\t%d", bestHits, best_read_score, *best_start_pos);
 	avail -= check;
@@ -826,7 +829,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 		if(avail < 11) {
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
-			update = dest->next;
+			update = (char *) dest->next;
 		}
 		check = sprintf(update, ",%d", best_start_pos[i]);
 		avail -= check;
@@ -836,7 +839,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 	if(avail < 11) {
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
-		update = dest->next;
+		update = (char *) dest->next;
 	}
 	check = sprintf(update, "\t%d", *best_end_pos);
 	avail -= check;
@@ -845,7 +848,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 		if(avail < 11) {
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
-			update = dest->next;
+			update = (char *) dest->next;
 		}
 		check = sprintf(update, ",%d", best_end_pos[i]);
 		avail -= check;
@@ -855,7 +858,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 	if(avail < 11) {
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
-		update = dest->next;
+		update = (char *) dest->next;
 	}
 	check = sprintf(update, "\t%d", *bestTemplates);
 	avail -= check;
@@ -864,7 +867,7 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 		if(avail < 11) {
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
-			update = dest->next;
+			update = (char *) dest->next;
 		}
 		check = sprintf(update, ",%d", bestTemplates[i]);
 		avail -= check;
@@ -875,14 +878,15 @@ void updateAllFrag(char *qseq, int q_len, int bestHits, int best_read_score, int
 	if(avail < check) {
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
-		update = dest->next;
+		update = (char *) dest->next;
 	}
 	*update++ = '\t';
 	header->seq[header->len - 1] = '\n';
 	memcpy(update, header->seq, header->len);
+	update += header->len;
 	
 	dest->bytes = avail - check;
-	dest->next = update + header->len;
+	dest->next = (unsigned char *) update;
 }
 
 int openAndDetermine(struct FileBuff *inputfile, char *filename) {
@@ -933,9 +937,22 @@ int chunkPos(char *seq, int start, int end) {
 	return end;
 }
 
+unsigned char * ustrdup(unsigned char *src, size_t n) {
+	
+	unsigned char *dest;
+	
+	dest = malloc(n);
+	if(!dest) {
+		ERROR();
+	}
+	memcpy(dest, src, n);
+	
+	return dest;
+}
+
 int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, char *trans) {
 	
-	char *buff, *seq;
+	unsigned char *buff, *seq;
 	int size, avail;
 	
 	/* init */
@@ -1031,7 +1048,7 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 
 int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq, char *trans) {
 	
-	char *buff, *seq;
+	unsigned char *buff, *seq;
 	int size, avail;
 	
 	/* init */
@@ -1110,7 +1127,7 @@ int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq, char *trans) {
 
 int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, struct qseqs *qual, char *trans) {
 	
-	char *buff, *seq;
+	unsigned char *buff, *seq;
 	int size, avail;
 	
 	/* init */
@@ -1256,7 +1273,7 @@ int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq
 
 int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qual, char *trans) {
 	
-	char *buff, *seq;
+	unsigned char *buff, *seq;
 	int size, avail;
 	
 	/* init */
@@ -1386,7 +1403,7 @@ int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qua
 int getPhredFileBuff(struct FileBuff *dest) {
 	
 	int seek;
-	char *buff;
+	unsigned char *buff;
 	
 	buff = dest->next;
 	
@@ -1545,10 +1562,10 @@ int find_contamination2(int *out_Tem, int contamination_s) {
 	return -1;
 }
 
-void strrc(char *qseq, int q_len) {
+void strrc(unsigned char *qseq, int q_len) {
 	
 	int i, j, seqlen;
-	char carry, comp[6] = {3, 2, 1, 0, 4, 5};
+	unsigned char carry, comp[6] = {3, 2, 1, 0, 4, 5};
 	
 	seqlen = q_len >> 1;
 	
@@ -1642,16 +1659,15 @@ void resetComp(struct compDNA *compressor) {
 	compressor->complen = 0;
 }
 
-void strtranslate(const char *qseq, char *trans) {
+void strtranslate(unsigned char *strp, char *trans) {
 	
-	char *strp;
-	
-	for(strp = (char*) qseq; *strp; ++strp) {
+	while(*strp) {
 		*strp = trans[*strp];
+		++strp;
 	}
 }
 
-int translateToKmersAndDump(long unsigned *Kmers, int n, int max, char *qseq, int seqlen, long unsigned prefix, int prefix_len) {
+int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char *qseq, int seqlen, long unsigned prefix, int prefix_len) {
 	
 	int i, end, rc;
 	long unsigned key;
@@ -1723,7 +1739,7 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, char *qseq, in
 	return n;
 }
 
-void compDNA(struct compDNA *compressor, char *seq, int seqlen) {
+void compDNA(struct compDNA *compressor, unsigned char *seq, int seqlen) {
 	
 	int i, j, pos, end;
 	
@@ -1753,7 +1769,7 @@ void compDNA(struct compDNA *compressor, char *seq, int seqlen) {
 	}
 }
 
-void unCompDNA(struct compDNA *compressor, char *seq) {
+void unCompDNA(struct compDNA *compressor, unsigned char *seq) {
 	
 	int i;
 	
@@ -6066,7 +6082,8 @@ void run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, cha
 	
 	int fileCounter, phredCut, start, end;
 	unsigned FASTQ;
-	char *filename, *seq;
+	char *filename;
+	unsigned char *seq;
 	struct qseqs *header, *qseq, *qual;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
@@ -6168,7 +6185,8 @@ void run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, 
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
-	char *filename, *seq;
+	char *filename;
+	unsigned char *seq;
 	struct qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	struct FileBuff *inputfile, *inputfile2;
 	struct compDNA *compressor;
@@ -6351,7 +6369,8 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip,
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ;
-	char *filename, *seq;
+	char *filename;
+	unsigned char *seq;
 	struct qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
@@ -6512,7 +6531,8 @@ void run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip,
 void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveClip, char *trans) {
 	
 	int FASTQ, fileCounter, phredCut, start, end;
-	char *filename, *seq;
+	char *filename;
+	unsigned char *seq;
 	struct qseqs *qseq, *qual;
 	struct FileBuff *inputfile;
 	struct compKmers *Kmers;
@@ -7371,16 +7391,16 @@ void save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char 
 	
 }
 
-struct alnScore NW(const long unsigned *template, const char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned) {
+struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	char *query, t_nuc, *E_ptr, e;
+	unsigned char *query, t_nuc, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
 	q_len = q_e - q_s;
-	query = (char*)(queryOrg + q_s);
+	query = (unsigned char*)(queryOrg + q_s);
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -7625,16 +7645,16 @@ struct alnScore NW(const long unsigned *template, const char *queryOrg, int k, i
 	return Stat;
 }
 
-struct alnScore NW_band(const long unsigned *template, const char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned, int band) {
+struct alnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned, int band) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, q_pos, start, end, pos[2];
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	char *E_ptr, *query, t_nuc, e;
+	unsigned char *E_ptr, *query, t_nuc, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
 	q_len = q_e - q_s;
-	query = (char*)(queryOrg + q_s);
+	query = (unsigned char*)(queryOrg + q_s);
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -7938,16 +7958,16 @@ struct alnScore NW_band(const long unsigned *template, const char *queryOrg, int
 	return Stat;
 }
 
-struct alnScore NW_score(const long unsigned *template, const char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e) {
+struct alnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	char *query, t_nuc, *E_ptr, e;
+	unsigned char *query, t_nuc, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
 	q_len = q_e - q_s;
-	query = (char*)(queryOrg + q_s);
+	query = (unsigned char*)(queryOrg + q_s);
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -8165,16 +8185,16 @@ struct alnScore NW_score(const long unsigned *template, const char *queryOrg, in
 	return Stat;
 }
 
-struct alnScore NW_band_score(const long unsigned *template, const char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, int band) {
+struct alnScore NW_band_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, int band) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, q_pos, start, end, pos[2];
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	char *E_ptr, *query, t_nuc, e;
+	unsigned char *E_ptr, *query, t_nuc, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
 	q_len = q_e - q_s;
-	query = (char*)(queryOrg + q_s);
+	query = (unsigned char*)(queryOrg + q_s);
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -8668,11 +8688,11 @@ int chainMEMs(int *MEMs, int q_len, int restart) {
 	return bestScore;
 }
 
-struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct aln *aligned, struct aln *Frag_align, int min, int max) {
+struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_len, struct aln *aligned, struct aln *Frag_align, int min, int max) {
 	
 	int i, j, bias, prev, prev_index, stop, t_len, value, end, mem_count, band;
 	int t_s, t_e, q_s, q_e;
-	char nuc;
+	unsigned char nuc;
 	long unsigned key;
 	struct alnScore Stat, NWstat;
 	struct hashMap_index *template_index;
@@ -8962,11 +8982,11 @@ struct alnScore KMA(const int template_name, const char *qseq, int q_len, struct
 	return Stat;
 }
 
-struct alnScore KMA_score(const int template_name, const char *qseq, int q_len, const struct compDNA *qseq_comp) {
+struct alnScore KMA_score(const int template_name, const unsigned char *qseq, int q_len, const struct compDNA *qseq_comp) {
 	
 	int i, j, k, prev, prev_index, stop, t_len, value, end, mem_count, band;
 	int t_s, t_e, q_s, q_e;
-	char nuc;
+	unsigned char nuc;
 	struct alnScore Stat, NWstat;
 	struct hashMap_index *template_index;
 	
@@ -9187,7 +9207,7 @@ struct alnScore KMA_score(const int template_name, const char *qseq, int q_len, 
 	return Stat;
 }
 
-int preseed(struct hashMap_index *template_index, char *qseq, int q_len) {
+int preseed(struct hashMap_index *template_index, unsigned char *qseq, int q_len) {
 	
 	int i;
 	
@@ -9204,7 +9224,7 @@ int preseed(struct hashMap_index *template_index, char *qseq, int q_len) {
 	return i;
 }
 
-int anker_rc(const int template_name, char *qseq, int q_len) {
+int anker_rc(const int template_name, unsigned char *qseq, int q_len) {
 	
 	int i, j, rc, end, score, score_r, bestScore, value, t_len;
 	int prev, *track;
@@ -9335,7 +9355,7 @@ int significantAnd90Nuc(int X, int Y) {
 	return (p_chisqr(pow(X - Y, 2) / (X + Y)) <= evalue && (9 * (X + Y) <= 10 * X));
 }
 
-char baseCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, short unsigned *calls) {
+char baseCaller(unsigned char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, short unsigned *calls) {
 	
 	/* determine base at current position */
 	if(depthUpdate == 0) {
@@ -9354,11 +9374,10 @@ char baseCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct asse
 	return bestNuc;
 }
 
-char nanoCaller(char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, short unsigned *calls) {
-	
-	// calls = assembly[pos]
+char nanoCaller(unsigned char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, short unsigned *calls) {
 	
 	int j, bestBaseScore;
+	char bases[] = "ACGTN-";
 	
 	/* determine base at current position */
 	if(depthUpdate == 0) {
@@ -9395,8 +9414,9 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	int nextTemplate, file_i, max_asmlen, nextGap, stats[4], *assemNext;
 	unsigned depth, coverScore;
 	short unsigned (*assembly)[6];
+	char bases[] = "ACGTN-";
 	double score;
-	char bestNuc;
+	unsigned char bestNuc;
 	FILE *file;
 	struct alnScore alnStat;
 	
@@ -9692,8 +9712,9 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
 	unsigned depth, coverScore;
 	short unsigned (*assembly)[6];
+	char bases[] = "ACGTN-";
 	double score;
-	char bestNuc;
+	unsigned char bestNuc;
 	FILE *file;
 	struct alnScore alnStat;
 	
@@ -9900,7 +9921,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	free(assembly);
 }
 
-void update_Scores(char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, struct qseqs *header, FILE *frag_out_raw) {
+void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, struct qseqs *header, FILE *frag_out_raw) {
 	
 	int i, buffer[4];
 	
@@ -9933,7 +9954,7 @@ void update_Scores(char *qseq, int q_len, int counter, int score, int *start, in
 	}
 }
 
-void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, char *qseq, char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
 	
 	int t_i, template, read_score, best_read_score, bestHits, aln_len;
 	int start, end;
@@ -10024,7 +10045,7 @@ void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, 
 	}
 }
 
-void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, char *qseq, char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
 	
 	int t_i, template, read_score, best_read_score, best_read_score_r;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, rc;
@@ -10259,7 +10280,7 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 	}
 }
 
-void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, char *qseq, char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
 	
 	int t_i, template, read_score, best_read_score, best_read_score_r;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, rc;
@@ -10492,7 +10513,7 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 	}
 }
 
-void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, char *qseq, char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
 	
 	int t_i, template, read_score, best_read_score, bestHits, aln_len;
 	int start, end, rc;
@@ -10924,12 +10945,8 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			alignFrag->buffer[3] = start;
 			alignFrag->buffer[4] = end;
 			alignFrag->buffer[5] = header->len;
-			alignFrag->qseq = malloc(qseq->len);
-			alignFrag->header = strdup(header->seq);
-			if(!alignFrag->qseq || !alignFrag->header) {
-				ERROR();
-			}
-			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
+			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
+			alignFrag->header = ustrdup(header->seq, header->len);
 			alignFrag->next = alignFrags[bestTemplate];
 			alignFrags[bestTemplate] = alignFrag;
 			
@@ -11032,7 +11049,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 					depth = aligned_assem->depth;
 					depth /= t_len;
 					id = 100.0 * coverScore / t_len;
-					aln_len = strlen(aligned_assem->q) - countChar(aligned_assem->q, '-');
+					aln_len = countChar(aligned_assem->q, '-');
 					q_id = 100.0 * coverScore / aln_len;
 					cover = 100.0 * aln_len / t_len;
 					q_cover = 100.0 * t_len / aln_len;
@@ -11443,12 +11460,8 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			alignFrag->buffer[3] = start;
 			alignFrag->buffer[4] = end;
 			alignFrag->buffer[5] = header->len;
-			alignFrag->qseq = malloc(qseq->len);
-			alignFrag->header = strdup(header->seq);
-			if(!alignFrag->qseq || !alignFrag->header) {
-				ERROR();
-			}
-			memcpy(alignFrag->qseq, qseq->seq, qseq->len);
+			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
+			alignFrag->header = ustrdup(header->seq, header->len);
 			alignFrag->next = alignFrags[bestTemplate];
 			alignFrags[bestTemplate] = alignFrag;
 			
@@ -11559,7 +11572,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 					depth = aligned_assem->depth;
 					depth /= t_len;
 					id = 100.0 * coverScore / t_len;
-					aln_len = strlen(aligned_assem->q) - countChar(aligned_assem->q, '-');
+					aln_len = countChar(aligned_assem->q, '-');
 					q_id = 100.0 * coverScore / aln_len;
 					cover = 100.0 * aln_len / t_len;
 					q_cover = 100.0 * t_len / aln_len;
@@ -11873,7 +11886,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			depth = aligned_assem->depth;
 			depth /= t_len;
 			id = 100.0 * coverScore / t_len;
-			aln_len = strlen(aligned_assem->q) - countChar(aligned_assem->q, '-');
+			aln_len = countChar(aligned_assem->q, '-');
 			q_id = 100.0 * coverScore / aln_len;
 			cover = 100.0 * aln_len / t_len;
 			q_cover = 100.0 * t_len / aln_len;

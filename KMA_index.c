@@ -15,19 +15,20 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-#include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <ctype.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <time.h>
 #include <unistd.h>
-#include <errno.h>
 #include <zlib.h>
+
 
 #define CHUNK 1048576
 #define ENABLE_ZLIB_GZIP 32
@@ -123,15 +124,15 @@ struct valuesHash {
 struct qseqs {
 	int size;
 	int len;
-	char *seq;
+	unsigned char *seq;
 };
 
 struct FileBuff {
 	int bytes;
 	int buffSize;
-	char *buffer;
-	char *inBuffer;
-	char *next;
+	unsigned char *buffer;
+	unsigned char *inBuffer;
+	unsigned char *next;
 	FILE *file;
 	z_stream *strm;
 };
@@ -236,25 +237,6 @@ int int_eq(const int *s1, const int *s2, int len) {
 	return 1;
 }
 
-void strrc(char *qseq, int q_len) {
-	
-	static char comp[6] = {3, 2, 1, 0, 4, 5};
-	char carry;
-	int i, j, seqlen;
-	
-	seqlen = q_len >> 1;
-	
-	for(i = 0, j = q_len - 1; i < seqlen; ++i, --j) {
-		carry = comp[qseq[i]];
-		qseq[i] = comp[qseq[j]];
-		qseq[j] = carry;
-	}
-	if(q_len & 1) {
-		qseq[seqlen] = comp[qseq[seqlen]];
-	}
-	
-}
-
 /*
 	COMPRESSION FUNCTIONS
 */
@@ -331,10 +313,10 @@ void compDNA(struct compDNA *compressor, char *seq, int seqlen) {
 	}
 }
 
-int compDNAref(struct compDNA *compressor, char *qseq, int seqlen) {
+int compDNAref(struct compDNA *compressor, unsigned char *qseq, int seqlen) {
 	
 	int i, j, pos, end, bias;
-	char nuc, *seq;
+	unsigned char nuc, *seq;
 	
 	/* trim leadin N's */
 	seq = qseq;
@@ -612,7 +594,7 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	strm = dest->strm;
 	if(strm->avail_out != 0) {
 		strm->avail_in = fread(dest->inBuffer, 1, dest->buffSize, dest->file);
-		strm->next_in = (unsigned char*) dest->inBuffer;
+		strm->next_in = dest->inBuffer;
 		if(strm->avail_in == 0) {
 			dest->bytes = 0;
 			dest->next = dest->buffer;
@@ -622,7 +604,7 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	
 	/* reset uncompressed buffer */
 	strm->avail_out = dest->buffSize;
-	strm->next_out = (unsigned char*) dest->buffer;
+	strm->next_out = dest->buffer;
 	
 	/* uncompress buffer */
 	status = inflate(strm, Z_NO_FLUSH);
@@ -642,7 +624,7 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 void init_gzFile(struct FileBuff *inputfile) {
 	
 	int status;
-	char *tmp;
+	unsigned char *tmp;
 	z_stream *strm;
 	
 	/* set inBuffer, for compressed format */
@@ -672,7 +654,7 @@ void init_gzFile(struct FileBuff *inputfile) {
 		fprintf(stderr, "Gzip error %d\n", status);
 		exit(status);
 	}
-	strm->next_in = (unsigned char*) inputfile->inBuffer;
+	strm->next_in = inputfile->inBuffer;
 	strm->avail_in = inputfile->bytes;
 	
 	inputfile->strm = strm;
@@ -786,7 +768,7 @@ int chunkPos(char *seq, int start, int end) {
 
 int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq, char *trans) {
 	
-	char *buff, *seq;
+	unsigned char *buff, *seq;
 	int size, avail;
 	
 	/* init */
@@ -1133,7 +1115,7 @@ int CP(char *templatefilename, char *outputfilename) {
 
 int load_DBs(char *templatefilename, char *outputfilename) {
 	
-	int file_len, out_len, appender;
+	int file_len, out_len;
 	FILE *infile;
 	
 	file_len = strlen(templatefilename);
@@ -1186,26 +1168,25 @@ int load_DBs(char *templatefilename, char *outputfilename) {
 	/* cp name, seq and index */
 	strcat(templatefilename, ".name");
 	strcat(outputfilename, ".name");
-	appender = CP(templatefilename, outputfilename);
+	CP(templatefilename, outputfilename);
 	templatefilename[file_len] = 0;
 	outputfilename[out_len] = 0;
 	
 	strcat(templatefilename, ".seq.b");
 	strcat(outputfilename, ".seq.b");
-	appender = CP(templatefilename, outputfilename);
+	CP(templatefilename, outputfilename);
 	templatefilename[file_len] = 0;
 	outputfilename[out_len] = 0;
 	
 	if(template_ulengths == 0) {
 		strcat(templatefilename, ".index.b");
 		strcat(outputfilename, ".index.b");
-		appender = CP(templatefilename, outputfilename);
+		CP(templatefilename, outputfilename);
 		templatefilename[file_len] = 0;
 		outputfilename[out_len] = 0;
 	}
 	
 	return 1;
-	//return appender;
 }
 
 int megaMap_addKMA(long unsigned key, int value, int extend) {
@@ -3307,6 +3288,7 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	
 	int fileCounter, file_len, bias, FASTQ;
 	char *filename;
+	unsigned char *seq;
 	FILE *index_out, *seq_out, *length_out, *name_out, *DB_update;
 	struct qseqs *header, *qseq;
 	struct FileBuff *inputfile;
@@ -3397,7 +3379,11 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 				bias = compDNAref(compressor, qseq->seq, qseq->len);
 				if(qseq->len > MinLen && update_DB(compressor)) {
 					/* Update annots */
-					chomp(header->seq);
+					seq = header->seq + header->len;
+					while(isspace(*--seq)) {
+						*seq = 0;
+					}
+					
 					if(bias > 0) {
 						fprintf(name_out, "%s B%d\n", header->seq + 1, bias);
 					} else {
@@ -3418,16 +3404,6 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 			}
 		}
 	}
-	
-	char bases[] = "ACGTN-";
-	fprintf(stderr, "%s", header->seq);
-	for(int i = 0; i < qseq->len; ++i) {
-		if(i % 60 == 0) {
-			fprintf(stderr, "\n");
-		}
-		fprintf(stderr, "%c", bases[qseq->seq[i]]);
-	}
-	fprintf(stderr, "\n");
 	
 	/* Dump annots */
 	fwrite(&DB_size, sizeof(int), 1, length_out);
@@ -3500,6 +3476,7 @@ int main(int argc, char *argv[]) {
 	unsigned megaDB;
 	char **inputfiles, *outputfilename, *templatefilename, **deconfiles;
 	char *line, *to2Bit;
+	unsigned char *update;
 	struct hashMapKMA *finalDB;
 	FILE *inputfile, *out;
 	
@@ -3804,9 +3781,10 @@ int main(int argc, char *argv[]) {
 				} else {
 					prefix_len = strlen(argv[args]);
 					prefix = 0;
+					update = (unsigned char *) argv[args];
 					for(i = 0; i < prefix_len; ++i) {
-						prefix = (prefix << 2) | to2Bit[argv[args][i]];
-						if(to2Bit[argv[args][i]] > 3) {
+						prefix = (prefix << 2) | to2Bit[update[i]];
+						if(to2Bit[update[i]] > 3) {
 							fprintf(stderr, "Invalid prefix.\n");
 							exit(1);
 						}
