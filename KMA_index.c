@@ -29,7 +29,6 @@
 #include <unistd.h>
 #include <zlib.h>
 
-
 #define CHUNK 1048576
 #define ENABLE_ZLIB_GZIP 32
 #define getNuc(Comp,pos)((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
@@ -185,30 +184,6 @@ int chomp(char *string) {
 	++k;
 	string[k] = 0;
 	return k;
-}
-
-char * fget_line(char *line, int *line_size, int *l_len, FILE *file) {
-	
-	int i, grow;
-	i = 0;
-	*l_len = 0;
-	grow = *line_size;
-	
-	while(!feof(file) && fgets((line + i), grow, file) != NULL) {
-		*l_len = chomp(line);
-		if(*l_len == (*line_size - 1)) { //realloc
-			i = *l_len;
-			*line_size += grow;
-			line = realloc(line, *line_size);
-			if(line == NULL) {
-				ERROR();
-			}
-		} else {
-			return line;
-		}
-	}
-	line[0] = 0;
-	return line;
 }
 
 int uint_eq(const unsigned *s1, const unsigned *s2, int len) {
@@ -3472,10 +3447,10 @@ void helpMessage(int exeStatus) {
 int main(int argc, char *argv[]) {
 	
 	int i, args, stop, filecount, deconcount, sparse_run;
-	int line_size, l_len, mapped_cont, file_len, appender;
+	int size, l_len, mapped_cont, file_len, appender;
 	unsigned megaDB;
 	char **inputfiles, *outputfilename, *templatefilename, **deconfiles;
-	char *line, *to2Bit;
+	char *to2Bit, *line;
 	unsigned char *update;
 	struct hashMapKMA *finalDB;
 	FILE *inputfile, *out;
@@ -3512,10 +3487,8 @@ int main(int argc, char *argv[]) {
 	megaDB = 0;
 	inputfiles = malloc(sizeof(char*));
 	deconfiles = malloc(sizeof(char*));
-	line_size = 256;
-	line = malloc(line_size);
 	to2Bit = malloc(384);
-	if(!inputfiles || !deconfiles || !line || !to2Bit) {
+	if(!inputfiles || !deconfiles || !to2Bit) {
 		ERROR();
 	}
 	/* set to2Bit */
@@ -3730,46 +3703,108 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-batch") == 0) {
 			++args;
 			if(args < argc) {
-				inputfile = fopen(argv[args], "r");
+				inputfile = fopen(argv[args], "rb");
 				if(!inputfile) {
 					ERROR();
 				}
-				while(!feof(inputfile) && *(line = fget_line(line, &line_size, &l_len, inputfile))) {
-					if(l_len != 0) {
-						++filecount;
-						inputfiles = realloc(inputfiles, filecount * sizeof(char*));
-						if(inputfiles == NULL) {
-							ERROR();
-						}
-						inputfiles[filecount - 1] = strdup(line);
-						if(inputfiles[filecount - 1] == NULL) {
-							ERROR();
+				fseek(inputfile, 0, SEEK_END);
+				size = ftell(inputfile) + 1;
+				rewind(inputfile);
+				
+				++filecount;
+				inputfiles = realloc(inputfiles, filecount * sizeof(char*));
+				if(!inputfiles) {
+					ERROR();
+				}
+				inputfiles[filecount - 1] = malloc(size);
+				if(!inputfiles[filecount - 1]) {
+					ERROR();
+				}
+				
+				/* get number of file */
+				fread(inputfiles[filecount - 1], 1, size - 1, inputfile);
+				fclose(inputfile);
+				
+				i = size;
+				size = 0;
+				line = inputfiles[filecount - 1];
+				while(--i) {
+					if(line[i] == '\n') {
+						size++;
+						while(isspace(line[i])) {
+							line[i] = 0;
+							--i;
 						}
 					}
 				}
-				fclose(inputfile);
+				--size;
+				inputfiles = realloc(inputfiles, (filecount + size) * sizeof(char*));
+				if(!inputfiles) {
+					ERROR();
+				}
+				for(i = size; i; --i) {
+					while(*line != 0) {
+						++line;
+					}
+					while(*line == 0) {
+						++line;
+					}
+					inputfiles[filecount] = line;
+					++filecount;
+				}
 			}
 		} else if(strcmp(argv[args], "-batchD") == 0) {
 			++args;
 			if(args < argc) {
-				inputfile = fopen(argv[args], "r");
+				inputfile = fopen(argv[args], "rb");
 				if(!inputfile) {
 					ERROR();
 				}
-				while(!feof(inputfile) && *(line = fget_line(line, &line_size, &l_len, inputfile))) {
-					if(l_len != 0) {
-						++deconcount;
-						deconfiles = realloc(deconfiles, deconcount * sizeof(char*));
-						if(deconfiles == NULL) {
-							ERROR();
-						}
-						deconfiles[deconcount - 1] = strdup(line);
-						if(deconfiles[deconcount - 1] == NULL) {
-							ERROR();
+				fseek(inputfile, 0, SEEK_END);
+				size = ftell(inputfile) + 1;
+				rewind(inputfile);
+				
+				++deconcount;
+				deconfiles = realloc(deconfiles, deconcount * sizeof(char*));
+				if(!inputfiles) {
+					ERROR();
+				}
+				deconfiles[deconcount - 1] = malloc(size);
+				if(!deconfiles[deconcount - 1]) {
+					ERROR();
+				}
+				
+				/* get number of file */
+				fread(deconfiles[deconcount - 1], 1, size - 1, inputfile);
+				fclose(inputfile);
+				
+				i = size;
+				size = 0;
+				line = deconfiles[deconcount - 1];
+				while(--i) {
+					if(line[i] == '\n') {
+						size++;
+						while(isspace(line[i])) {
+							line[i] = 0;
+							--i;
 						}
 					}
 				}
-				fclose(inputfile);
+				--size;
+				deconfiles = realloc(deconfiles, (deconcount + size) * sizeof(char*));
+				if(!inputfiles) {
+					ERROR();
+				}
+				for(i = size; i; --i) {
+					while(*line != 0) {
+						++line;
+					}
+					while(*line == 0) {
+						++line;
+					}
+					deconfiles[deconcount] = line;
+					++deconcount;
+				}
 			}
 		} else if(strcmp(argv[args], "-Sparse") == 0) {
 			sparse_run = 1;

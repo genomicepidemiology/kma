@@ -65,6 +65,7 @@ Some of the most important options:
 -Mt1 Match to only one template in the database.
 -ID Minimum identity to output template match.
 -apm Paired end method, “p”: Reward if pairing the reads, “u”: unite best template matches in each read if possible, “f” force paired reads to pair.
+-1t1 One read to one template, no splicing performed. Well suited for short reads and whole genome mapping.
 -bc90 Basecalls should be significantly overrepresented, and have at least 90% agreement.
 -bcNano Basecalls optimized for nanopore sequencing.
 -mrs minimum alignment score normalized to alignment length.
