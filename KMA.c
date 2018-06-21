@@ -191,7 +191,7 @@ struct kmerScan_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 6};
+int version[3] = {0, 14, 7};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -9845,13 +9845,15 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	
 	/* Allocate assembly arrays */
 	t_len = template_lengths[template];
-	assembly = calloc(t_len + 1, 6 * sizeof(short unsigned));
 	if(aligned_assem->size <= t_len) {
 		aligned_assem->size = t_len + 1;
 		aligned_assem->t = malloc(t_len + 1);
 		aligned_assem->s = malloc(t_len + 1);
 		aligned_assem->q = malloc(t_len + 1);
 	}
+	
+	assembly = calloc(((int) (pow(2, ceil(log(t_len + 1)/log(2))) + 0.5)) * 6, sizeof(short unsigned));
+	//assembly = calloc((t_len + 1), 6 * sizeof(short unsigned));
 	if(!assembly || !aligned_assem->t || !aligned_assem->s || !aligned_assem->q) {
 		ERROR();
 	}
@@ -9876,7 +9878,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 				stats[3] = buffer[5];
 				header->len = buffer[6];
 				
-				if(delta < qseq->len) {
+				if(qseq->size < qseq->len) {
 					free(qseq->seq);
 					qseq->size = qseq->len << 1;
 					qseq->seq = malloc(qseq->size);
@@ -9896,8 +9898,8 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 				fread(header->seq, 1, header->len, file);
 				header->seq[header->len] = 0;
 				
-				if(delta < qseq->len) {
-					delta = qseq->len << 1;
+				if(delta < qseq->size) {
+					delta = qseq->size;
 					free(aligned->t);
 					free(aligned->s);
 					free(aligned->q);
@@ -11650,6 +11652,10 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			p_value  = p_chisqr(q_value);
 			
 			if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
+				/* here */
+				/* ConClave 2 */
+				//fprintf(stdout, "%s\t%d\t%d\t%d\n", template_names[template], w_scores[template], alignment_scores[template], uniq_alignment_scores[template]);
+				
 				/* load DB */
 				templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], 0, 0);
 				
