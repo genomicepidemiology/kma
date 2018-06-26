@@ -194,6 +194,7 @@ struct assembly {
 };
 
 struct assemInfo {
+	int len;
 	int size;
 	struct assembly *assmb;
 };
@@ -202,7 +203,7 @@ struct assemInfo {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 7};
+int version[3] = {0, 14, 8};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -817,10 +818,11 @@ void destroyGzFileBuff(struct FileBuff *dest) {
 	free(dest);
 }
 
-void updateMatrix(struct FileBuff *dest, char *template_name, unsigned char *template_seq, struct assembly *assembly, int asm_len) {
+void updateMatrix(struct FileBuff *dest, char *template_name, long unsigned *template_seq, struct assemInfo *matrix, int t_len) {
 	
-	int i, pos, check, avail;
-	char *update;
+	int i, pos, check, avail, asm_len;
+	char *update, bases[] = "ACGTN-";
+	struct assembly *assembly;
 	
 	/* check buffer capacity */
 	check = strlen(template_name) + 2;
@@ -838,7 +840,10 @@ void updateMatrix(struct FileBuff *dest, char *template_name, unsigned char *tem
 	*update++ = '\n';
 	
 	/* fill in rows */
-	for(i = 0, pos = 0; i < asm_len; ++i, pos = assembly[pos].next) {
+	asm_len = matrix->len;
+	assembly = matrix->assmb;
+	i = 0;
+	for(pos = 0; asm_len != 0; --asm_len, pos = assembly[pos].next) {
 		/* check buffer capacity */
 		if(dest->bytes < 38) {
 			writeGzFileBuff(dest);
@@ -847,7 +852,12 @@ void updateMatrix(struct FileBuff *dest, char *template_name, unsigned char *tem
 		}
 		
 		/* update with row */
-		check = sprintf(update, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", template_seq[i], assembly[pos].counts[0], assembly[pos].counts[1], assembly[pos].counts[2], assembly[pos].counts[3], assembly[pos].counts[4], assembly[pos].counts[5]);
+		if(pos < t_len) {
+			check = sprintf(update, "%c\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", bases[getNuc(template_seq, i)], assembly[pos].counts[0], assembly[pos].counts[1], assembly[pos].counts[2], assembly[pos].counts[3], assembly[pos].counts[4], assembly[pos].counts[5]);
+			++i;
+		} else {
+			check = sprintf(update, "-\t%hu\t%hu\t%hu\t%hu\t%hu\t%hu\n", assembly[pos].counts[0], assembly[pos].counts[1], assembly[pos].counts[2], assembly[pos].counts[3], assembly[pos].counts[4], assembly[pos].counts[5]);
+		}
 		avail -= check;
 		update += check;
 	}
@@ -9817,6 +9827,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	}
 	
 	/* Trim alignment on consensus */
+	matrix->len = asm_len;
 	coverScore = 0;
 	bias = 0;
 	for(i = 0; i < asm_len; ++i) {
@@ -10071,6 +10082,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	aligned_assem->len = t_len;
 	
 	matrix->assmb = assembly;
+	matrix->len = t_len;
 	matrix->size = t_len + 1;
 }
 
@@ -11269,7 +11281,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 					printConsensus(aligned_assem, template_names[template], alignment_out, consensus_out);
 					/* print matrix */
 					if(matrix_out) {
-						updateMatrix(matrix_out, template_names[template], aligned_assem->t, matrix->assmb, t_len);
+						updateMatrix(matrix_out, template_names[template], templates_index[template]->seq, matrix, t_len);
 					}
 				}
 			}
@@ -11738,7 +11750,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 					printConsensus(aligned_assem, template_names[template], alignment_out, consensus_out);
 					/* print matrix */
 					if(matrix_out) {
-						updateMatrix(matrix_out, template_names[template], aligned_assem->t, matrix->assmb, t_len);
+						updateMatrix(matrix_out, template_names[template], templates_index[template]->seq, matrix, t_len);
 					}
 				}
 				/* destroy this DB index */
@@ -12034,7 +12046,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			printConsensus(aligned_assem, *template_names, alignment_out, consensus_out);
 			/* print matrix */
 			if(matrix_out) {
-				updateMatrix(matrix_out, *template_names, aligned_assem->t, matrix->assmb, t_len);
+				updateMatrix(matrix_out, *template_names, templates_index[0]->seq, matrix, t_len);
 			}
 		}
 		/* destroy this DB index */
