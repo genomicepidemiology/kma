@@ -199,11 +199,22 @@ struct assemInfo {
 	struct assembly *assmb;
 };
 
+struct alnPoints {
+	int size;
+	int len;
+	int *tStart;
+	int *tEnd;
+	int *qStart;
+	int *qEnd;
+	int *weight;
+	int *score;
+	int *next;
+};
 
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 8};
+int version[3] = {0, 14, 9};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -230,7 +241,7 @@ void (*printPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*printPairPtr)(int*, struct compDNA*, int, struct qseqs*, struct compDNA*, int, struct qseqs*);
 void (*deConPrintPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*ankerPtr)(int*, int*, int*, int**, int**, int*, struct compDNA*, int, int, int, int, struct qseqs*);
-void (*assemblyPtr)(struct assem*, int, FILE**, int, struct FileBuff*, char*, struct aln*, struct aln*, struct qseqs*, struct qseqs*, struct assemInfo *);
+void (*assemblyPtr)(struct assem*, int, FILE**, int, struct FileBuff*, char*, struct aln*, struct aln*, struct qseqs*, struct qseqs*, struct assemInfo *, struct alnPoints *);
 void (*destroyPtr)(int);
 struct hashMap_index * (*alignLoadPtr)(FILE*, FILE*, int, long unsigned, long unsigned);
 int * (*hashMap_get)(long unsigned);
@@ -238,7 +249,7 @@ void (*kmerScan)(int*, int*, int*, int*, struct compDNA*, struct compDNA*, struc
 void (*save_kmers_pair)(int*, int*, int*, int*, int*, int*, struct compDNA*, struct compDNA*, struct qseqs*, struct qseqs*, int*);
 void (*printFsa_ptr)(struct qseqs*, struct qseqs*, struct compDNA*);
 void (*printFsa_pair_ptr)(struct qseqs*, struct qseqs*, struct qseqs*, struct qseqs*, struct compDNA*);
-void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, unsigned char*, unsigned char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*);
+void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, unsigned char*, unsigned char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*, struct alnPoints *);
 long unsigned (*getKmerP)(long unsigned *, unsigned);
 int (*cmp)(int, int);
 int (*significantBase)(int, int);
@@ -3634,206 +3645,6 @@ int loadFsa(struct compDNA *qseq, struct qseqs *header, FILE *inputfile) {
 	return buffer[3];
 }
 
-void get_kmers_old(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, int *BestScore, int *BestScore_r, int *extendScore) {
-	
-	/* save_kmers find ankering k-mers the in query sequence,
-	   and is the time determining step */
-	int i, j, l, end, HIT, bestHits, hitCounter, bestScore, bestScore_r, reps;
-	int *values, *last;
-	
-	if(qseq->seqlen < kmersize) {
-		return;
-	}
-	
-	bestScore = 0;
-	bestScore_r = 0;
-	
-	/* reverse complement qseq */
-	rc_comp(qseq, qseq_r);
-	
-	/* Search forward strand */
-	/* Make quick check of the qseq */
-	HIT = exhaustive;
-	j = 0;
-	qseq->N[0]++;
-	qseq->N[qseq->N[0]] = qseq->seqlen;
-	for(i = 1; i <= qseq->N[0] && !HIT; ++i) {
-		end = qseq->N[i] - kmersize + 1;
-		for(;j < end && !HIT; j += kmersize) {
-			if(hashMap_get(getKmer(qseq->seq, j))) {
-				HIT = 1;
-			}
-		}
-		j = qseq->N[i] + 1;
-	}
-	
-	/* If deltamer qseq hits, then continue */
-	if(HIT) {
-		/* Scan the deltamer exhaustively, and collect scores in Score*/
-		hitCounter = 0;
-		*bestTemplates = 0;
-		last = 0;
-		reps = 0;
-		j = 0;
-		end = qseq->seqlen;
-		for(i = 1; i <= qseq->N[0]; ++i) {
-			end = qseq->N[i] - kmersize + 1;
-			for(;j < end; ++j) {
-				if((values = hashMap_get(getKmer(qseq->seq, j)))) {
-					if(values == last) {
-						++reps;
-					} else {
-						if(last) {
-							for(l = 1; l <= *last; ++l) {
-								if(Score[last[l]] > 0) {
-									Score[last[l]] += reps;
-								} else {
-									Score[last[l]] = reps;
-									bestTemplates[0]++;
-									bestTemplates[*bestTemplates] = last[l];
-								}
-							}
-							hitCounter += reps;
-						}
-						reps = 1;
-						last = values;
-					}
-				}
-			}
-			j = qseq->N[i] + 1;
-		}
-		if(last) {
-			for(l = 1; l <= *last; ++l) {
-				if(Score[last[l]] > 0) {
-					Score[last[l]] += reps;
-				} else {
-					Score[last[l]] = reps;
-					bestTemplates[0]++;
-					bestTemplates[*bestTemplates] = last[l];
-				}
-			}
-			hitCounter += reps;
-		}
-		reps = 0;
-		
-		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
-			bestHits = 0;
-			for(l = 1; l <= *bestTemplates; ++l) {
-				if(Score[bestTemplates[l]] > bestScore) {
-					bestScore = Score[bestTemplates[l]];
-					bestHits = 1;
-					bestTemplates[bestHits] = bestTemplates[l];
-				} else if(Score[bestTemplates[l]] == bestScore) {
-					++bestHits;
-					bestTemplates[bestHits] = bestTemplates[l];
-				}
-				Score[bestTemplates[l]] = 0;
-			}
-			*bestTemplates = bestHits;
-		} else {
-			for(l = 1; l <= *bestTemplates; ++l) {
-				Score[bestTemplates[l]] = 0;
-			}
-			*bestTemplates = 0;
-		}
-	}
-	qseq->N[0]--;
-	
-	/* search rc strand */
-	/* Make quick check of the qseq */
-	HIT = exhaustive;
-	j = 0;
-	qseq_r->N[0]++;
-	qseq_r->N[qseq_r->N[0]] = qseq_r->seqlen;
-	for(i = 1; i <= qseq_r->N[0] && !HIT; ++i) {
-		end = qseq_r->N[i] - kmersize + 1;
-		for(;j < end && !HIT; j += kmersize) {
-			if(hashMap_get(getKmer(qseq_r->seq, j))) {
-				HIT = 1;
-			}
-		}
-		j = qseq_r->N[i] + 1;
-	}
-	
-	/* If deltamer qseq hits, then continue */
-	if(HIT) {
-		/* Scan the deltamer exhaustively, and collect scores in Score*/
-		hitCounter = 0;
-		*bestTemplates_r = 0;
-		last = 0;
-		reps = 0;
-		j = 0;
-		end = qseq_r->seqlen;
-		for(i = 1; i <= qseq_r->N[0]; ++i) {
-			end = qseq_r->N[i] - kmersize + 1;
-			for(;j < end; ++j) {
-				if((values = hashMap_get(getKmer(qseq_r->seq, j)))) {
-					if(values == last) {
-						++reps;
-					} else {
-						if(last) {
-							for(l = 1; l <= *last; ++l) {
-								if(Score_r[last[l]] > 0) {
-									Score_r[last[l]] += reps;
-								} else {
-									Score_r[last[l]] = reps;
-									bestTemplates_r[0]++;
-									bestTemplates_r[*bestTemplates_r] = last[l];
-								}	
-							}
-							hitCounter += reps;
-						}
-						reps = 1;
-						last = values;
-					}
-				}
-			}
-			j = qseq_r->N[i] + 1;
-		}
-		if(last) {
-			for(l = 1; l <= *last; ++l) {
-				if(Score_r[last[l]] > 0) {
-					Score_r[last[l]] += reps;
-				} else {
-					Score_r[last[l]] = reps;
-					bestTemplates_r[0]++;
-					bestTemplates_r[*bestTemplates_r] = last[l];
-				}	
-			}
-			hitCounter += reps;
-		}
-		reps = 0;
-		
-		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
-			bestHits = 0;
-			for(l = 1; l <= *bestTemplates_r; ++l) {
-				if(Score_r[bestTemplates_r[l]] > bestScore_r) {
-					bestScore_r = Score_r[bestTemplates_r[l]];
-					bestHits = 1;
-					bestTemplates_r[bestHits] = bestTemplates_r[l];
-				} else if(Score_r[bestTemplates_r[l]] == bestScore_r) {
-					++bestHits;
-					bestTemplates_r[bestHits] = bestTemplates_r[l];
-				}
-				Score_r[bestTemplates_r[l]] = 0;
-			}
-			*bestTemplates_r = bestHits;
-		} else {
-			for(l = 1; l <= *bestTemplates_r; ++l) {
-				Score_r[bestTemplates_r[l]] = 0;
-			}
-			*bestTemplates_r = 0;
-		}
-	}
-	qseq_r->N[0]--;
-	
-	*BestScore = bestScore;
-	*BestScore_r = bestScore_r;
-	
-}
-
 void get_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, int *BestScore, int *BestScore_r, int *extendScore) {
 	
 	/* save_kmers find ankering k-mers the in query sequence,
@@ -4178,92 +3989,6 @@ void get_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_
 	*BestScore = bestScore;
 	*BestScore_r = bestScore_r;
 	
-}
-
-int get_kmers_for_pair_old(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, int *extendScore) {
-	
-	/* save_kmers find ankering k-mers the in query sequence,
-	   and is the time determining step */
-	int i, j, l, rc, end, HIT, reps;
-	int *values, *last, *bests, *Scores;
-	
-	if(qseq->seqlen < kmersize) {
-		return 0;
-	}
-	
-	*bestTemplates = 0;
-	*bestTemplates_r = 0;
-	bests = bestTemplates;
-	Scores = Score;
-	for(rc = 0; rc < 2; ++rc) {
-		if(rc) {
-			bests = bestTemplates_r;
-			Scores = Score_r;
-			comp_rc(qseq);
-		}
-		/* Make quick check of the qseq */
-		HIT = exhaustive;
-		j = 0;
-		qseq->N[0]++;
-		qseq->N[qseq->N[0]] = qseq->seqlen;
-		for(i = 1; i <= qseq->N[0] && !HIT; ++i) {
-			end = qseq->N[i] - kmersize + 1;
-			for(;j < end && !HIT; j += kmersize) {
-				if(hashMap_get(getKmer(qseq->seq, j))) {
-					HIT = 1;
-				}
-			}
-			j = qseq->N[i] + 1;
-		}
-		
-		/* If deltamer qseq hits, then continue */
-		if(HIT) {
-			/* Scan the deltamer exhaustively, and collect scores in Score*/
-			last = 0;
-			reps = 0;
-			j = 0;
-			for(i = 1; i <= qseq->N[0]; ++i) {
-				end = qseq->N[i] - kmersize + 1;
-				for(;j < end; ++j) {
-					if((values = hashMap_get(getKmer(qseq->seq, j)))) {
-						if(values == last) {
-							++reps;
-						} else {
-							if(last) {
-								for(l = 1; l <= *last; ++l) {
-									if(Scores[last[l]]) {
-										Scores[last[l]] += reps;
-									} else {
-										Scores[last[l]] = reps;
-										bests[0]++;
-										bests[*bests] = last[l];
-									}
-								}
-							}
-							reps = 1;
-							last = values;
-						}
-					}
-				}
-				j = qseq->N[i] + 1;
-			}
-			if(last) {
-				for(l = 1; l <= *last; ++l) {
-					if(Scores[last[l]]) {
-						Scores[last[l]] += reps;
-					} else {
-						Scores[last[l]] = reps;
-						bests[0]++;
-						bests[*bests] = last[l];
-					}
-				}
-			}
-			reps = 0;
-		}
-		qseq->N[0]--;
-	}
-	
-	return (*bestTemplates | *bestTemplates_r);
 }
 
 int get_kmers_for_pair(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, int *extendScore) {
@@ -5085,39 +4810,6 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 		}
 	}
 	qseq_r->N[0]--;
-	
-	/* Validate best match */
-	if(bestScore > 0 || bestScore_r > 0) {
-		end = qseq->seqlen + 1;
-		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
-			if(bestScore > bestScore_r) {
-				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq, bestScore, header);
-				unlock(excludeOut);
-			} else if(bestScore < bestScore_r) {
-				lock(excludeOut);
-				deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header);
-				unlock(excludeOut);
-			} else {
-				/* merge */
-				for(i = 1; i <= *bestTemplates_r; ++i) {
-					bestTemplates[0]++;
-					bestTemplates[*bestTemplates] = -bestTemplates_r[i];
-				}
-				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq, -bestScore, header);
-				unlock(excludeOut);
-			}
-		}
-	}
-}
-
-void save_kmers_old(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
-	
-	int i, end, bestScore, bestScore_r;
-	bestScore = 0;
-	bestScore_r = 0;
-	get_kmers(bestTemplates, bestTemplates_r, Score, Score_r, qseq, qseq_r, &bestScore, &bestScore_r, extendScore);
 	
 	/* Validate best match */
 	if(bestScore > 0 || bestScore_r > 0) {
@@ -7781,9 +7473,10 @@ struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg,
 
 struct alnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned, int band) {
 	
-	int m, n, t_len, q_len, thisScore, nuc_pos, q_pos, start, end, pos[2];
+	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
+	int bq_len, halfBand, sn, en, sq, eq, q_pos, c_pos;
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	unsigned char *E_ptr, *query, t_nuc, e;
+	unsigned char *query, t_nuc, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
@@ -7818,21 +7511,27 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 		return Stat;
 	}
 	
+	/* ensure that band is equal */
+	if(band & 1) {
+		++band;
+	}
+	halfBand = band >> 1;
+	
 	/* check matrix size */
 	if(NW_q <= band) {
 		NW_q = band << 1;
 		free(D[0]);
 		free(P[0]);
-		D[0] = malloc((band << 1) * sizeof(int));
-		P[0] = malloc((band << 1) * sizeof(int));
+		D[0] = malloc((NW_q << 1) * sizeof(int));
+		P[0] = malloc((NW_q << 1) * sizeof(int));
 		if(!D[0] || !P[0]) {
 			ERROR();
 		}
 		D[1] = D[0] + NW_q;
 		P[1] = P[0] + NW_q;
 	}
-	if(NW_s <= ((q_len + 1) * (t_len + 1))) {
-		NW_s = ((q_len + 2) * (t_len + 2));
+	if(NW_s <= ((band + 2) * (t_len + 1))) {
+		NW_s = ((band + 3) * (t_len + 2));
 		free(E);
 		E = malloc(NW_s);
 		if(!E) {
@@ -7840,92 +7539,74 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 		}
 	}
 	
-	--band;
-	band >>= 1;
-	band <<= 1;
-	
 	/* fill in start penalties */
+	bq_len = band + 1; /* (band + 1) ~ q_len */
 	D_ptr = D[0];
 	D_prev = D[1];
 	P_ptr = P[0];
 	P_prev = P[1];
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	if(0 < k) {
-		E_ptr = E;
-		for(m = 0; m < t_len - (band >> 1); ++m) {
-			E_ptr[band] = 0;
-			E_ptr += (band + 1);
-		}
-		for(m = t_len - (band >> 1), n = band - 1; m < t_len; ++m, --n) {
-			E_ptr[n] = 0;
-			E_ptr += (band + 1);
-		}
-		band >>= 1;
-		if(k == 1) {
-			for(n = band - 1; n >= 0; --n) {
-				D_prev[n] = W1 + (band - 1 - n) * U;
-				P_prev[n] = thisScore;
-				E_ptr[n] = 3;
-			}
-			E_ptr[band - 1] = 18;
-			E_ptr[band] = 0;
-			D_prev[band] = 0;
-			P_prev[band] = 0;
-		} else {
-			for(n = band; n >= 0; --n) {
-				D_prev[n] = 0;
-				P_prev[n] = thisScore;
-				E_ptr[n] = 0;
-			}
-		}
-	} else {
-		E_ptr = E;
-		for(m = 0; m < t_len - (band >> 1); ++m) {
-			E_ptr[band] = 37;
-			E_ptr += (band + 1);
-		}
-		for(m = t_len - (band >> 1), n = band - 1; m < t_len; ++m, --n) {
-			E_ptr[n] = 37;
-			E_ptr += (band + 1);
-		}
-		if(t_len != 1) {
-			E_ptr[(-1) -(band >> 1)] = 36;
-		}
-		
-		band >>= 1;
-		for(n = band - 1; n >= 0; --n) {
-			D_prev[n] = W1 + (band - 1 - n) * U;
+	
+	E_ptr = E + (t_len * (bq_len + 1));
+	c_pos = (t_len + q_len) >> 1;
+	
+	
+	sn = q_len - 1 - (c_pos - halfBand);
+	if(k != 2) {
+		for(n = sn - 1; n >= 0; --n) {
+			D_prev[n] = W1 + (sn - n - 1) * U;
 			P_prev[n] = thisScore;
 			E_ptr[n] = 3;
 		}
-		E_ptr[band - 1] = 18;
-		E_ptr[band] = 0;
-		D_prev[band] = 0;
-		P_prev[band] = 0;
+		E_ptr[sn - 1] = 18;
+		E_ptr[sn] = 0;
+		D_prev[sn] = 0;
+		P_prev[sn] = 0;
+	} else {
+		for(n = sn; n >= 0; --n) {
+			D_prev[n] = 0;
+			P_prev[n] = thisScore;
+			E_ptr[n] = 0;
+		}
 	}
-	E_ptr -= ((band << 1) + 1);
+	E_ptr -= (bq_len + 1);
+	
 	
 	/* Perform banded NW */
 	pos[0] = 0;
-	for(m = t_len - 1, nuc_pos = m + t_s; m >= 0; --m, --nuc_pos) {
-		start = MIN((band << 1) - 1, band + (t_len - 1 - m) - 2);
+	en = 0;
+	c_pos = (t_len + q_len) >> 1;
+	for(m = t_len - 1, nuc_pos = t_s + t_len - 1; m >= 0; --m, --nuc_pos, --c_pos) {
 		
-		end = MAX(1, band - m);
+		/* get banded boundaries, w.r.t. query */
+		sq = c_pos + halfBand;
+		eq = c_pos - halfBand;
 		
-		q_pos = MIN(q_len - 1, m + band - 1);
-		
-		if(m < t_len - band) {
-			D_ptr[start + 1] = (t_len + q_len) * (MM + U + W1);
-			E_ptr[start + 1] = 37;
+		if(eq < 0) {
+			eq = 0;
+			++en;
 		} else {
-			D_ptr[start + 1] = 0 < k ? 0 : W1 + (t_len - 1 - m) * U;
-			E_ptr[start + 1] = 0 < k ? 0 : 37;
+			en = 0;
 		}
+		
+		/* get start penalties */
 		Q_prev = (t_len + q_len) * (MM + U + W1);
+		/* check boundaries */
+		if(sq < (q_len - 1)) {
+			sn = bq_len - 1;
+			D_ptr[bq_len] = (t_len + q_len) * (MM + U + W1);
+			E_ptr[bq_len] = 37;
+		} else {
+			sq = q_len - 1;
+			sn = en + (q_len - eq);
+			D_ptr[sn] = (0 < k) ? 0 : (W1 + (t_len - 1 - m) * U);
+			E_ptr[sn] = (0 < k) ? 0 : 37;
+			--sn;
+		}
 		
 		t_nuc = getNuc(template, nuc_pos);
-		for(n = start; n >= end; --n, --q_pos) {
+		for(n = sn, q_pos = sq; n > en; --q_pos, --n) {
 			E_ptr[n] = 0;
 			
 			/* update Q and P, gap openings */
@@ -7963,7 +7644,7 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			}
 			
 			/* Update D, match */
-			thisScore = D_prev[n] + d[t_nuc][query[n]];
+			thisScore = D_prev[n] + d[t_nuc][query[q_pos]];
 			if(D_ptr[n] < thisScore) {
 				D_ptr[n] = thisScore;
 				E_ptr[n] |= 1;
@@ -7973,6 +7654,8 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			
 			Q_prev = Q;
 		}
+		
+		/* handle banded boundary */
 		E_ptr[n] = 0;
 		
 		/* update Q gap */
@@ -7986,7 +7669,7 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			E_ptr[n] |= 16;
 		}
 		
-		/* update P gap */
+		/* update unavailable P gap */
 		P_ptr[n] = (t_len + q_len) * (MM + U + W1);
 		
 		/* Update D */
@@ -8000,9 +7683,10 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			E_ptr[n] |= e;
 		}
 		
-		E_ptr -= ((band << 1) + 1);
+		/* continue as usual */
+		E_ptr -= (bq_len + 1);
 		
-		if(k < 0 && end != 1 && Stat.score <= D_ptr[n]) {
+		if(k < 0 && Stat.score <= D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
 		}
@@ -8020,9 +7704,10 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 	/* get start position of alignment */
 	if(k < 0) {
 		pos[1] = 0;
+		q_pos = 0;
 		if(k == -2) {
-			for(n = 0; n < (band << 1); ++n) {
-				if(Stat.score < D_prev[n]) {
+			for(n = en; n < bq_len; ++n) {
+				if(D_prev[n] > Stat.score) {
 					Stat.score = D_prev[n];
 					pos[0] = 0;
 					pos[1] = n;
@@ -8030,17 +7715,17 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			}
 		}
 	} else {
-		Stat.score = D_prev[band];
+		Stat.score = D_prev[en];
+		q_pos = 0;
 		pos[0] = 0;
-		pos[1] = 0;
+		pos[1] = en;
 	}
 	
-	/* make back tracking */
+	
+	/* back tracking */
 	m = pos[0];
-	E_ptr = E + (m * ((band << 1) + 1));
-	q_pos = pos[1];
-	n = pos[1] + band;
-	band <<= 1;
+	n = pos[1];
+	E_ptr = E + (m * (bq_len + 1));
 	nuc_pos = m + t_s;
 	Stat.len = 0;
 	Stat.gaps = 0;
@@ -8050,23 +7735,23 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			aligned->q[Stat.len] = query[q_pos];
 			aligned->s[Stat.len] = (aligned->t[Stat.len] == aligned->q[Stat.len]) ? '|' : '_';
 			++nuc_pos;
-			E_ptr += (band + 1);
+			E_ptr += (bq_len + 1);
 			++q_pos;
 		} else if((E_ptr[n] & 7) >= 4) {
 			while(!(E_ptr[n] >> 4)) {
 				aligned->t[Stat.len] = getNuc(template, nuc_pos);
 				aligned->q[Stat.len] = 5;
-				aligned->s[Stat.len] = '_';
+				aligned->s[Stat.len] = '_';	
 				++nuc_pos;
-				E_ptr += (band + 1);
+				E_ptr += (bq_len + 1);
 				--n;
 				++Stat.len;
 			}
 			aligned->t[Stat.len] = getNuc(template, nuc_pos);
 			aligned->q[Stat.len] = 5;
-			aligned->s[Stat.len] = '_';
+			aligned->s[Stat.len] = '_';		
 			++nuc_pos;
-			E_ptr += (band + 1);
+			E_ptr += (bq_len + 1);
 			--n;
 		} else {
 			while(!(E_ptr[n] >> 3)) {
@@ -8321,9 +8006,10 @@ struct alnScore NW_score(const long unsigned *template, const unsigned char *que
 
 struct alnScore NW_band_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, int band) {
 	
-	int m, n, t_len, q_len, thisScore, nuc_pos, q_pos, start, end, pos[2];
+	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
+	int bq_len, halfBand, sn, en, sq, eq, q_pos, c_pos;
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	unsigned char *E_ptr, *query, t_nuc, e;
+	unsigned char *query, t_nuc, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
@@ -8347,21 +8033,27 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 		return Stat;
 	}
 	
+	/* ensure that band is equal */
+	if(band & 1) {
+		++band;
+	}
+	halfBand = band >> 1;
+	
 	/* check matrix size */
 	if(NW_q <= band) {
 		NW_q = band << 1;
 		free(D[0]);
 		free(P[0]);
-		D[0] = malloc((band << 1) * sizeof(int));
-		P[0] = malloc((band << 1) * sizeof(int));
+		D[0] = malloc((NW_q << 1) * sizeof(int));
+		P[0] = malloc((NW_q << 1) * sizeof(int));
 		if(!D[0] || !P[0]) {
 			ERROR();
 		}
 		D[1] = D[0] + NW_q;
 		P[1] = P[0] + NW_q;
 	}
-	if(NW_s <= ((q_len + 1) * (t_len + 1))) {
-		NW_s = ((q_len + 2) * (t_len + 2));
+	if(NW_s <= ((band + 2) * (t_len + 1))) {
+		NW_s = ((band + 3) * (t_len + 2));
 		free(E);
 		E = malloc(NW_s);
 		if(!E) {
@@ -8369,92 +8061,74 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 		}
 	}
 	
-	--band;
-	band >>= 1;
-	band <<= 1;
-	
 	/* fill in start penalties */
+	bq_len = band + 1; /* (band + 1) ~ q_len */
 	D_ptr = D[0];
 	D_prev = D[1];
 	P_ptr = P[0];
 	P_prev = P[1];
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	if(0 < k) {
-		E_ptr = E;
-		for(m = 0; m < t_len - (band >> 1); ++m) {
-			E_ptr[band] = 0;
-			E_ptr += (band + 1);
-		}
-		for(m = t_len - (band >> 1), n = band - 1; m < t_len; ++m, --n) {
-			E_ptr[n] = 0;
-			E_ptr += (band + 1);
-		}
-		band >>= 1;
-		if(k == 1) {
-			for(n = band - 1; n >= 0; --n) {
-				D_prev[n] = W1 + (band - 1 - n) * U;
-				P_prev[n] = thisScore;
-				E_ptr[n] = 3;
-			}
-			E_ptr[band - 1] = 18;
-			E_ptr[band] = 0;
-			D_prev[band] = 0;
-			P_prev[band] = 0;
-		} else {
-			for(n = band; n >= 0; --n) {
-				D_prev[n] = 0;
-				P_prev[n] = thisScore;
-				E_ptr[n] = 0;
-			}
-		}
-	} else {
-		E_ptr = E;
-		for(m = 0; m < t_len - (band >> 1); ++m) {
-			E_ptr[band] = 37;
-			E_ptr += (band + 1);
-		}
-		for(m = t_len - (band >> 1), n = band - 1; m < t_len; ++m, --n) {
-			E_ptr[n] = 37;
-			E_ptr += (band + 1);
-		}
-		if(t_len != 1) {
-			E_ptr[(-1) -(band >> 1)] = 36;
-		}
-		
-		band >>= 1;
-		for(n = band - 1; n >= 0; --n) {
-			D_prev[n] = W1 + (band - 1 - n) * U;
+	
+	E_ptr = E + (t_len * (bq_len + 1));
+	c_pos = (t_len + q_len) >> 1;
+	
+	
+	sn = q_len - 1 - (c_pos - halfBand);
+	if(k != 2) {
+		for(n = sn - 1; n >= 0; --n) {
+			D_prev[n] = W1 + (sn - n - 1) * U;
 			P_prev[n] = thisScore;
 			E_ptr[n] = 3;
 		}
-		E_ptr[band - 1] = 18;
-		E_ptr[band] = 0;
-		D_prev[band] = 0;
-		P_prev[band] = 0;
+		E_ptr[sn - 1] = 18;
+		E_ptr[sn] = 0;
+		D_prev[sn] = 0;
+		P_prev[sn] = 0;
+	} else {
+		for(n = sn; n >= 0; --n) {
+			D_prev[n] = 0;
+			P_prev[n] = thisScore;
+			E_ptr[n] = 0;
+		}
 	}
-	E_ptr -= ((band << 1) + 1);
+	E_ptr -= (bq_len + 1);
+	
 	
 	/* Perform banded NW */
 	pos[0] = 0;
-	for(m = t_len - 1, nuc_pos = m + t_s; m >= 0; --m, --nuc_pos) {
-		start = MIN((band << 1) - 1, band + (t_len - 1 - m) - 2);
+	en = 0;
+	c_pos = (t_len + q_len) >> 1;
+	for(m = t_len - 1, nuc_pos = t_s + t_len - 1; m >= 0; --m, --nuc_pos, --c_pos) {
 		
-		end = MAX(1, band - m);
+		/* get banded boundaries, w.r.t. query */
+		sq = c_pos + halfBand;
+		eq = c_pos - halfBand;
 		
-		q_pos = MIN(q_len - 1, m + band - 1);
-		
-		if(m < t_len - band) {
-			D_ptr[start + 1] = (t_len + q_len) * (MM + U + W1);
-			E_ptr[start + 1] = 37;
+		if(eq < 0) {
+			eq = 0;
+			++en;
 		} else {
-			D_ptr[start + 1] = 0 < k ? 0 : W1 + (t_len - 1 - m) * U;
-			E_ptr[start + 1] = 0 < k ? 0 : 37;
+			en = 0;
 		}
+		
+		/* get start penalties */
 		Q_prev = (t_len + q_len) * (MM + U + W1);
+		/* check boundaries */
+		if(sq < (q_len - 1)) {
+			sn = bq_len - 1;
+			D_ptr[bq_len] = (t_len + q_len) * (MM + U + W1);
+			E_ptr[bq_len] = 37;
+		} else {
+			sq = q_len - 1;
+			sn = en + (q_len - eq);
+			D_ptr[sn] = (0 < k) ? 0 : (W1 + (t_len - 1 - m) * U);
+			E_ptr[sn] = (0 < k) ? 0 : 37;
+			--sn;
+		}
 		
 		t_nuc = getNuc(template, nuc_pos);
-		for(n = start; n >= end; --n, --q_pos) {
+		for(n = sn, q_pos = sq; n > en; --q_pos, --n) {
 			E_ptr[n] = 0;
 			
 			/* update Q and P, gap openings */
@@ -8492,7 +8166,7 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 			}
 			
 			/* Update D, match */
-			thisScore = D_prev[n] + d[t_nuc][query[n]];
+			thisScore = D_prev[n] + d[t_nuc][query[q_pos]];
 			if(D_ptr[n] < thisScore) {
 				D_ptr[n] = thisScore;
 				E_ptr[n] |= 1;
@@ -8502,6 +8176,8 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 			
 			Q_prev = Q;
 		}
+		
+		/* handle banded boundary */
 		E_ptr[n] = 0;
 		
 		/* update Q gap */
@@ -8515,7 +8191,7 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 			E_ptr[n] |= 16;
 		}
 		
-		/* update P gap */
+		/* update unavailable P gap */
 		P_ptr[n] = (t_len + q_len) * (MM + U + W1);
 		
 		/* Update D */
@@ -8529,9 +8205,10 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 			E_ptr[n] |= e;
 		}
 		
-		E_ptr -= ((band << 1) + 1);
+		/* continue as usual */
+		E_ptr -= (bq_len + 1);
 		
-		if(k < 0 && end != 1 && Stat.score <= D_ptr[n]) {
+		if(k < 0 && Stat.score <= D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
 		}
@@ -8549,9 +8226,10 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 	/* get start position of alignment */
 	if(k < 0) {
 		pos[1] = 0;
+		q_pos = 0;
 		if(k == -2) {
-			for(n = 0; n < (band << 1); ++n) {
-				if(Stat.score < D_prev[n]) {
+			for(n = en; n < bq_len; ++n) {
+				if(D_prev[n] > Stat.score) {
 					Stat.score = D_prev[n];
 					pos[0] = 0;
 					pos[1] = n;
@@ -8559,34 +8237,34 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 			}
 		}
 	} else {
-		Stat.score = D_prev[band];
+		Stat.score = D_prev[en];
+		q_pos = 0;
 		pos[0] = 0;
-		pos[1] = 0;
+		pos[1] = en;
 	}
 	
-	/* make back tracking */
+	
+	/* back tracking */
 	m = pos[0];
-	E_ptr = E + (m * ((band << 1) + 1));
-	q_pos = pos[1];
-	n = pos[1] + band;
-	band <<= 1;
+	n = pos[1];
+	E_ptr = E + (m * (bq_len + 1));
 	nuc_pos = m + t_s;
 	Stat.len = 0;
 	Stat.gaps = 0;
 	while(E_ptr[n] != 0) {
 		if((E_ptr[n] & 7) == 1) {
 			++nuc_pos;
-			E_ptr += (band + 1);
+			E_ptr += (bq_len + 1);
 			++q_pos;
 		} else if((E_ptr[n] & 7) >= 4) {
 			while(!(E_ptr[n] >> 4)) {
 				++nuc_pos;
-				E_ptr += (band + 1);
+				E_ptr += (bq_len + 1);
 				--n;
 				++Stat.len;
 			}
 			++nuc_pos;
-			E_ptr += (band + 1);
+			E_ptr += (bq_len + 1);
 			--n;
 		} else {
 			while(!(E_ptr[n] >> 3)) {
@@ -8605,229 +8283,141 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 	return Stat;
 }
 
-struct chains {
-	int *chain;
-	int *best;
-	int *back;
-	int size;
-};
-
-struct mems {
-	int q_s;
-	int q_e;
-	int t_s;
-	int t_e;
-};
-
-int *chain = 0, *best = 0, *back = 0, size = 0;
-
-int getMEM(struct mems *mem_ptr, int *mems, int end) {
+struct alnPoints * seedPoint_init(int size) {
 	
-	int i;
+	struct alnPoints *dest;
 	
-	for(i = 0; i < end; ++i) {
-		if(mems[i] > 0) {
-			mem_ptr->q_s = i;
-			mem_ptr->t_s = mems[i];
-			while(i < end && mems[i] != 0) {
-				++i;
-			}
-			--i;
-			mem_ptr->q_e = i;
-			mem_ptr->t_e = mems[i];
-			++i;
-			return i;
-		}
+	dest = malloc(sizeof(struct alnPoints));
+	if(!dest) {
+		ERROR();
 	}
-	mem_ptr->q_s = i;
-	mem_ptr->t_s = 0;
-	mem_ptr->q_e = i;
-	mem_ptr->t_e = 0;
-	return i;
+	dest->len = 0;
+	dest->size = size;
+	size *= sizeof(int);
+	dest->tStart = malloc(size);
+	dest->tEnd = malloc(size);
+	dest->qStart = malloc(size);
+	dest->qEnd = malloc(size);
+	dest->weight = malloc(size);
+	dest->score = malloc(size);
+	dest->next = malloc(size);
+	if(!dest->tStart || !dest->tEnd || !dest->qStart || !dest->qEnd || !dest->weight || !dest->score || !dest->next) {
+		ERROR();
+	}
+	
+	return dest;
 }
 
-#define scoreMEMset(mem1, mem2) ((mem1->t_e - mem1->t_s + 1) + (mem2->t_e - mem2->t_s + 1) - abs((mem1->q_e - mem2->q_s) - (mem1->t_e - mem2->t_s)))
+void seedPoint_realloc(struct alnPoints *dest, int size) {
+	
+	dest->size = size;
+	size *= sizeof(int);
+	dest->tStart = realloc(dest->tStart, size);
+	dest->tEnd = realloc(dest->tEnd, size);
+	dest->qStart = realloc(dest->qStart, size);
+	dest->qEnd = realloc(dest->qEnd, size);
+	dest->weight = realloc(dest->weight, size);
+	dest->score = realloc(dest->score, size);
+	dest->next = realloc(dest->next, size);
+	if(!dest->tStart || !dest->tEnd || !dest->qStart || !dest->qEnd || !dest->weight || !dest->score || !dest->next) {
+		ERROR();
+	}
+}
 
-int chainMEMs(int *MEMs, int q_len, int restart) {
+void seedPoint_free(struct alnPoints *src) {
 	
-	/* check mems in sets of three,
-	if not colinear exclude the worst */
+	free(src->tStart);
+	free(src->tEnd);
+	free(src->qStart);
+	free(src->qEnd);
+	free(src->weight);
+	free(src->score);
+	free(src->next);
+	free(src);
+}
+
+int chainSeeds(struct alnPoints *points) {
 	
-	int i, j, Score, score[3], bestScore, recScore, start, *tmp;
-	struct mems mem_set[3], *mem[3], *mem_ptr;
+	int i, j, nMems, weight, gap, score, bestScore, bestPos;
+	int tEnd, qEnd, tGap, qGap, nMin, pM;
 	
-	bestScore = -q_len;
-	i = 0;
-	mem[0] = &mem_set[0];
-	mem[1] = &mem_set[1];
-	mem[2] = &mem_set[2];
-	mem_ptr = mem[0];
-	i += getMEM(mem_ptr, MEMs, q_len);
-	start = mem_ptr->t_s;
-	Score = mem_ptr->t_e - mem_ptr->t_s + 1;
-	if(i == q_len) {
-		/* determine best chain */
-		if(restart && Score > bestScore) {
-			bestScore = Score;
-			tmp = best;
-			best = chain;
-			chain = tmp;
-		}
-		return Score;
-	}
-	mem_ptr = mem[1];
-	i += getMEM(mem_ptr, MEMs + i, q_len - i);
-	if(i == q_len) { 
-		if(mem[0]->t_e <= mem[1]->t_s) {
-			Score += (mem_ptr->t_e - mem_ptr->t_s + 1);
-			/* determine best chain */
-			if(restart && Score > bestScore) {
-				bestScore = Score;
-				tmp = best;
-				best = chain;
-				chain = tmp;
-			}
-			
-			return Score;
-		} else if(Score < (mem_ptr->t_e - mem_ptr->t_s + 1)) {
-			/* determine best chain */
-			if(restart && Score > bestScore) {
-				bestScore = Score;
-				tmp = best;
-				best = chain;
-				chain = tmp;
-			}
-			
-			return (mem_ptr->t_e - mem_ptr->t_s + 1);
-		} else {
-			/* determine best chain */
-			if(restart && Score > bestScore) {
-				bestScore = Score;
-				tmp = best;
-				best = chain;
-				chain = tmp;
-			}
-			return Score;
-		}
-	} else if(restart && mem_ptr->t_s <= start) {
-		/* change MEMs to a backup */
-		memcpy(back + i, MEMs + i, (q_len - i) * sizeof(int));
-		recScore = chainMEMs(back + i, q_len - i, 0);
-		if(recScore > bestScore) {
-			for(j = 0; j < i; ++j) {
-				back[j] = 0;
-			}
-			bestScore = recScore;
-			tmp = best;
-			best = back;
-			back = tmp;
-		}
-	}
-	mem_ptr = mem[2];
-	while(i < q_len) {
-		i += getMEM(mem_ptr, MEMs + i, q_len - i);
-		/* check if colinear */
-		if(mem[0]->t_e <= mem[1]->t_s && mem[1]->t_e <= mem[2]->t_s) {
-			Score += (mem_ptr->t_e - mem_ptr->t_s + 1);
-			mem_ptr = mem[0];
-			mem[0] = mem[1];
-			mem[1] = mem[2];
-			mem[2] = mem_ptr;
-		} else if(mem_ptr->t_e) {
-			
-			/* remove worst one, or spawn new one */
-			if(restart && mem_ptr->t_s <= start) {
-				/* change MEMs to a backup */
-				memcpy(back + i, MEMs + i, (q_len - i) * sizeof(int));
-				recScore = chainMEMs(back + i, q_len - i, 0);
-				if(recScore > bestScore) {
-					for(j = 0; j < i; ++j) {
-						back[j] = 0;
-					}
-					bestScore = recScore;
-					tmp = best;
-					best = back;
-					back = tmp;
-				}
-			} else {
-				score[0] = scoreMEMset(mem[0], mem[1]);
-				score[1] = scoreMEMset(mem[0], mem[2]);
-				score[2] = scoreMEMset(mem[1], mem[2]);
+	pM = MM + M;
+	nMems = points->len;
+	i = nMems - 1;
+	bestScore = points->weight[i];
+	bestPos = i;
+	points->score[i] = bestScore;
+	points->next[i] = 0;
+	
+	while(i--) {
+		
+		weight = points->weight[i];
+		/* here */
+		/* W1 is deprecated, new pen for non-pairing is needed */
+		score = weight + W1;
+		points->next[i] = 0;
+		tEnd = points->tEnd[i];
+		qEnd = points->qEnd[i];
+		
+		/* 64 is the bandwidth */
+		nMin = MIN(nMems, i + 64);
+		
+		/* find best link */
+		for(j = i + 1; j < nMin; ++j) {
+			/* check compability */
+			if(tEnd < points->tStart[j]) { /* full compatability */
+				tGap = points->tStart[j] - tEnd;
+				qGap = points->qStart[j] - qEnd;
 				
-				/* get lowest score */
-				if(score[0] < score[1]) {
-					/* a < b */
-					if(score[0] < score[2]) {
-						Score += (mem_ptr->t_e - mem_ptr->t_s + 1);
-						/* a < b A a < c */
-						/* reset 0 */
-						mem_ptr = mem[0];
-						for(j = mem_ptr->q_s; j < mem_ptr->q_e; ++j) {
-							MEMs[j] = 0;
-						}
-						Score -= (mem_ptr->t_e - mem_ptr->t_s + 1);
-						
-						/* remove set 0 */
-						mem[0] = mem[1];
-						mem[1] = mem[2];
-						mem[2] = mem_ptr;
-					} else {
-						/* c <= a < b */
-						/* reset 2 */
-						mem_ptr = mem[2];
-						for(j = mem_ptr->q_s; j < mem_ptr->q_e; ++j) {
-							MEMs[j] = 0;
-						}
-						/* remove set 2 */
-						/* same as doing nothing */
-					}
-				} else {
-					/* b < a */
-					if(score[1] < score[2]) {
-						Score += (mem_ptr->t_e - mem_ptr->t_s + 1);
-						/* b < a A b < c */
-						/* reset 1 */
-						mem_ptr = mem[1];
-						for(j = mem_ptr->q_s; j < mem_ptr->q_e; ++j) {
-							MEMs[j] = 0;
-						}
-						Score -= (mem_ptr->t_e - mem_ptr->t_s + 1);
-						
-						/* remove set 1 */
-						mem[1] = mem[2];
-						mem[2] = mem_ptr;
-					} else {
-						/* c <= b < a */
-						/* reset 2 */
-						mem_ptr = mem[2];
-						for(j = mem_ptr->q_s; j < mem_ptr->q_e; ++j) {
-							MEMs[j] = 0;
-						}
-						/* remove set 2 */
-						/* same as doing nothing */
-					}
+				/* calculate score for this chaining */
+				if((gap = abs(tGap - qGap))) {
+					--gap;
+					gap *= U;
+					gap += W1;
 				}
-			}
+				//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
+				gap += weight + points->score[j];
+				
+				/* check if score is max */
+				if(score < gap) {
+					score = gap;
+					points->next[i] = j;
+				}
+				
+				/* here */
+			} /*else if(tEnd < points->tEnd[j]) { // semi compatability
+				// cut mem	
+				
+				
+			}*/
+		}
+		if(bestScore < score) {
+			bestScore = score;
+			bestPos = i;
+		}
+		points->score[i] = score;
+		
+	}
+	
+	/* penalize start */
+	if(bestPos != 0) {
+		score = (MIN(points->qStart[bestPos], points->tStart[bestPos])) * pM;
+		bestScore += MAX(W1, score);
+		if(points->qStart[0] == 0 && bestScore < points->score[0]) {
+			bestScore = points->score[0];
+			bestPos = 0;
 		}
 	}
 	
-	/* determine best chain */
-	if(restart && Score > bestScore) {
-		bestScore = Score;
-		tmp = best;
-		best = chain;
-		chain = tmp;
-	}
-	
-	return bestScore;
+	return bestPos;
 }
 
-struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_len, struct aln *aligned, struct aln *Frag_align, int min, int max) {
+struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_len, struct aln *aligned, struct aln *Frag_align, int min, int max, struct alnPoints *points) {
 	
-	int i, j, bias, prev, prev_index, stop, t_len, value, end, mem_count, band;
-	int t_s, t_e, q_s, q_e;
-	unsigned char nuc;
+	int i, j, bias, prev, start, stop, t_len, value, end, band;
+	int t_s, t_e, q_s, q_e, mem_count, score;
 	long unsigned key;
+	unsigned char nuc;
 	struct alnScore Stat, NWstat;
 	struct hashMap_index *template_index;
 	
@@ -8836,27 +8426,10 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 	t_len = template_lengths[template_name];
 	key = 0;
 	
-	if(template_name) {
-		if(!chain || size < q_len) {
-			size = q_len << 1;
-			free(chain);
-			free(best);
-			free(back);
-			chain = calloc(size, sizeof(int));
-			best = calloc(size, sizeof(int));
-			back = calloc(size, sizeof(int));
-			if(!chain || !best || !back) {
-				ERROR();
-			}
-		} else {
-			for(i = 0; i < q_len; ++i) {
-				chain[i] = 0;
-				best[i] = 0;
-				back[i] = 0;
-			}
-		}
-		
-		/* find seeds */
+	/* find seeds */
+	if(points->len) {
+		mem_count = points->len;
+	} else {
 		mem_count = 0;
 		i = 0;
 		while(i < q_len) {
@@ -8876,28 +8449,47 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 				key = ((key << 2) | qseq[i]) & mask;
 				if((value = hashMap_index_get_bound(template_index, key, min, max)) < 0) {
 					value = 0;
-					chain[i - kmersize + 1] = -1;
 				}
 				
 				if(0 < value) {
 					i -= (kmersize - 1);
 					
 					/* backseed for ambiguos seeds */
-					prev = value - 1;
-					for(j = i - 1; j >= 0 && prev >= 0 && chain[j] == -1 && qseq[j] == getNuc(template_index->seq, (prev - 1)); --j, --prev) {
-						chain[j] = prev;
+					if(mem_count) {
+						stop = points->qEnd[mem_count - 1];
+					} else {
+						stop = -1;
+					}
+					prev = value - 2;
+					for(j = i - 1; stop < j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
+						--prev;
 					}
 					
-					/* k-mer */
-					for(j = 0; j < kmersize; ++i, ++j, ++value) {
-						chain[i] = value;
-					}
+					/* get start positions */
+					points->qStart[mem_count] = j + 1;
+					points->tStart[mem_count] = prev + 2;
+					
+					/* skip k-mer bases */
+					value += (kmersize - 1);
+					i += kmersize;
 					
 					/* extend */
-					while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, (value - 1))) {
-						chain[i] = value;
+					while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, value)) {
 						++i;
 						++value;
+					}
+					
+					/* get end positions */
+					points->qEnd[mem_count] = i;
+					points->tEnd[mem_count] = value + 1;
+					
+					/* calculate weight */
+					points->weight[mem_count] = (points->qEnd[mem_count] - points->qStart[mem_count]) * M;
+					++mem_count;
+					
+					/* realloc seeding points */
+					if(mem_count == points->size) {
+						seedPoint_realloc(points, points->size << 1);
 					}
 					
 					/* update position */
@@ -8907,7 +8499,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 					} else {
 						i = end + 1;
 					}
-					++mem_count;
 				} else {
 					++i;
 				}
@@ -8916,179 +8507,170 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 		}
 	}
 	
-	/* get best seed chain */
-	stop = chainMEMs(chain, q_len, 1);
-	
-	//if((stop * kmersize) < (q_len - stop + kmersize)) {
-	if(stop < (q_len >> 5)) {
+	if(mem_count) {
+		if(points->qEnd[mem_count - 1] != q_len && points->tEnd[mem_count - 1] != t_len) {
+			--mem_count;
+			score = (MIN(q_len - points->qEnd[mem_count], t_len - points->tEnd[mem_count])) * (MM + M);
+			/* W1 is deprecated, new pen for non-pairing is needed */
+			points->weight[mem_count] += MAX(W1, score);
+			++mem_count;
+		}
+		points->len = mem_count;
+	} else {
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.gaps = 0;
 		aligned->s[0] = 0;
-		
+		points->len = 0;
 		return Stat;
 	}
 	
-	/* piece them together */
-	prev = 0;
-	prev_index = 0;
+	/* get best seed chain, returns best starting point */
+	start = chainSeeds(points);
+	score = points->score[start];
+	
+	//if(score < kmersize || (score << 1) < scoreT * q_len) {
+	if(score < kmersize || (score << 1) < scoreT * (points->qEnd[points->len - 1] - points->qStart[0])) {
+		Stat.score = 0;
+		Stat.len = 1;
+		Stat.gaps = 0;
+		aligned->s[0] = 0;
+		points->len = 0;
+		return Stat;
+	}
+	
+	/* initialize */
 	Stat.len = 0;
 	Stat.score = 0;
-	Stat.pos = t_len;
 	Stat.gaps = 0;
-	i = 0;
-	while(i < q_len) {
-		if(best[i] > prev_index) {
-			value = best[i] - 1;
-			if(value < Stat.pos) {
-				Stat.pos = value;
-				/* Get intervals in query and template to align */
-				if((value - prev_index) > (i - prev + 64) || (value - prev_index) > ((i - prev) << 1)) { // big leading template gap, cut down
-					t_s = value - (((i - prev) < 64) ? ((i - prev) << 1) : (i - prev + 64));
-					t_e = value;
-					q_s = prev;
-					q_e = i;
-				} else if ((i - prev) > (value - prev_index + 64) || (i - prev) > ((value - prev_index) << 1)) { // big leading query gap, cut down
-					t_s = prev_index;
-					t_e = value;
-					q_s = i - (((value - prev_index) < 64) ? ((value - prev_index) << 1) : (value - prev_index + 64));
-					q_e = i;
-				} else { // small leading gap
-					t_s = prev_index;
-					t_e = value;
-					q_s = prev;
-					q_e = i;
-				}
-				/* align leading gap */
-				if(t_e - t_s > 0 && q_e - q_s > 0) {
-					band = MAX(32, 4 * abs(t_e - t_s - q_e + q_s) + 16);
-					if(t_e - t_s <= 64 || q_e - q_s <= 64 || q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-						NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
-					} else {
-						NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band);
-						//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
-					}
-					/* trim leading gaps */
-					bias = 0;
-					if(t_s == 0) {
-						while(bias < NWstat.len && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
-							if(Frag_align->t[bias] == 5) {
-								--NWstat.gaps;
-							}
-							++bias;
-						}
-						NWstat.len -= bias;
-						/*if(bias) {
-							NWstat.score -= (W1 + (bias - 1) * U);
-						}*/
-					}
-					
-					memcpy(aligned->t, Frag_align->t + bias, NWstat.len);
-					memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
-					memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
-					Stat.pos -= (NWstat.len - NWstat.gaps);
-					Stat.score = NWstat.score;
-					Stat.len = NWstat.len;
-					Stat.gaps = NWstat.gaps;
-				} else {
-					Stat.score = 0;
-					Stat.len = 0;
-				}
+	value = points->tStart[start] - 1;
+	Stat.pos = value;
+	i = points->qStart[start];
+	
+	/* align leading tail */
+	if(i != 0) {
+		/* get boundaries */
+		t_s = 0;
+		t_e = value;
+		q_s = 0;
+		q_e = i;
+		if((q_e << 1) < t_e || (q_e + 64) < t_e) { // big leading template gap, cut down
+			t_s = t_e - MIN(64, (q_e << 1));
+		} else if((t_e << 1) < q_e || (t_e + 64) < q_e) { // big leading query gap, cut down
+			q_s = q_e - MIN(64, (t_e << 1));
+		}
+		
+		/* align */
+		if(t_e - t_s > 0 && q_e - q_s > 0) {
+			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
+				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
 			} else {
-				/* get positions between seed-extends */
-				t_s = prev_index;
-				t_e = value;
-				q_s = prev;
-				q_e = i;
-				
-				/* piece seed-extends together */
-				if(abs(t_e - t_s - q_e + q_s) * U > q_len * M || t_e - t_s > q_len || q_e - q_s > (q_len >> 1)) {
-					/* gap is too big to give a positive score */
-					Stat.score = 0;
-					Stat.len = 1;
-					Stat.gaps = 0;
-					aligned->s[0] = 0;
-					
-					return Stat;
-				}
-				if((t_e - t_s > 0 || q_e - q_s > 0)) {
-					band = MAX(32, 4 * abs(t_e - t_s - q_e + q_s) + 16);
-					if(t_e - t_s <= 64 || q_e - q_s <= 64 || q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-						NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
-					} else {
-						NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band);
-						//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
+				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band);
+				//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
+			}
+			/* trim leading gaps */
+			bias = 0;
+			if(t_s == 0) {
+				while(bias < NWstat.len && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
+					if(Frag_align->t[bias] == 5) {
+						--NWstat.gaps;
 					}
-					memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
-					memcpy(aligned->s + Stat.len, Frag_align->s, NWstat.len);
-					memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
-					Stat.score += NWstat.score;
-					Stat.len += NWstat.len;
-					Stat.gaps += NWstat.gaps;
+					++bias;
 				}
+				NWstat.len -= bias;
+				/*if(bias) {
+					NWstat.score -= (W1 + (bias - 1) * U);
+				}*/
 			}
 			
-			/* Expand from matching k-mer */
-			prev_index = value;
-			stop = 0;
-			while(i < q_len && prev_index < t_len && !stop) {
-				nuc = getNuc(template_index->seq, prev_index);
-				if(qseq[i] == nuc) {
-					Stat.score += d[nuc][nuc];
-					aligned->t[Stat.len] = nuc;
-					aligned->s[Stat.len] = '|';
-					aligned->q[Stat.len] = nuc;
-					++Stat.len;
-					++prev_index;
-					++i;
-				} else {
-					stop = 1;
-				}
-			}
-			
-			/* update positions */
-			prev = i;
-		} else {
-			++i;
+			memcpy(aligned->t, Frag_align->t + bias, NWstat.len);
+			memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
+			memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
+			Stat.pos -= (NWstat.len - NWstat.gaps);
+			Stat.score = NWstat.score;
+			Stat.len = NWstat.len;
+			Stat.gaps = NWstat.gaps;
 		}
 	}
 	
-	/* No valid ankers were found */
-	if(prev_index == 0 || prev == 0) {
-		/* No best mapping position found */
-		Stat.score = 0;
-		Stat.len = 1;
-		aligned->s[0] = 0;
-		return Stat;
+	/* piece seeds together */
+	stop = 1;
+	while(stop) {
+		/* MEM */
+		q_s = points->qStart[start];
+		end = points->qEnd[start] - q_s;
+		memcpy(aligned->t + Stat.len, qseq + q_s, end);
+		memset(aligned->s + Stat.len, '|', end);
+		memcpy(aligned->q + Stat.len, qseq + q_s, end);
+		Stat.len += end;
+		end = points->qEnd[start];
+		for(i = points->qStart[start]; i < end; ++i) {
+			nuc = qseq[i];
+			Stat.score += d[nuc][nuc];
+		}
+		
+		/* join MEMs */
+		if(points->next[start]) {
+			/* get positions between seed-extends */
+			q_s = points->qEnd[start];
+			t_s = points->tEnd[start] - 1;
+			start = points->next[start];
+			q_e = points->qStart[start];
+			t_e = points->tStart[start] - 1;
+			
+			/* piece seed-extends together */
+			if(abs(t_e - t_s - q_e + q_s) * U > q_len * M || t_e - t_s > q_len || q_e - q_s > (q_len >> 1)) {
+				/* gap is too big to give a positive score */
+				Stat.score = 0;
+				Stat.len = 1;
+				Stat.gaps = 0;
+				aligned->s[0] = 0;
+				points->len = 0;
+				return Stat;
+			}
+			if((t_e - t_s > 0 || q_e - q_s > 0)) {
+				band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+				if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
+					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
+				} else {
+					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band);
+					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
+				}
+				memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
+				memcpy(aligned->s + Stat.len, Frag_align->s, NWstat.len);
+				memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
+				Stat.score += NWstat.score;
+				Stat.len += NWstat.len;
+				Stat.gaps += NWstat.gaps;
+			}
+		} else {
+			stop = 0;
+		}
 	}
+	
+	/* align trailing tail */
 	/* Get intervals in query and template to align */
-	if((t_len - prev_index) > (q_len - prev + 64) || (t_len - prev_index) > ((q_len - prev) << 1)) { // big trailing template gap, cut down
-		t_s = prev_index;
-		t_e = t_s + ((((q_len - prev)) < 64) ? ((q_len - prev) << 1) : (q_len - prev + 64));
-		q_s = prev;
-		q_e = q_len;
-	} else if ((q_len - prev) > (t_len - prev_index + 64) || (q_len - prev) > ((t_len - prev_index) << 1)) { // big leading query gap, cut down
-		t_s = prev_index;
-		t_e = t_len;
-		q_s = prev;
-		q_e = q_s + (((t_len - prev_index) < 64) ? ((t_len - prev_index) << 1) : ((t_len - prev_index) + 64));
-	} else { // small leading gap
-		t_s = prev_index;
-		t_e = t_len;
-		q_s = prev;
-		q_e = q_len;
+	q_s = points->qEnd[start];
+	t_s = points->tEnd[start] - 1;
+	q_e = q_len;
+	t_e = t_len;
+	if(((q_len - q_s) << 1) < (t_len - t_s) || (q_len - q_s + 64) < (t_len - t_s)) { // big trailing template gap, cut down
+		t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+	} else if(((t_len - t_s) << 1) < (q_len - q_s) || (t_len - t_s + 64) < (q_len - q_s)) { // big leading query gap, cut down
+		q_e = q_s + MIN(64, ((t_len - t_s) << 1));
 	}
+	
 	/* align trailing gap */
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
-		band = MAX(32, 4 * abs(t_e - t_s - q_e + q_s) + 16);
-		if(t_e - t_s <= 64 || q_e - q_s <= 64 || q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
+		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
 			NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align);
 		} else {
 			NWstat = NW_band(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, band);
 			//NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align);
 		}
 		/* trim trailing gaps */
-		/*
 		if(t_e == t_len) {
 			bias = NWstat.len - 1;
 			while(bias && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
@@ -9098,12 +8680,14 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 				--bias;
 			}
 			++bias;
+			/*
 			if(bias != NWstat.len) {
 				NWstat.score -= (W1 + (NWstat.len - bias) * U);
 				NWstat.len = bias;
 			}
+			*/
 		}
-		*/
+		
 		memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
 		memcpy(aligned->s + Stat.len, Frag_align->s, NWstat.len);
 		memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
@@ -9112,14 +8696,15 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 		Stat.gaps += NWstat.gaps;
 	}
 	aligned->s[Stat.len] = 0;
+	points->len = 0;
 	
 	return Stat;
 }
 
-struct alnScore KMA_score(const int template_name, const unsigned char *qseq, int q_len, const struct compDNA *qseq_comp) {
+struct alnScore KMA_score(const int template_name, const unsigned char *qseq, int q_len, const struct compDNA *qseq_comp, struct alnPoints *points) {
 	
-	int i, j, k, prev, prev_index, stop, t_len, value, end, mem_count, band;
-	int t_s, t_e, q_s, q_e;
+	int i, j, k, prev, start, stop, t_len, value, end, band;
+	int t_s, t_e, q_s, q_e, mem_count, score;
 	unsigned char nuc;
 	struct alnScore Stat, NWstat;
 	struct hashMap_index *template_index;
@@ -9128,25 +8713,6 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 	template_index = templates_index[template_name];
 	t_len = template_lengths[template_name];
 	
-	if(!chain || size < q_len) {
-		size = q_len << 1;
-		free(chain);
-		free(best);
-		free(back);
-		chain = calloc(size, sizeof(int));
-		best = calloc(size, sizeof(int));
-		back = calloc(size, sizeof(int));
-		if(!chain || !best || !back) {
-			ERROR();
-		}
-	} else {
-		for(i = 0; i < q_len; ++i) {
-			chain[i] = 0;
-			best[i] = 0;
-			back[i] = 0;
-		}
-	}
-	
 	/* find seeds */
 	mem_count = 0;
 	for(i = 1, j = 0; i <= qseq_comp->N[0]; ++i) {
@@ -9154,30 +8720,48 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 		while(j < end) {
 			if((value = hashMap_index_get(template_index, getKmer(qseq_comp->seq, j))) < 0) {
 				value = 0;
-				chain[j] = -1;
 			}
 			
 			if(0 < value) {
 				/* backseed for ambiguos seeds */
-				prev = value - 1;
-				for(k = j - 1; k >= 0 && prev >= 0 && chain[k] == -1 && qseq[k] == getNuc(template_index->seq, (prev - 1)); --k, --prev) {
-					chain[k] = prev;
+				if(mem_count) {
+					stop = points->qEnd[mem_count - 1];
+				} else {
+					stop = -1;
+				}
+				prev = value - 2;
+				for(k = j - 1; stop < k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
+					--prev;
 				}
 				
-				/* k-mer */
-				for(k = 0; k < kmersize; ++j, ++k, ++value) {
-					chain[j] = value;
-				}
+				/* get start positions */
+				points->qStart[mem_count] = k + 1;
+				points->tStart[mem_count] = prev + 2;
+				
+				
+				/* skip k-mer bases */
+				value += (kmersize - 1);
+				j += kmersize;
 				
 				/* extend */
 				end += (kmersize - 1);
-				while(j < end && value <= t_len && qseq[j] == getNuc(template_index->seq, (value - 1))) {
-					chain[j] = value;
+				while(j < end && value <= t_len && qseq[j] == getNuc(template_index->seq, value)) {
 					++j;
 					++value;
 				}
-				end -= (kmersize - 1);
+				
+				/* get end positions */
+				points->qEnd[mem_count] = j;
+				points->tEnd[mem_count] = value + 1;
+				
+				/* calculate weight */
+				points->weight[mem_count] = (points->qEnd[mem_count] - points->qStart[mem_count]) * M;
 				++mem_count;
+				
+				/* realloc seeding points */
+				if(mem_count == points->size) {
+					seedPoint_realloc(points, points->size << 1);
+				}
 			} else {
 				++j;
 			}
@@ -9185,153 +8769,134 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 		j = qseq_comp->N[i] + 1;
 	}
 	
-	/* get best seed chain */
-	stop = chainMEMs(chain, q_len, 1);
-	if(stop < (q_len >> 5)) {
+	if(mem_count) {
+		if(points->qEnd[mem_count - 1] != q_len && points->tEnd[mem_count - 1] != t_len) {
+			--mem_count;
+			score = (MIN(q_len - points->qEnd[mem_count], t_len - points->tEnd[mem_count])) * (MM + M);
+			/* W1 is deprecated, new pen for non-pairing is needed */
+			points->weight[mem_count] += MAX(W1, score);
+			++mem_count;
+		}
+		points->len = mem_count;
+	} else {
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.gaps = 0;
-		Stat.pos = 1;
 		return Stat;
 	}
 	
-	/* piece them together */
-	prev = 0;
-	prev_index = 0;
+	/* get best seed chain, returns best starting point */
+	start = chainSeeds(points);
+	score = points->score[start];
+	
+	if(score < (q_len >> 5)) {
+		Stat.score = 0;
+		Stat.len = 1;
+		Stat.gaps = 0;
+		return Stat;
+	}
+	
+	/* initialize */
 	Stat.len = 0;
 	Stat.score = 0;
-	Stat.pos = t_len;
 	Stat.gaps = 0;
-	i = 0;
-	end = q_len;
-	while(i < q_len) {
-		if(best[i] > prev_index) {
-			
-			value = best[i] - 1;
-			
-			if(value < Stat.pos) {
-				Stat.pos = value;
-				/* Get intervals in query and template to align */
-				if((value - prev_index) > (i - prev + 64) || (value - prev_index) > ((i - prev) << 1)) { // big leading template gap, cut down
-					t_s = value - (((i - prev) < 64) ? ((i - prev) << 1) : (i - prev + 64));
-					t_e = value;
-					q_s = prev;
-					q_e = i;
-				} else if ((i - prev) > (value - prev_index + 64) || (i - prev) > ((value - prev_index) << 1)) { // big leading query gap, cut down
-					t_s = prev_index;
-					t_e = value;
-					q_s = i - (((value - prev_index) < 64) ? ((value - prev_index) << 1) : (value - prev_index + 64));
-					q_e = i;
-				} else { // small leading gap
-					t_s = prev_index;
-					t_e = value;
-					q_s = prev;
-					q_e = i;
-				}
-				/* align leading gap */
-				if(t_e - t_s > 0 && q_e - q_s > 0) {
-					band = MAX(32, 4 * abs(t_e - t_s - q_e + q_s) + 16);
-					if(t_e - t_s <= 64 || q_e - q_s <= 64 || q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-						NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e);
-					} else {
-						NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band);
-						//NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e);
-					}
-					
-					Stat.pos -= (NWstat.len - NWstat.gaps);
-					Stat.score = NWstat.score;
-					Stat.len = NWstat.len;
-					Stat.gaps = NWstat.gaps;
-				} else {
-					Stat.score = 0;
-					Stat.len = 0;
-				}
+	value = points->tStart[start] - 1;
+	Stat.pos = value;
+	i = points->qStart[start];
+	
+	/* align leading tail */
+	if(i != 0) {
+		/* get boundaries */
+		t_s = 0;
+		t_e = value;
+		q_s = 0;
+		q_e = i;
+		if(value > (i + 64) || value > (i << 1)) { // big leading template gap, cut down
+			t_s = value - ((i < 64) ? (i << 1) : (i + 64));
+		} else if (i > (value + 64) || i > (value << 1)) { // big leading query gap, cut down
+			q_s = i - ((value < 64) ? (value << 1) : (value + 64));
+		}
+		
+		/* align */
+		if(t_e - t_s > 0 && q_e - q_s > 0) {
+			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+			if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
+				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e);
 			} else {
-				/* get positions between seed-extends */
-				t_s = prev_index;
-				t_e = value;
-				q_s = prev;
-				q_e = i;
-				
-				/* piece seed-extends together */
-				if(abs(t_e - t_s - q_e + q_s) * U > q_len * M || t_e - t_s > q_len || q_e - q_s > (q_len >> 1)) {
-					/* gap is too big to give a positive score */
-					Stat.score = 0;
-					Stat.len = 1;
-					Stat.gaps = 0;
-					Stat.pos = 1;
-					return Stat;
-				}
-				if((t_e - t_s > 0 || q_e - q_s > 0)) {
-					band = MAX(32, 4 * abs(t_e - t_s - q_e + q_s) + 16);
-					if(t_e - t_s <= 64 || q_e - q_s <= 64 || q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-						NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e);
-					} else {
-						NWstat = NW_band_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, band);
-						//NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e);
-					}
-					Stat.score += NWstat.score;
-					Stat.len += NWstat.len;
-					Stat.gaps += NWstat.gaps;
-				}
+				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band);
 			}
-			
-			/* Expand from matching k-mer */
-			prev_index = value;
-			stop = 0;
-			while(i < end && prev_index < t_len && !stop) {
-				nuc = getNuc(template_index->seq, prev_index);
-				if(qseq[i] == nuc) {
-					Stat.score += d[nuc][nuc];
-					++Stat.len;
-					++prev_index;
-					++i;
-				} else {
-					stop = 1;
-				}
-			}
-			
-			/* update positions */
-			prev = i;
-		} else {
-			++i;
+			Stat.pos -= (NWstat.len - NWstat.gaps);
+			Stat.score = NWstat.score;
+			Stat.len = NWstat.len;
+			Stat.gaps = NWstat.gaps;
 		}
 	}
 	
-	/* No valid ankers were found */
-	if(prev_index == 0 || prev == 0) {
-		/* No best mapping position found */
-		Stat.score = 0;
-		Stat.len = 1;
-		Stat.gaps = 0;
-		Stat.pos = 1;
-		return Stat;
+	/* piece seeds together */
+	stop = 1;
+	while(stop) {
+		/* MEM */
+		q_s = points->qStart[start];
+		end = points->qEnd[start] - q_s;
+		Stat.len += end;
+		end = points->qEnd[start];
+		for(i = points->qStart[start]; i < end; ++i) {
+			nuc = qseq[i];
+			Stat.score += d[nuc][nuc];
+		}
+		
+		/* join MEMs */
+		if(points->next[start]) {
+			/* get positions between seed-extends */
+			q_s = points->qEnd[start];
+			t_s = points->tEnd[start] - 1;
+			start = points->next[start];
+			q_e = points->qStart[start];
+			t_e = points->tStart[start] - 1;
+			
+			/* piece seed-extends together */
+			if(abs(t_e - t_s - q_e + q_s) * U > q_len * M || t_e - t_s > q_len || q_e - q_s > (q_len >> 1)) {
+				/* gap is too big to give a positive score */
+				Stat.score = 0;
+				Stat.len = 1;
+				Stat.gaps = 0;
+				return Stat;
+			}
+			if((t_e - t_s > 0 || q_e - q_s > 0)) {
+				band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+				if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {
+					NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e);
+				} else {
+					NWstat = NW_band_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, band);
+				}
+				Stat.score += NWstat.score;
+				Stat.len += NWstat.len;
+				Stat.gaps += NWstat.gaps;
+			}
+		} else {
+			stop = 0;
+		}
 	}
+	
+	/* align trailing tail */
 	/* Get intervals in query and template to align */
-	if((t_len - prev_index) > (q_len - prev + 64) || (t_len - prev_index) > ((q_len - prev) << 1)) { // big trailing template gap, cut down
-		t_s = prev_index;
-		t_e = t_s + ((((q_len - prev)) < 64) ? ((q_len - prev) << 1) : (q_len - prev + 64));
-		q_s = prev;
-		q_e = q_len;
-	} else if ((q_len - prev) > (t_len - prev_index + 64) || (q_len - prev) > ((t_len - prev_index) << 1)) { // big leading query gap, cut down
-		t_s = prev_index;
-		t_e = t_len;
-		q_s = prev;
-		q_e = q_s + (((t_len - prev_index) < 64) ? ((t_len - prev_index) << 1) : ((t_len - prev_index) + 64));
-	} else { // small leading gap
-		t_s = prev_index;
-		t_e = t_len;
-		q_s = prev;
-		q_e = q_len;
+	q_s = points->qEnd[start];
+	t_s = points->tEnd[start] - 1;
+	q_e = q_len;
+	t_e = t_len;
+	if((t_len - t_s) > (q_len - q_s + 64) || (t_len - t_s) > ((q_len - q_s) << 1)) { // big trailing template gap, cut down
+		t_e = t_s + ((((q_len - q_s)) < 64) ? ((q_len - q_s) << 1) : (q_len - q_s + 64));
+	} else if ((q_len - q_s) > (t_len - t_s + 64) || (q_len - q_s) > ((t_len - t_s) << 1)) { // big leading query gap, cut down
+		q_e = q_s + (((t_len - t_s) < 64) ? ((t_len - t_s) << 1) : ((t_len - t_s) + 64));
 	}
+	
 	/* align trailing gap */
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
-		band = MAX(32, 4 * abs(t_e - t_s - q_e + q_s) + 16);
-		if(t_e - t_s <= 64 || q_e - q_s <= 64 || q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
+		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+		if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
 			NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e);
 		} else {
 			NWstat = NW_band_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, band);
-			//NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e);
 		}
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
@@ -9358,10 +8923,10 @@ int preseed(struct hashMap_index *template_index, unsigned char *qseq, int q_len
 	return i;
 }
 
-int anker_rc(const int template_name, unsigned char *qseq, int q_len) {
+int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct alnPoints *points) {
 	
-	int i, j, rc, end, score, score_r, bestScore, value, t_len;
-	int prev, *track;
+	int i, j, rc, end, score, score_r, bestScore, value, t_len, stop;
+	int prev, mem_count, totMems;
 	long unsigned key;
 	struct hashMap_index *template_index;
 	
@@ -9369,37 +8934,21 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len) {
 	template_index = templates_index[template_name];
 	key = 0;
 	
-	if(!chain || size < q_len) {
-		size = q_len << 1;
-		free(chain);
-		free(best);
-		free(back);
-		chain = calloc(size, sizeof(int));
-		best = calloc(size, sizeof(int));
-		back = calloc(size, sizeof(int));
-		if(!chain || !best || !back) {
-			ERROR();
-		}
-	} else {
-		for(i = 0; i < q_len; ++i) {
-			chain[i] = 0;
-			best[i] = 0;
-			back[i] = 0;
-		}
-	}
-	
 	/* find seeds */
-	track = chain;
 	bestScore = 0;
 	score = 0;
 	score_r = 0;
+	mem_count = 0;
+	totMems = 0;
+	points->len = 0;
 	for(rc = 0; rc < 2; ++rc) {
 		if(rc) {
 			strrc(qseq, q_len);
-			track = best;
 			score = score_r;
+			points->len = mem_count;
 		}
 		score_r = 0;
+		mem_count = 0;
 		i = preseed(template_index, qseq, q_len);
 		while(i < q_len) {
 			end = charpos(qseq, 4, i, q_len);
@@ -9417,29 +8966,51 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len) {
 				key = ((key << 2) | qseq[i]) & mask;
 				if((value = hashMap_index_get_bound(template_index, key, 0, t_len)) < 0) {
 					value = 0;
-					track[i - kmersize + 1] = -1;
 				}
 				
 				if(0 < value) {
 					i -= (kmersize - 1);
 					/* backseed for ambiguos seeds */
-					prev = value - 1;
-					for(j = i - 1; j >= 0 && prev >= 0 && track[j] == -1 && qseq[j] == getNuc(template_index->seq, (prev - 1)); --j, --prev) {
-						track[j] = prev;
+					prev = value - 2;
+					if(mem_count) {
+						stop = points->qEnd[totMems - 1];
+					} else {
+						stop = -1;
+					}
+					for(j = i - 1; stop < j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
+						--prev;
 						++score_r;
 					}
-					/* k-mer */
-					for(j = 0; j < kmersize; ++i, ++j, ++value) {
-						track[i] = value;
-					}
+					
+					/* get start positions */
+					points->qStart[totMems] = j + 1;
+					points->tStart[totMems] = prev + 2;
+					
+					
+					/* skip k-mer bases */
+					value += (kmersize - 1);
+					i += kmersize;
 					score_r += kmersize;
 					
 					/* extend */
-					while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, (value - 1))) {
-						track[i] = value;
+					while(i < end && value <= t_len && qseq[i] == getNuc(template_index->seq, value)) {
 						++i;
 						++value;
 						++score_r;
+					}
+					
+					/* get end positions */
+					points->qEnd[totMems] = i;
+					points->tEnd[totMems] = value + 1;
+					
+					/* calculate weight */
+					points->weight[totMems] = (points->qEnd[totMems] - points->qStart[totMems]) * M;
+					++mem_count;
+					++totMems;
+					
+					/* realloc seeding points */
+					if(mem_count == points->size) {
+						seedPoint_realloc(points, points->size << 1);
 					}
 					
 					/* update position */
@@ -9462,19 +9033,25 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len) {
 	
 	if(bestScore * kmersize < (q_len - kmersize - bestScore)) {
 		bestScore = 0;
+		points->len = 0;
 	} else if(bestScore == score) {
 		strrc(qseq, q_len);
-		for(i = 0; i < q_len; ++i) {
-			best[i] = 0;
-		}
 		Score[template_name] += bestScore;
 	} else {
-		track = best;
-		best = chain;
-		chain = track;
-		for(i = 0; i < q_len; ++i) {
-			best[i] = 0;
+		/* move mems down */
+		if(points->len) {
+			points->len += mem_count;
+			for(i = points->len, j = 0; i < totMems; ++i, ++j) {
+				points->tStart[j] = points->tStart[i];
+				points->tEnd[j] = points->tEnd[i];
+				points->qStart[j] = points->qStart[i];
+				points->qEnd[j] = points->qEnd[i];
+				points->weight[j] = points->weight[i];
+				points->score[j] = points->score[i];
+				points->next[j] = points->next[i];
+			}
 		}
+		points->len = mem_count;
 		Score[template_name] += bestScore;
 	}
 	
@@ -9541,7 +9118,7 @@ char nanoCaller(unsigned char bestNuc, int i, int bestScore, int depthUpdate, st
 	return bestNuc;
 }
 
-void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix) {
+void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix, struct alnPoints *points) {
 	
 	int i, j, t_len, aln_len, asm_len, start, end, bias, myBias, gaps;
 	int read_score, depthUpdate, bestBaseScore, pos, bestScore, buffer[7];
@@ -9558,7 +9135,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	t_len = template_lengths[template];
 	asm_len = t_len;
 	nextGap = t_len;
-	max_asmlen = t_len << 2;
+	max_asmlen = t_len << 1;
 	if(max_asmlen < matrix->size) {
 		max_asmlen = matrix->size;
 	}
@@ -9570,6 +9147,8 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 			ERROR();
 		}
 		matrix->size = max_asmlen;
+	} else {
+		max_asmlen = matrix->size;
 	}
 	assembly = matrix->assmb;
 	
@@ -9583,6 +9162,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 		assembly[i].counts[5] = 0;
 		assembly[i].next = j;
 	}
+	assembly[i - 1].next = 0;
 	
 	/* load reads of this template */
 	file_i = 0;
@@ -9639,10 +9219,9 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 				}
 				
 				/* Update assembly with read */
-				if(read_score || anker_rc(template, qseq->seq, qseq->len)) {
+				if(read_score || anker_rc(template, qseq->seq, qseq->len, points)) {
 					/* Start with alignment */
-					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
-					//alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, 0, t_len);
+					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points);
 					
 					/* get read score */
 					aln_len = alnStat.len;
@@ -9651,7 +9230,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 					
 					/* Get normed score */
 					read_score = alnStat.score;
-					if(aln_len > 0) {
+					if(aln_len >= kmersize) {
 						score = 1.0 * read_score / aln_len;
 					} else {
 						score = 0;
@@ -9694,6 +9273,13 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 										pos = assembly[pos].next;
 										assembly[pos].next = gaps;
 										++nextGap;
+										if(nextGap == max_asmlen) {
+											max_asmlen <<= 1;
+											assembly = realloc(assembly, max_asmlen * sizeof(struct assembly));
+											if(!assembly) {
+												ERROR();
+											}
+										}
 										
 										assembly[pos].counts[0] = 0;
 										assembly[pos].counts[1] = 0;
@@ -9704,18 +9290,11 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 										assembly[pos].counts[aligned->q[i]]++;
 										
 										++i;
-										if(nextGap == max_asmlen) {
-											max_asmlen <<= 1;
-											assembly = realloc(assembly, max_asmlen * sizeof(struct assembly));
-											if(!assembly) {
-												ERROR();
-											}
-										}
 										++asm_len;
 									}
 									pos = assembly[pos].next;
 								}
-							} else if(pos >= t_len) { // Old template gap, not present in this read
+							} else if(t_len <= pos) { // Old template gap, not present in this read
 								assembly[pos].counts[5]++;
 								pos = assembly[pos].next;
 							} else { // (Match, mismatch) and (Query gap, deletion)
@@ -9732,7 +9311,6 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 						qseq->seq[qseq->len] = 0;
 						
 						/* Save fragment */
-						/* here */
 						updateFrags(frag_out, qseq, header, template_names[template], stats);
 						//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
 					}
@@ -9761,7 +9339,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	/* Make consensus assembly by majority voting */
 	/* Pepare and make alignment on consensus */
 	if(aligned_assem->size <= asm_len) {
-		aligned_assem->size = asm_len + 1;
+		aligned_assem->size = (asm_len + 1) << 1;
 		free(aligned_assem->t);
 		free(aligned_assem->s);
 		free(aligned_assem->q);
@@ -9772,6 +9350,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 			ERROR();
 		}
 	}
+	
 	/* Call nucleotides for the consensus */
 	i = 0;
 	pos = 0;
@@ -9856,7 +9435,7 @@ void assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int f
 	matrix->size = max_asmlen;
 }
 
-void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix) {
+void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix, struct alnPoints *points) {
 	
 	int i, j, t_len, aln_len, start, end, file_i, stats[4], buffer[7];
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
@@ -9883,7 +9462,7 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 		}
 	}
 	if(matrix->size < t_len) {
-		matrix->size = pow(2, ceil(log(t_len)/log(2))) + 0.5;
+		matrix->size = t_len << 1;
 		free(matrix->assmb);
 		matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
 		if(!matrix->assmb) {
@@ -9959,9 +9538,9 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 				}
 				
 				/* Update assembly with read */
-				if(read_score || anker_rc(template, qseq->seq, qseq->len)) {
+				if(read_score || anker_rc(template, qseq->seq, qseq->len, points)) {
 					/* Start with alignment */
-					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]));
+					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points);
 					
 					/* get read score */
 					aln_len = alnStat.len;
@@ -10083,7 +9662,6 @@ void assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files,
 	
 	matrix->assmb = assembly;
 	matrix->len = t_len;
-	matrix->size = t_len + 1;
 }
 
 void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, struct qseqs *header, FILE *frag_out_raw) {
@@ -10119,7 +9697,7 @@ void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *
 	}
 }
 
-void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
 	
 	int t_i, template, read_score, best_read_score, bestHits, aln_len;
 	int start, end;
@@ -10156,9 +9734,9 @@ void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, 
 		
 		/* align qseq */
 		if(template < 0) {
-			alnStat = KMA_score(-template, qseq_r, q_len, qseq_r_comp);
+			alnStat = KMA_score(-template, qseq_r, q_len, qseq_r_comp, points);
 		} else {
-			alnStat = KMA_score(template, qseq, q_len, qseq_comp);
+			alnStat = KMA_score(template, qseq, q_len, qseq_comp, points);
 		}
 		
 		/* get read score */
@@ -10210,7 +9788,7 @@ void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, 
 	}
 }
 
-void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
 	
 	int t_i, template, read_score, best_read_score, best_read_score_r;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, rc;
@@ -10260,7 +9838,7 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 		template = abs(template);
 		
 		/* align qseqs */
-		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp);
+		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points);
 		
 		/* get read score */
 		if(0 < alnStat.score) {
@@ -10290,7 +9868,7 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 			best_end_pos[t_i] = -1;
 		}
 		
-		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp);
+		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points);
 		/* get read score */
 		if(0 < alnStat.score) {
 			aln_len = alnStat.len;
@@ -10445,7 +10023,7 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 	}
 }
 
-void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
 	
 	int t_i, template, read_score, best_read_score, best_read_score_r;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, rc;
@@ -10495,7 +10073,7 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 		template = abs(template);
 		
 		/* align qseqs */
-		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp);
+		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points);
 		
 		/* get read score */
 		if(0 < alnStat.score) {
@@ -10525,7 +10103,7 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 			best_end_pos[t_i] = -1;
 		}
 		
-		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp);
+		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points);
 		/* get read score */
 		if(0 < alnStat.score) {
 			aln_len = alnStat.len;
@@ -10678,7 +10256,7 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 	}
 }
 
-void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw) {
+void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
 	
 	int t_i, template, read_score, best_read_score, bestHits, aln_len;
 	int start, end, rc;
@@ -10727,9 +10305,9 @@ void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct c
 		template = abs(template);
 		
 		/* align qseq */
-		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp);
+		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points);
 		if(0 < alnStat.score) {
-			alnStat_r = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp);
+			alnStat_r = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points);
 			
 			/* get read score */
 			if(0 < alnStat_r.score) {
@@ -10860,6 +10438,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	struct compDNA *qseq_comp, *qseq_r_comp;
 	struct qseqs *qseq, *qseq_r, *header, *header_r;
 	struct assemInfo *matrix;
+	struct alnPoints *points;
 	
 	/* open pipe */
 	//inputfile = popen(exePrev, "r");
@@ -10910,6 +10489,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	header_r = setQseqs(256);
 	allocComp(qseq_comp, delta);
 	allocComp(qseq_r_comp, delta);
+	points = seedPoint_init(delta);
 	
 	/* make file indexes of template indexing */
 	*index_indexes = 0;
@@ -11020,9 +10600,9 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 		
 		if(read_score) { // PE
-			alnFragsPE(matched_templates, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, header, header_r, bestTemplates, bestTemplates_r, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw);
+			alnFragsPE(matched_templates, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, header, header_r, bestTemplates, bestTemplates_r, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points);
 		} else { // SE
-			alnFragsSE(matched_templates, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, header, bestTemplates, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw);
+			alnFragsSE(matched_templates, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, header, bestTemplates, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points);
 		}
 	
 	}
@@ -11233,7 +10813,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			matrix->size = template_lengths[i];
 		}
 	}
-	matrix->size = pow(2, ceil(log(matrix->size)/log(2))) + 0.5;
+	matrix->size <<= 1;
 	aligned_assem->size = matrix->size;
 	aligned_assem->t = malloc(aligned_assem->size);
 	aligned_assem->s = malloc(aligned_assem->size);
@@ -11258,7 +10838,7 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
 				/* Do assembly */
-				assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix);
+				assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix, points);
 				
 				/* Depth, ID and coverage */
 				if(aligned_assem->cover > 0) {
@@ -11287,14 +10867,6 @@ void runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			}
 		}
 	}
-	destroyQseqs(qseq);
-	destroyQseqs(header);
-	if(aligned_assem->size != 0) {
-		free(aligned_assem->t);
-		free(aligned_assem->s);
-		free(aligned_assem->q);
-	}
-	free(aligned_assem);
 	
 	/* Close files */
 	fclose(index_in);
@@ -11335,6 +10907,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	struct compDNA *qseq_comp, *qseq_r_comp;
 	struct qseqs *qseq, *qseq_r, *header, *header_r;
 	struct assemInfo *matrix;
+	struct alnPoints *points;
 	
 	/* open pipe */
 	//inputfile = popen(exePrev, "r");
@@ -11379,6 +10952,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	qseq_r = setQseqs(delta);
 	header = setQseqs(256);
 	header_r = setQseqs(256);
+	points = seedPoint_init(delta);
 	
 	/* etta = small value to avoid zero-divisio */
 	etta = 1.0e-6;
@@ -11696,7 +11270,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			matrix->size = template_lengths[i];
 		}
 	}
-	matrix->size = pow(2, ceil(log(matrix->size)/log(2))) + 0.5;
+	matrix->size <<= 1;
 	aligned_assem->size = matrix->size;
 	aligned_assem->t = malloc(aligned_assem->size);
 	aligned_assem->s = malloc(aligned_assem->size);
@@ -11728,7 +11302,7 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 				templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], 0, 0);
 				
 				/* Do assembly */
-				assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix);
+				assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix, points);
 				
 				/* Depth, ID and coverage */
 				if(aligned_assem->cover > 0) {
@@ -11765,15 +11339,6 @@ void runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 	}
 	
-	destroyQseqs(header);
-	destroyQseqs(qseq);
-	if(aligned_assem->size != 0) {
-		free(aligned_assem->t);
-		free(aligned_assem->s);
-		free(aligned_assem->q);
-	}
-	free(aligned_assem);
-	
 	/* Close files */
 	fclose(index_in);
 	fclose(seq_in);
@@ -11802,6 +11367,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	struct assem *aligned_assem;
 	struct qseqs *qseq, *header;
 	struct assemInfo *matrix;
+	struct alnPoints *points;
 	
 	/* open pipe */
 	//template_fragments = popen(exePrev, "r");
@@ -11815,6 +11381,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	file_len = strlen(outputfilename);
 	header = setQseqs(256);
 	qseq = setQseqs(delta);
+	points = seedPoint_init(delta);
 	
 	/* etta = small value to avoid zero-divisio */
 	etta = 1.0e-6;
@@ -12000,7 +11567,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	if(!matrix || !aligned_assem || !aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
 		ERROR();
 	}
-	matrix->size = pow(2, ceil(log(*template_lengths)/log(2))) + 0.5;
+	matrix->size = (*template_lengths) << 1;
 	aligned_assem->size = matrix->size;
 	aligned_assem->t = malloc(aligned_assem->size);
 	aligned_assem->s = malloc(aligned_assem->size);
@@ -12015,7 +11582,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	cover = 0;
 	q_cover = 0;
 	/* Do assembly */
-	assemblyPtr(aligned_assem, 0, &template_fragments, 1, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix);
+	assemblyPtr(aligned_assem, 0, &template_fragments, 1, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix, points);
 	
 	/* make p_value */
 	read_score = *Score;
@@ -12052,15 +11619,6 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		/* destroy this DB index */
 		destroyPtr(0);
 	}
-	
-	destroyQseqs(header);
-	destroyQseqs(qseq);
-	if(aligned_assem->size != 0) {
-		free(aligned_assem->t);
-		free(aligned_assem->s);
-		free(aligned_assem->q);
-	}
-	free(aligned_assem);
 	
 	/* Close files */
 	fclose(res_out);
