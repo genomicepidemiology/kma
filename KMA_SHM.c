@@ -28,34 +28,37 @@
 #include <time.h>
 #include <unistd.h>
 
+#define HU_LIMIT 65535
+#define U_LIMIT 4294967295
+
 /*
  STRUCTURES
 */
 struct hashMapKMA {
-	/* end product of script */
-	unsigned kmersize;		// k
-	unsigned size;			// size of DB
-	unsigned n;				// k-mers stored
-	unsigned null_index;	// null value
-	unsigned seqsize;		// size of seq
-	unsigned v_index;		// size of values
-	unsigned prefix_len;	// prefix length
-	long unsigned *prefix;	// prefix
-	unsigned *exist;		// size long
-	long unsigned *seq;		// compressed sequence of k-mers
-	unsigned *values;		// compressed values
-	unsigned *key_index	;	// Relative
-	unsigned *value_index;	// Relative
+	long unsigned size;				// size of DB
+	long unsigned n;				// k-mers stored
+	long unsigned null_index;		// null value
+	long unsigned v_index;			// size of values
+	unsigned kmersize;				// k
+	unsigned prefix_len;			// prefix length
+	long unsigned prefix;			// prefix
+	unsigned *exist;				// size long
+	long unsigned *exist_l;			// size long, big DBs
+	unsigned *values;				// compressed values
+	short unsigned *values_s;		// compressed values, few templates
+	unsigned *key_index;			// Relative
+	long unsigned *key_index_l;		// Relative, 16 < k
+	unsigned *value_index;			// Relative
+	long unsigned *value_index_l;	// Relative, big DBs
 };
 
-int version[3] = {0, 14, 0};
+int version[3] = {0, 15, 0};
 
 /*
  FUNCTIONS
 */
 void hashMap_shm_detach(struct hashMapKMA *dest) {
 	shmdt(dest->exist);
-	shmdt(dest->seq);
 	shmdt(dest->values);
 	shmdt(dest->key_index);
 	shmdt(dest->value_index);
@@ -63,150 +66,189 @@ void hashMap_shm_detach(struct hashMapKMA *dest) {
 
 void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
 	
-	int shmid;
-	long unsigned mask;
+	int shmid, kmersize;
+	unsigned DB_size;
+	long unsigned mask, size;
 	key_t key;
 	
 	/* load sizes */
-	fseek(file, sizeof(int), SEEK_CUR);
+	fread(&DB_size, sizeof(unsigned), 1, file);
 	fread(&dest->kmersize, sizeof(unsigned), 1, file);
 	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
 	fread(&dest->prefix, sizeof(long unsigned), 1, file);
 	fread(&dest->size, sizeof(long unsigned), 1, file);
-	fread(&dest->n, sizeof(unsigned), 1, file);
-	fread(&dest->seqsize, sizeof(unsigned), 1, file);
-	fread(&dest->v_index, sizeof(unsigned), 1, file);
-	fread(&dest->null_index, sizeof(unsigned), 1, file);
+	fread(&dest->n, sizeof(long unsigned), 1, file);
+	fread(&dest->v_index, sizeof(long unsigned), 1, file);
+	fread(&dest->null_index, sizeof(long unsigned), 1, file);
+	kmersize = dest->kmersize;
+	mask = 0;
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
 	
 	/* check shared memory, else load */
+	size = dest->size;
+	if((dest->size - 1) == mask) {
+		if(dest->v_index <= U_LIMIT) {
+			size *= sizeof(unsigned);
+		} else {
+			size *= sizeof(long unsigned);
+		}
+	} else {
+		if(dest->n <= U_LIMIT) {
+			size *= sizeof(unsigned);
+		} else {
+			size *= sizeof(long unsigned);
+		}
+	}
 	key = ftok(filename, 'e');
-	shmid = shmget(key, dest->size * sizeof(unsigned), IPC_CREAT | 0666);
+	shmid = shmget(key, size, IPC_CREAT | 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "Could not setup the shared hashMap e\n");
-		fseek(file, dest->size * sizeof(unsigned), SEEK_CUR);
+		fseek(file, size, SEEK_CUR);
 		dest->exist = 0;
 	} else {
 		dest->exist = shmat(shmid, NULL, 0);
-		fread(dest->exist, sizeof(unsigned), dest->size, file);
+		fread(dest->exist, 1, size, file);
 	}
 	
-	mask = 0;
-	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
-	
-	if((dest->size - 1) == mask) {
-		key = ftok(filename, 'v');
-		shmid = shmget(key, dest->v_index * sizeof(unsigned), IPC_CREAT | 0666);
-		if(shmid < 0) {
-			fprintf(stderr, "Could not setup the shared hashMap v\n");
-			fseek(file, dest->v_index * sizeof(unsigned), SEEK_CUR);
-			dest->values = 0;
-		} else {
-			/* found */
-			dest->values = shmat(shmid, NULL, 0);
-			fread(dest->values, sizeof(unsigned), dest->v_index, file);
-		}
+	/* values */
+	size = dest->v_index;
+	if(DB_size < HU_LIMIT) {
+		size *= sizeof(short unsigned);
 	} else {
-		key = ftok(filename, 's');
-		shmid = shmget(key, dest->seqsize * sizeof(long unsigned), IPC_CREAT | 0666);
-		if(shmid < 0) {
-			fprintf(stderr, "Could not setup the shared hashMap s\n");
-			fseek(file, dest->seqsize * sizeof(long unsigned), SEEK_CUR);
-			dest->seq = 0;
-		} else {
-			/* found */
-			dest->seq = shmat(shmid, NULL, 0);
-			fread(dest->seq, sizeof(long unsigned), dest->seqsize, file);
-		}
-		key = ftok(filename, 'v');
-		shmid = shmget(key, dest->v_index * sizeof(unsigned), IPC_CREAT | 0666);
-		if(shmid < 0) {
-			fprintf(stderr, "Could not setup the shared hashMap v\n");
-			fseek(file, dest->v_index * sizeof(unsigned), SEEK_CUR);
-			dest->values = 0;
-		} else {
-			/* found */
-			dest->values = shmat(shmid, NULL, 0);
-			fread(dest->values, sizeof(unsigned), dest->v_index, file);
-		}
-		key = ftok(filename, 'k');
-		shmid = shmget(key, (dest->n + 1) * sizeof(unsigned), IPC_CREAT | 0666);
-		if(shmid < 0) {
-			fprintf(stderr, "Could not setup the shared hashMap k\n");
-			fseek(file, (dest->n + 1) * sizeof(unsigned), SEEK_CUR);
-			dest->key_index = 0;
-		} else {
-			/* found */
-			dest->key_index = shmat(shmid, NULL, 0);
-			fread(dest->key_index, sizeof(unsigned), dest->n + 1, file);
-		}
-		key = ftok(filename, 'i');
-		shmid = shmget(key, dest->n * sizeof(unsigned), IPC_CREAT | 0666);
-		if(shmid < 0) {
-			fprintf(stderr, "Could not setup the shared hashMap i\n");
-			fseek(file, dest->n * sizeof(unsigned), SEEK_CUR);
-			dest->value_index = 0;
-		} else {
-			/* found */
-			dest->value_index = shmat(shmid, NULL, 0);
-			fread(dest->value_index, sizeof(unsigned), dest->n, file);
-		}
+		size *= sizeof(unsigned);
+	}
+	key = ftok(filename, 'v');
+	shmid = shmget(key, size, IPC_CREAT | 0666);
+	if(shmid < 0) {
+		fprintf(stderr, "Could not setup the shared hashMap v\n");
+		fseek(file, size, SEEK_CUR);
+		dest->values = 0;
+	} else {
+		/* found */
+		dest->values = shmat(shmid, NULL, 0);
+		fread(dest->values, 1, size, file);
+	}
+	if((dest->size - 1) == mask) {
+		return;
+	}
+	
+	/* kmers */
+	size = dest->n + 1;
+	if(dest->kmersize <= 16) {
+		size *= sizeof(unsigned);
+	} else {
+		size *= sizeof(long unsigned);
+	}
+	key = ftok(filename, 'k');
+	shmid = shmget(key, size, IPC_CREAT | 0666);
+	if(shmid < 0) {
+		fprintf(stderr, "Could not setup the shared hashMap k\n");
+		fseek(file, size, SEEK_CUR);
+		dest->values = 0;
+	} else {
+		/* found */
+		dest->key_index = shmat(shmid, NULL, 0);
+		fread(dest->key_index, 1, size, file);
+	}
+	
+	/* value indexes */
+	size = dest->n;
+	if(dest->v_index < U_LIMIT) {
+		size *= sizeof(unsigned);
+	} else {
+		size *= sizeof(long unsigned);
+	}
+	key = ftok(filename, 'i');
+	shmid = shmget(key, size, IPC_CREAT | 0666);
+	if(shmid < 0) {
+		fprintf(stderr, "Could not setup the shared hashMap i\n");
+		fseek(file, size, SEEK_CUR);
+		dest->value_index = 0;
+	} else {
+		/* found */
+		dest->value_index = shmat(shmid, NULL, 0);
+		fread(dest->value_index, 1, size, file);
 	}
 }
 
 void hashMapKMA_destroySHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
 	
-	int shmid;
-	long unsigned mask;
+	int shmid, kmersize;
+	unsigned DB_size;
+	long unsigned mask, size;
 	key_t key;
 	
 	/* load sizes */
-	fseek(file, sizeof(int), SEEK_CUR);
+	fread(&DB_size, sizeof(unsigned), 1, file);
 	fread(&dest->kmersize, sizeof(unsigned), 1, file);
 	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
 	fread(&dest->prefix, sizeof(long unsigned), 1, file);
 	fread(&dest->size, sizeof(long unsigned), 1, file);
-	fread(&dest->n, sizeof(unsigned), 1, file);
-	fread(&dest->seqsize, sizeof(unsigned), 1, file);
-	fread(&dest->v_index, sizeof(unsigned), 1, file);
-	fread(&dest->null_index, sizeof(unsigned), 1, file);
+	fread(&dest->n, sizeof(long unsigned), 1, file);
+	fread(&dest->v_index, sizeof(long unsigned), 1, file);
+	fread(&dest->null_index, sizeof(long unsigned), 1, file);
+	kmersize = dest->kmersize;
+	mask = 0;
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
 	
 	/* check shared memory, and destroy */
+	size = dest->size;
+	if((dest->size - 1) == mask) {
+		if(dest->v_index <= U_LIMIT) {
+			size *= sizeof(unsigned);
+		} else {
+			size *= sizeof(long unsigned);
+		}
+	} else {
+		if(dest->n <= U_LIMIT) {
+			size *= sizeof(unsigned);
+		} else {
+			size *= sizeof(long unsigned);
+		}
+	}
 	key = ftok(filename, 'e');
-	shmid = shmget(key, dest->size * sizeof(unsigned), 0666);
+	shmid = shmget(key, size, 0666);
 	if(shmid >= 0) {
 		shmctl(shmid, IPC_RMID, NULL);
 	}
 	
-	mask = 0;
-	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
-	
-	if((dest->size - 1) == mask) {
-		key = ftok(filename, 'v');
-		shmid = shmget(key, dest->v_index * sizeof(unsigned), 0666);
-		if(shmid >= 0) {
-			shmctl(shmid, IPC_RMID, NULL);
-		}
+	/* values */
+	size = dest->v_index;
+	if(DB_size < HU_LIMIT) {
+		size *= sizeof(short unsigned);
 	} else {
-		key = ftok(filename, 's');
-		shmid = shmget(key, dest->seqsize * sizeof(long unsigned), 0666);
-		if(shmid >= 0) {
-			shmctl(shmid, IPC_RMID, NULL);
-		}
-		key = ftok(filename, 'v');
-		shmid = shmget(key, dest->v_index * sizeof(unsigned), 0666);
-		if(shmid >= 0) {
-			shmctl(shmid, IPC_RMID, NULL);
-		}
-		key = ftok(filename, 'k');
-		shmid = shmget(key, (dest->n + 1) * sizeof(unsigned), 0666);
-		if(shmid >= 0) {
-			shmctl(shmid, IPC_RMID, NULL);
-		}
-		key = ftok(filename, 'i');
-		shmid = shmget(key, dest->n * sizeof(unsigned), 0666);
-		if(shmid >= 0) {
-			shmctl(shmid, IPC_RMID, NULL);
-		}
+		size *= sizeof(unsigned);
+	}
+	key = ftok(filename, 'v');
+	shmid = shmget(key, size, 0666);
+	if(shmid >= 0) {
+		shmctl(shmid, IPC_RMID, NULL);
+	}
+	
+	/* kmers */
+	size = dest->n + 1;
+	if(dest->kmersize <= 16) {
+		size *= sizeof(unsigned);
+	} else {
+		size *= sizeof(long unsigned);
+	}
+	key = ftok(filename, 'k');
+	shmid = shmget(key, size, 0666);
+	if(shmid >= 0) {
+		shmctl(shmid, IPC_RMID, NULL);
+	}
+	
+	/* value indexes */
+	size = dest->n;
+	if(dest->v_index < U_LIMIT) {
+		size *= sizeof(unsigned);
+	} else {
+		size *= sizeof(long unsigned);
+	}
+	key = ftok(filename, 'i');
+	shmid = shmget(key, size, 0666);
+	if(shmid >= 0) {
+		shmctl(shmid, IPC_RMID, NULL);
 	}
 }
 

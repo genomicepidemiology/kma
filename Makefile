@@ -1,5 +1,5 @@
 CFLAGS = -w -O3
-BINS = kma kma_index kma_shm
+BINS = kma kma_index kma_shm kma_update
 
 all: $(BINS)
 
@@ -11,6 +11,9 @@ kma_index: KMA_index.c
 
 kma_shm: KMA_SHM.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+kma_update: KMA_update.c
+        $(CC) $(CFLAGS) -o $@ $<
 
 clean:
 	$(RM) $(BINS)

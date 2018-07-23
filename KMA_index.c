@@ -29,6 +29,8 @@
 #include <unistd.h>
 #include <zlib.h>
 
+#define HU_LIMIT 65535
+#define U_LIMIT 4294967295
 #define CHUNK 1048576
 #define ENABLE_ZLIB_GZIP 32
 #define getNuc(Comp,pos)((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
@@ -55,39 +57,38 @@ struct KMA_SEQ {
 
 struct hashMapKMA {
 	/* end product of script */
-	unsigned kmersize;		// k
-	long unsigned size;		// size of DB
-	unsigned n;				// k-mers stored
-	unsigned null_index;	// null value
-	unsigned seqsize;		// size of seq
-	unsigned v_index;		// size of values
-	unsigned prefix_len;	// prefix length
-	long unsigned prefix;	// prefix
-	unsigned *exist;		// size long
-	long unsigned *seq;		// compressed sequence of k-mers
-	int *values;			// compressed values
-	unsigned *key_index	;	// Relative
-	unsigned *value_index;	// Relative
+	long unsigned size;				// size of DB
+	long unsigned n;				// k-mers stored
+	long unsigned null_index;		// null value
+	long unsigned v_index;			// size of values
+	unsigned kmersize;				// k
+	unsigned prefix_len;			// prefix length
+	long unsigned prefix;			// prefix
+	unsigned *exist;				// size long
+	long unsigned *exist_l;			// size long, big DBs
+	unsigned *values;				// compressed values
+	short unsigned *values_s;		// compressed values, few templates
+	unsigned *key_index;			// Relative
+	long unsigned *key_index_l;		// Relative, 16 < k
+	unsigned *value_index;			// Relative
+	long unsigned *value_index_l;	// Relative, big DBs
 };
 
 struct hashTable {
-	unsigned key;
-	unsigned values;
+	long unsigned key;
+	unsigned *values;
 	struct hashTable *next;
 };
 
 struct hashMap {
 	/* open hash structure */
-	unsigned kmersize;		// k
-	long unsigned size;		// size of DB
-	unsigned n;				// k-mers stored
-	unsigned seq_size;		// size of seq
-	unsigned seq_n;			// next seq index
-	unsigned prefix_len;	// prefix length
-	long unsigned prefix;	// prefix
-	struct hashTable **table; // outer = exist, inner = key,value index
-	long unsigned *seq;		// compressed sequence of k-mers
-	int **values;		// uncompressed values
+	unsigned kmersize;			// k
+	long unsigned size;			// size of DB
+	long unsigned n;			// k-mers stored
+	unsigned prefix_len;		// prefix length
+	long unsigned prefix;		// prefix
+	struct hashTable **table;	// org
+	unsigned **values;			// ME
 };
 
 struct hashMap_index {
@@ -109,14 +110,14 @@ struct hashMap_kmers {
 };
 
 struct valuesTable {
-	unsigned values;
-	unsigned value_index;
+	long unsigned v_index;
+	unsigned *values;
 	struct valuesTable *next;
 };
 
 struct valuesHash {
-	unsigned n;
-	unsigned size;
+	long unsigned n;
+	long unsigned size;
 	struct valuesTable **table;
 };
 
@@ -140,7 +141,7 @@ struct FileBuff {
 /*
 	GLOBAL VARIABLES
 */
-int version[3] = {0, 14, 1};
+int version[3] = {0, 15, 0};
 struct hashMap *templates;
 struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
@@ -153,17 +154,31 @@ double homQ, homT;
 	FUNCTION POINTERS
 */
 int (*homcmp)(int, int);
-int (*update_DB)(struct compDNA *);
+int (*update_DB)(struct hashMap *, struct compDNA *, unsigned);
 void (*load_ptr)(struct hashMap*, char*);
-int (*deConNode_ptr)(struct compDNA *, struct hashMapKMA *);
-int (*addCont)(struct hashMapKMA *, long unsigned, int);
+int (*deConNode_ptr)(struct compDNA *, struct hashMapKMA *, unsigned **);
+int (*addCont)(struct hashMapKMA *, long unsigned, int, unsigned **);
 int (*QualCheck)(struct compDNA *);
 void (*updateAnnotsPtr)(struct compDNA *, FILE *, FILE *);
-int (*hashMap_add)(long unsigned, int, int);
-int * (*hashMap_get)(long unsigned);
-long unsigned (*getKmerP)(long unsigned *, unsigned);
-unsigned (*addKmer)(long unsigned, int);
+int (*hashMap_add)(struct hashMap *, long unsigned, unsigned);
+unsigned * (*hashMap_get)(struct hashMap *, long unsigned);
 int (*buffFileBuff)(struct FileBuff *);
+void (*dumpIndex)(struct compDNA *, FILE *, FILE *);
+unsigned * (*updateValuePtr)(unsigned *, unsigned);
+long unsigned (*valuesKeyPtr)(unsigned *);
+int (*cmpValuesPtr)(unsigned *, unsigned *, unsigned);
+unsigned (*valuesSize)(unsigned *);
+void (*hashMapKMA_addKey_ptr)(struct hashMapKMA *, long unsigned, long unsigned);
+void (*hashMapKMA_addValue_ptr)(struct hashMapKMA *, long unsigned, long unsigned);
+void (*hashMapKMA_addExist_ptr)(struct hashMapKMA *, long unsigned, long unsigned);
+void (*updateScoreAndTemplate_ptr)(unsigned *, unsigned *, unsigned *);
+void (*addUscore_ptr)(unsigned *, unsigned *);
+void (*addUniqueValues)(struct hashMap *, long unsigned, unsigned *);
+long unsigned (*getExistPtr)(struct hashMapKMA *, long unsigned);
+long unsigned (*getKeyPtr)(struct hashMapKMA *, long unsigned);
+long unsigned (*getValueIndexPtr)(struct hashMapKMA *, long unsigned);
+unsigned * (*getValuePtr)(struct hashMapKMA *, long unsigned);
+int (*getSizePtr)(unsigned *, int);
 
 /*
 	FUNCTIONS
@@ -172,6 +187,41 @@ int (*buffFileBuff)(struct FileBuff *);
 void ERROR() {
 	fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 	exit(errno);
+}
+
+void * smalloc(size_t size) {
+	
+	void *dest;
+	
+	dest = malloc(size);
+	if(!dest) {
+		ERROR();
+	}
+	
+	return dest;
+}
+
+void * memdup(const void * src, size_t size) {
+	
+	void *dest;
+	
+	dest = smalloc(size);
+	memcpy(dest, src, size);
+	
+	return dest;
+}
+
+FILE * sfopen(const char *filename, const char *mode) {
+	
+	FILE *file;
+	
+	file = fopen(filename, mode);
+	if(!file) {
+		fprintf(stderr, "File:\t%s\n", filename);
+		ERROR();
+	}
+	
+	return file;
 }
 
 int chomp(char *string) {
@@ -187,15 +237,17 @@ int chomp(char *string) {
 }
 
 int uint_eq(const unsigned *s1, const unsigned *s2, int len) {
+	
 	if(len == 0) {
 		return 1;
 	}
-	int i;
-	for(i = 0; i < len; ++i) {
-		if(s1[i] != s2[i]) {
+	
+	while(len--) {
+		if(s1[len] != s2[len]) {
 			return 0;
 		}
 	}
+	
 	return 1;
 }
 
@@ -355,36 +407,16 @@ void unCompDNA(struct compDNA *compressor, char *seq) {
 	
 }
 
-long unsigned getKmer(long unsigned *compressor, unsigned pos) {
+long unsigned getKmer(long unsigned *compressor, unsigned cPos) {
 	
-	unsigned cPos, iPos;
-	cPos = pos >> 5;
-	iPos = (pos & 31) << 1;
+	unsigned iPos = (cPos & 31) << 1;
+	cPos >>= 5;
 	
 	return (iPos <= shifter) ? ((compressor[cPos] << iPos) >> shifter) : (((compressor[cPos] << iPos) | (compressor[cPos + 1] >> (64-iPos))) >> shifter);
 }
 
 long unsigned getK(long unsigned *compressor, unsigned pos) {
 	return pos;
-}
-
-unsigned addKmerC(long unsigned key, int extend) {
-	
-	int i, pos;
-	
-	pos = templates->seq_n - kmersize + extend;
-	key <<= ((kmersize - extend) << 1);
-	for(i = kmersize - extend; i < kmersize; ++i) {
-		key <<= 2;
-		SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
-		++templates->seq_n;
-	}
-	
-	return pos;
-}
-
-unsigned addK(long unsigned key, int extend) {
-	return key;
 }
 
 long unsigned getKmerIndex(long unsigned *compressor, unsigned pos) {
@@ -853,24 +885,19 @@ struct hashMap * hashMap_initialize(long unsigned size) {
 	src->kmersize = kmersize;
 	src->size = size;
 	src->n = 0;
-	src->seq_size = size >> 5;
-	src->seq_n = 0;
 	src->prefix_len = 0;
 	src->prefix = 0;
 	
 	if((size - 1) == mask) {
 		src->table = 0;
-		src->seq_size = 0;
-		src->seq = 0;
 		src->values = calloc(src->size, sizeof(unsigned *));
 		if(!src->values) {
 			ERROR();
 		}
 	} else {
+		src->values = 0;
 		src->table = calloc(src->size, sizeof(struct hashTable *));
-		src->seq = calloc(src->seq_size, sizeof(long unsigned));
-		src->values = malloc(src->size * sizeof(unsigned *));
-		if(!src->table || !src->seq || !src->values) {
+		if(!src->table) {
 			ERROR();
 		}
 	}
@@ -883,175 +910,7 @@ struct hashMap * hashMap_initialize(long unsigned size) {
 
 struct hashMap * hashMap_load(char *filename) {
 	
-	unsigned i, index, pos[2];
-	FILE *infile;
-	struct hashMap *src;
-	struct hashTable *node;
-	
-	infile = fopen(filename, "rb");
-	if(!infile) {
-		ERROR();
-	}
-	
-	src = malloc(sizeof(struct hashMap));
-	if(!src) {
-		ERROR();
-	}
-	
-	/* load content */
-	fread(&src->kmersize, sizeof(unsigned), 1, infile);
-	kmersize = src->kmersize;
-	if(kmersize <= 16) {
-		getKmerP = &getK;
-		addKmer = &addK;
-	}
-	fread(&src->size, sizeof(long unsigned), 1, infile);
-	fread(&src->n, sizeof(unsigned), 1, infile);
-	fread(&src->seq_n, sizeof(unsigned), 1, infile);
-	src->seq_size = src->seq_n >> 4;
-	fread(&src->prefix_len, sizeof(unsigned), 1, infile);
-	fread(&src->prefix, sizeof(long unsigned), 1, infile);
-	mask = 0;
-	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
-	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
-	
-	/* allocate */
-	if((src->size - 1) == mask) {
-		src->values = calloc(src->size, sizeof(unsigned *));
-		if(!src->values) {
-			ERROR();
-		}
-		/* masking */
-		--src->size;
-		
-		/* load */
-		for(i = 0; i < src->n; ++i) {
-			fread(pos, sizeof(unsigned), 2, infile);
-			src->values[pos[0]] = malloc((pos[1] + 1) * sizeof(unsigned));
-			if(!src->values[pos[0]]) {
-				ERROR();
-			}
-			src->values[pos[0]][0] = pos[1];
-			fread(src->values[pos[0]] + 1, sizeof(unsigned), pos[1], infile);
-		}
-	} else {
-		src->table = calloc(src->size, sizeof(struct hashTable *));
-		src->seq = calloc(src->seq_size, sizeof(long unsigned));
-		src->values = malloc(src->size * sizeof(unsigned *));
-		if(!src->table || !src->seq || !src->values) {
-			ERROR();
-		}
-		/* masking */
-		--src->size;
-		
-		/* load */
-		fread(src->seq, sizeof(long unsigned), (src->seq_n >> 5) + 1, infile);
-		for(i = 0; i < src->n; ++i) {
-			fread(pos, sizeof(unsigned), 1, infile);
-			src->values[i] = malloc((pos[0] + 1) * sizeof(unsigned));
-			if(!src->values[i]) {
-				ERROR();
-			}
-			src->values[i][0] = pos[0];
-			fread(src->values[i] + 1, sizeof(unsigned), pos[0], infile);
-		}
-		
-		for(i = 0; i < src->n; ++i) {
-			//fread(pos, sizeof(unsigned), 2, infile);
-			node = malloc(sizeof(struct hashTable));
-			if(!node) {
-				ERROR();
-			}
-			/* push node */
-			//fread(&index, sizeof(unsigned), 1, infile);
-			fread(&node->key, sizeof(unsigned), 1, infile);
-			fread(&node->values, sizeof(int), 1, infile);
-			//node->key = pos[0];
-			//node->values = pos[1];
-			index = getKmerP(src->seq, node->key) & src->size;
-			node->next = src->table[index];
-			src->table[index] = node;
-		}
-	}
-	
-	fclose(infile);
-	return src;
-}
-
-void hashMap_dump(struct hashMap *src, FILE *outfile) {
-	
-	long unsigned i;
-	struct hashTable *node;
-	
-	/* dump content */
-	++src->size;
-	fwrite(&src->kmersize, sizeof(unsigned), 1, outfile);
-	fwrite(&src->size, sizeof(long unsigned), 1, outfile);
-	fwrite(&src->n, sizeof(unsigned), 1, outfile);
-	fwrite(&src->seq_n, sizeof(unsigned), 1, outfile);
-	fwrite(&src->prefix_len, sizeof(unsigned), 1, outfile);
-	fwrite(&src->prefix, sizeof(long unsigned), 1, outfile);
-	
-	/* allocate */
-	if((src->size - 1) == mask) {
-		/* dump values */
-		for(i = 0; i < src->size; ++i) {
-			if(src->values[i]) {
-				fwrite(&(unsigned){i}, sizeof(unsigned), 1, outfile);
-				fwrite(src->values[i], sizeof(unsigned), src->values[i][0] + 1, outfile);
-			}
-		}
-	} else {
-		/* dump */
-		fwrite(src->seq, sizeof(long unsigned), (src->seq_n >> 5) + 1, outfile);
-		for(i = 0; i < src->n; ++i) {
-			fwrite(src->values[i], sizeof(unsigned), src->values[i][0] + 1, outfile);
-		}
-		for(i = 0; i < src->size; ++i) {
-			for(node = src->table[i]; node != 0; node = node->next) {
-				//fwrite(&(unsigned){i}, sizeof(unsigned), 1, outfile);
-				fwrite(&node->key, sizeof(unsigned), 1, outfile);
-				fwrite(&node->values, sizeof(int), 1, outfile);
-			}
-		}
-	}
-	
-	/* masking */
-	--src->size;
-}
-
-void deConMap_dump(struct hashMapKMA *dest, FILE *out) {
-	
-	long unsigned i;
-	
-	/* dump sizes */
-	fwrite(&DB_size, sizeof(unsigned), 1, out);
-	fwrite(&dest->kmersize, sizeof(unsigned), 1, out);
-	fwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
-	fwrite(&dest->prefix, sizeof(long unsigned), 1, out);
-	fwrite(&dest->size, sizeof(long unsigned), 1, out);
-	fwrite(&dest->n, sizeof(unsigned), 1, out);
-	fwrite(&dest->seqsize, sizeof(unsigned), 1, out); //seq size
-	fwrite(&dest->v_index, sizeof(unsigned), 1, out);
-	fwrite(&dest->null_index, sizeof(unsigned), 1, out);
-	
-	/* dump arrays */
-	fwrite(dest->exist, sizeof(unsigned), dest->size, out);
-	
-	if(dest->seqsize != 0) {
-		fwrite(dest->seq, sizeof(long unsigned), dest->seqsize, out);
-		fwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
-		fwrite(dest->value_index, sizeof(unsigned), dest->n, out);
-		for(i = 0; i < dest->n; ++i) {
-			fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
-		}
-	} else {
-		for(i = 0; i < dest->size; ++i) {
-			if(templates->values[i]) {
-				fwrite(templates->values[i], sizeof(unsigned), templates->values[i][0] + 1, out);
-			}
-		}
-	}
+	return 0;
 }
 
 int CP(char *templatefilename, char *outputfilename) {
@@ -1065,8 +924,11 @@ int CP(char *templatefilename, char *outputfilename) {
 	}
 	
 	file_in = fopen(templatefilename, "rb");
+	if(!file_in) {
+		return 2;
+	}
 	file_out = fopen(outputfilename, "wb");
-	if(!file_in || !file_out) {
+	if(!file_out) {
 		ERROR();
 	}
 	
@@ -1088,167 +950,71 @@ int CP(char *templatefilename, char *outputfilename) {
 	return 0;
 }
 
-int load_DBs(char *templatefilename, char *outputfilename) {
+int megaMap_addKMA(struct hashMap *templates, long unsigned key, unsigned value) {
 	
-	int file_len, out_len;
-	FILE *infile;
-	
-	file_len = strlen(templatefilename);
-	out_len = strlen(outputfilename);
-	
-	/* load hash */
-	strcat(templatefilename, ".b");
-	templates = hashMap_load(templatefilename);
-	templatefilename[file_len] = 0;
-	prefix = templates->prefix;
-	prefix_len = templates->prefix_len;
-	
-	
-	/* load lengths */
-	strcat(templatefilename, ".length.b");
-	infile = fopen(templatefilename, "rb");
-	if(!infile) {
-		ERROR();
-	}
-	templatefilename[file_len] = 0;
-	fread(&DB_size, sizeof(unsigned), 1, infile);
-	
-	if(prefix_len) {
-		template_lengths = malloc((DB_size << 1) * sizeof(unsigned));
-		template_slengths = malloc((DB_size << 1) * sizeof(unsigned));
-		template_ulengths = malloc((DB_size << 1) * sizeof(unsigned));
-		if(!template_lengths || !template_slengths || !template_ulengths) {
-			ERROR();
-		}
-		fread(template_slengths, sizeof(unsigned), DB_size, infile);
-		fread(template_ulengths, sizeof(unsigned), DB_size, infile);
-		fread(template_lengths, sizeof(unsigned), DB_size, infile);
-		kmerindex = *template_lengths;
-		template_ulengths[0] = DB_size << 1;
-		template_slengths[0] = DB_size << 1;
-	} else {
-		template_lengths = malloc((DB_size << 1) * sizeof(unsigned));
-		template_slengths = 0;
-		template_ulengths = 0;
-		if(!template_lengths) {
-			ERROR();
-		}
-		fread(template_lengths, sizeof(unsigned), DB_size, infile);
-		kmerindex = *template_lengths;
-		template_lengths[0] = DB_size << 1;
-	}
-	
-	fclose(infile);
-	
-	/* cp name, seq and index */
-	strcat(templatefilename, ".name");
-	strcat(outputfilename, ".name");
-	CP(templatefilename, outputfilename);
-	templatefilename[file_len] = 0;
-	outputfilename[out_len] = 0;
-	
-	strcat(templatefilename, ".seq.b");
-	strcat(outputfilename, ".seq.b");
-	CP(templatefilename, outputfilename);
-	templatefilename[file_len] = 0;
-	outputfilename[out_len] = 0;
-	
-	if(template_ulengths == 0) {
-		strcat(templatefilename, ".index.b");
-		strcat(outputfilename, ".index.b");
-		CP(templatefilename, outputfilename);
-		templatefilename[file_len] = 0;
-		outputfilename[out_len] = 0;
-	}
-	
-	return 1;
-}
-
-int megaMap_addKMA(long unsigned key, int value, int extend) {
-	
-	int *values;
+	unsigned *values;
 	
 	values = templates->values[key];
-	
-	if(values == 0) { 
-		values = malloc(2 * sizeof(int));
-		values[0] = 1;
-		values[1] = value;
-		templates->values[key] = values;
+	if(values == 0) {
+		templates->values[key] = updateValuePtr(0, value);
 		++templates->n;
-	} else if(values[values[0]] != value) {
-		values[0]++;
-		values = realloc(values, (values[0] + 1) * sizeof(int));
-		if(!values) {
-			ERROR();
-		}
-		values[values[0]] = value;
+		return 1;
+	} else if((values = updateValuePtr(values, value))) {
 		templates->values[key] = values;
+		return 1;
 	}
 	
 	return 0;
 }
 
-int megaMap_addKMA_sparse(long unsigned key, int value, int extend) {
-	
-	int *values;
-	
-	values = templates->values[key];
-	
-	if(values == 0) { 
-		values = malloc(2 * sizeof(int));
-		values[0] = 1;
-		values[1] = value;
-		templates->values[key] = values;
-		++templates->n;
-		template_ulengths[value]++;
-	} else if(values[values[0]] != value) {
-		values[0]++;
-		values = realloc(values, (values[0] + 1) * sizeof(int));
-		if(!values) {
-			ERROR();
-		}
-		values[values[0]] = value;
-		templates->values[key] = values;
-		template_ulengths[value]++;
-	}
-	
-	return 0;
-}
-
-int * megaMap_getValue(long unsigned key) {
-	
+unsigned * megaMap_getValue(struct hashMap *templates, long unsigned key) {
 	return templates->values[key];
-	
 }
 
-int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
+void hashMapKMA_addKey(struct hashMapKMA *dest, long unsigned index, long unsigned key) {
+	dest->key_index[index] = key;
+}
+
+void hashMapKMA_addKeyL(struct hashMapKMA *dest, long unsigned index, long unsigned key) {
+	dest->key_index_l[index] = key;
+}
+
+void hashMapKMA_addValue(struct hashMapKMA *dest, long unsigned index, long unsigned v_index) {
+	dest->value_index[index] = v_index;
+}
+
+void hashMapKMA_addValueL(struct hashMapKMA *dest, long unsigned index, long unsigned v_index) {
+	dest->value_index_l[index] = v_index;
+}
+
+void hashMapKMA_addExist(struct hashMapKMA *dest, long unsigned index, long unsigned relative) {
+	dest->exist[index] = relative;
+}
+
+void hashMapKMA_addExistL(struct hashMapKMA *dest, long unsigned index, long unsigned relative) {
+	dest->exist_l[index] = relative;
+}
+
+int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value, unsigned **Values) {
 	
-	int *values;
-	unsigned pos, kpos;
+	unsigned pos, kpos, *values;
 	long unsigned kmer;
 	
 	kpos = key & dest->size;
-	pos = dest->exist[kpos];
+	pos = getExistPtr(dest, kpos);
 	
 	if(pos != dest->null_index) {
-		kmer = getKmerP(dest->seq, dest->key_index[pos]);
+		kmer = getKeyPtr(dest, pos);
 		while(key != kmer) {
 			++pos;
 			if(kpos != (kmer & dest->size)) {
 				return 0;
 			}
-			kmer = getKmerP(dest->seq, dest->key_index[pos]);
+			kmer = getKeyPtr(dest, pos);
 		}
-		values = templates->values[dest->value_index[pos]];
-		if(values[values[0]] != value) {
-			values[0]++;
-			values = realloc(values, (values[0] + 1) * sizeof(unsigned));
-			if(!values) {
-				ERROR();
-			}
-			values[values[0]] = value;
-			templates->values[dest->value_index[pos]] = values;
+		values = updateValuePtr(Values[getValueIndexPtr(dest, pos)], value);
+		if(values) {
+			Values[getValueIndexPtr(dest, pos)] = values;
 			return 1;
 		}
 	}
@@ -1256,20 +1022,15 @@ int hashMap_addCont(struct hashMapKMA *dest, long unsigned key, int value) {
 	return 0;
 }
 
-int megaMap_addCont(struct hashMapKMA *dest, long unsigned index, int value) {
+int megaMap_addCont(struct hashMapKMA *dest, long unsigned index, int value, unsigned **Values) {
 	
-	int *values;
+	long unsigned pos;
+	unsigned *values;
 	
-	if(dest->exist[index] != dest->n) {
-		values = templates->values[dest->exist[index]];
-		if(values[values[0]] != value) {
-			values[0]++;
-			values = realloc(values, (values[0] + 1) * sizeof(unsigned));
-			if(!values) {
-				ERROR();
-			}
-			values[values[0]] = value;
-			templates->values[dest->exist[index]] = values;
+	if((pos = getExistPtr(dest, index)) != dest->n) {
+		values = updateValuePtr(Values[pos], value);
+		if(values) {
+			Values[pos] = values;
 			return 1;
 		}
 	}
@@ -1277,33 +1038,29 @@ int megaMap_addCont(struct hashMapKMA *dest, long unsigned index, int value) {
 	return 0;
 }
 
-void hashMap2megaMap(struct hashTable *table) {
+void hashMap2megaMap(struct hashMap *templates, struct hashTable *table) {
 	
-	int **tmp;
 	struct hashTable *node, *next;
 	
-	tmp = templates->values;
+	templates->table = 0;
 	templates->values = calloc(templates->size, sizeof(unsigned *));
 	if(!templates->values) {
 		ERROR();
 	}
 	--templates->size;
 	
-	/* table sorted in semi descending order */
+	/* convert table */
 	for(node = table; node != 0; node = next) {
 		next = node->next;
 		
 		/* move values */
-		templates->values[getKmerP(templates->seq, node->key)] = tmp[node->values];
+		templates->values[node->key] = node->values;
 		
 		/* clean */
 		free(node);
 	}
 	
 	/* clean */
-	free(tmp);
-	free(templates->seq);
-	templates->seq = 0;
 	templates->table = 0;
 	
 	/* set pointers */
@@ -1312,138 +1069,66 @@ void hashMap2megaMap(struct hashTable *table) {
 	addCont = &megaMap_addCont;
 }
 
-int hashMap_addKMA(long unsigned key, int value, int extend) {
+unsigned * updateValue(unsigned *values, unsigned value) {
 	
-	int *values;
-	unsigned i, index;
-	struct hashTable *node, *next, *table;
-	
-	index = key & templates->size;
-	/* check if key exists */
-	for(node = templates->table[index]; node != 0; node = node->next) {
-		if(key == getKmerP(templates->seq, node->key)) {
-			values = templates->values[node->values];
-			if(values[*values] != value) {
-				values[0]++;
-				values = realloc(values, (values[0] + 1) * sizeof(unsigned));
-				if(!values) {
-					ERROR();
-				}
-				values[*values] = value;
-				templates->values[node->values] = values;
-			}
-			return 0;
-		}
-	}
-	
-	/* new value check if there is space */
-	if(templates->n == templates->size) {
-		++templates->size;
-		/* link table */
-		table = 0;
-		for(i = 0; i < templates->size; ++i) {
-			for(node = templates->table[i]; node != 0; node = next) {
-				next = node->next;
-				node->next = table;
-				table = node;
-			}
-		}
-		free(templates->table);
-		
-		/* check for megamap */
-		templates->size <<= 1;
-		if((templates->size - 1) == mask) {
-			hashMap2megaMap(table);
-			return megaMap_addKMA(key, value, extend);
-		}
-		
-		/* reallocate */
-		templates->values = realloc(templates->values, templates->size * sizeof(unsigned *));
-		templates->table = calloc(templates->size, sizeof(struct hashTable));
-		if(!templates->values || !templates->table) {
-			ERROR();
-		}
-		--templates->size;
-		
-		for(node = table; node != 0; node = next) {
-			next = node->next;
-			i = getKmerP(templates->seq, node->key) & templates->size;
-			node->next = templates->table[i];
-			templates->table[i] = node;
-		}
-	}
-	if(((templates->seq_n + kmersize) >> 5) >= (templates->seq_size - 1)) {
-		/* resize hashMapSEQ */
-		i = templates->seq_size;
-		templates->seq_size <<= 1;
-		templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
-		
-		if(!templates->seq) {
-			ERROR();
-		}
-		/* nullify new chunk */
-		for(; i < templates->seq_size; ++i) {
-			templates->seq[i] = 0;
-		}
-	}
-	/* add new value */
-	node = malloc(sizeof(struct hashTable));
-	if(!node) {
-		ERROR();
-	}
-	/* key */
-	node->key = addKmer(key, extend);
-	/*if(extend) {
-		node->key = templates->seq_n - kmersize + 1;
-		SetNuc(templates->seq, (key & 3), templates->seq_n);
-		++templates->seq_n;
+	if(!values) {
+		values = malloc(2 * sizeof(unsigned));
+		values[0] = 1;
+		values[1] = value;
+	} else if(values[*values] == value) {
+		return 0;
 	} else {
-		node->key = templates->seq_n;
-		for(i = 0; i < kmersize; ++i) {
-			key <<= 2;
-			SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
-			++templates->seq_n;
+		values[0]++;
+		values = realloc(values, (values[0] + 1) * sizeof(unsigned));
+		if(!values) {
+			ERROR();
 		}
-	}*/
+		values[*values] = value;
+	}
 	
-	/* value */
-	node->values = templates->n;
-	templates->values[node->values] = malloc(2 * sizeof(unsigned));
-	templates->values[node->values][0] = 1;
-	templates->values[node->values][1] = value;
-	
-	/* push it */
-	node->next = templates->table[index];
-	templates->table[index] = node;
-	
-	++templates->n;
-	
-	return 1;
+	return values;
 }
 
-int hashMap_addKMASparse(long unsigned key, int value, int extend) {
+unsigned * updateShortValue(unsigned *valuesOrg, unsigned value) {
 	
-	int *values;
-	unsigned i, index;
+	short unsigned *values;
+	
+	values = (short unsigned *)(valuesOrg);
+	if(!values) {
+		values = malloc(2 * sizeof(short unsigned));
+		values[0] = 1;
+		values[1] = value;
+	} else if(values[*values] == value) {
+		return 0;
+	} else {
+		values[0]++;
+		values = realloc(values, (values[0] + 1) * sizeof(short unsigned));
+		if(!values) {
+			ERROR();
+		}
+		values[*values] = value;
+	}
+	valuesOrg = (unsigned *)(values);
+	
+	return valuesOrg;
+}
+
+int hashMap_addKMA(struct hashMap *templates, long unsigned key, unsigned value) {
+	
+	unsigned *values;
+	long unsigned index;
 	struct hashTable *node, *next, *table;
 	
 	index = key & templates->size;
-	
 	/* check if key exists */
 	for(node = templates->table[index]; node != 0; node = node->next) {
-		if(key == getKmerP(templates->seq, node->key)) {
-			values = templates->values[node->values];
-			if(values[*values] != value) {
-				values[0]++;
-				values = realloc(values, (values[0] + 1) * sizeof(unsigned));
-				if(!values) {
-					ERROR();
-				}
-				values[*values] = value;
-				templates->values[node->values] = values;
-				template_ulengths[value]++;
+		if(key == node->key) {
+			if((values = updateValuePtr(node->values, value))) {
+				node->values = values;
+				return 1;
+			} else {
+				return 0;
 			}
-			return 0;
 		}
 	}
 	
@@ -1452,8 +1137,9 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		++templates->size;
 		/* link table */
 		table = 0;
-		for(i = 0; i < templates->size; ++i) {
-			for(node = templates->table[i]; node != 0; node = next) {
+		index = templates->size;
+		while(index--) {
+			for(node = templates->table[index]; node != 0; node = next) {
 				next = node->next;
 				node->next = table;
 				table = node;
@@ -1464,39 +1150,25 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		/* check for megamap */
 		templates->size <<= 1;
 		if((templates->size - 1) == mask) {
-			hashMap2megaMap(table);
-			hashMap_add = &megaMap_addKMA_sparse;
-			return megaMap_addKMA_sparse(key, value, extend);
+			hashMap2megaMap(templates, table);
+			return megaMap_addKMA(templates, key, value);
 		}
 		
 		/* reallocate */
-		templates->values = realloc(templates->values, templates->size * sizeof(unsigned *));
 		templates->table = calloc(templates->size, sizeof(struct hashTable));
-		if(!templates->values || !templates->table) {
+		if(!templates->table) {
 			ERROR();
 		}
 		--templates->size;
 		
 		for(node = table; node != 0; node = next) {
 			next = node->next;
-			i = getKmerP(templates->seq, node->key) & templates->size;
-			node->next = templates->table[i];
-			templates->table[i] = node;
+			index = node->key & templates->size;
+			node->next = templates->table[index];
+			templates->table[index] = node;
 		}
-	}
-	if(((templates->seq_n + kmersize) >> 5) >= (templates->seq_size - 1)) {
-		/* resize hashMapSEQ */
-		i = templates->seq_size;
-		templates->seq_size <<= 1;
-		templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
 		
-		if(!templates->seq) {
-			ERROR();
-		}
-		/* nullify new chunk */
-		for(; i < templates->seq_size; ++i) {
-			templates->seq[i] = 0;
-		}
+		index = key & templates->size;
 	}
 	
 	/* add new value */
@@ -1505,47 +1177,180 @@ int hashMap_addKMASparse(long unsigned key, int value, int extend) {
 		ERROR();
 	}
 	/* key */
-	node->key = addKmer(key, extend);
-	/*node->key = templates->seq_n - kmersize + extend;
-	key <<= ((kmersize - extend) << 1);
-	for(i = kmersize - extend; i < kmersize; ++i) {
-		key <<= 2;
-		SetNuc(templates->seq, ((key >> (kmersize << 1)) & 3), templates->seq_n);
-		++templates->seq_n;
-	}*/
+	node->key = key;
 	
 	/* value */
-	node->values = templates->n;
-	templates->values[node->values] = malloc(2 * sizeof(unsigned));
-	templates->values[node->values][0] = 1;
-	templates->values[node->values][1] = value;
+	node->values = updateValuePtr(0, value);
 	
 	/* push it */
 	node->next = templates->table[index];
 	templates->table[index] = node;
 	
 	++templates->n;
-	template_ulengths[value]++;
 	
 	return 1;
 }
 
-int * hashMap_getValue(long unsigned key) {
+unsigned * hashMap_getValue(struct hashMap *templates, long unsigned key) {
 	
 	struct hashTable *node;
 	
 	for(node = templates->table[key & templates->size]; node != 0; node = node->next) {
-		if(key == getKmerP(templates->seq, node->key)) {
-			return templates->values[node->values];
+		if(key == node->key) {
+			return node->values;
 		}
 	}
 	
 	return 0;
 }
 
+void hashMap_addUniqueValues(struct hashMap *dest, long unsigned key, unsigned *values) {
+	
+	long unsigned index;
+	struct hashTable *node;
+	
+	node = smalloc(sizeof(struct hashTable));
+	node->key = key;
+	node->values = values;
+	index = key & dest->size;
+	node->next = dest->table[index];
+	dest->table[index] = node;
+	dest->n++;
+}
+
+void megaMap_addUniqueValues(struct hashMap *dest, long unsigned key, unsigned *values) {
+	
+	dest->values[key] = values;
+	dest->n++;
+}
+
 /*
 	COMPRESSED HASHMAP FUNCTIONS
 */
+long unsigned getExist(struct hashMapKMA *dest, long unsigned pos) {
+	return dest->exist[pos];
+}
+
+long unsigned getExistL(struct hashMapKMA *dest, long unsigned pos) {
+	return dest->exist_l[pos];
+}
+
+long unsigned getKey(struct hashMapKMA *dest, long unsigned pos) {
+	return dest->key_index[pos];
+}
+
+long unsigned getKeyL(struct hashMapKMA *dest, long unsigned pos) {
+	return dest->key_index_l[pos];
+}
+
+long unsigned getValueIndex(struct hashMapKMA *dest, long unsigned pos) {
+	return dest->value_index[pos];
+}
+
+long unsigned getValueIndexL(struct hashMapKMA *dest, long unsigned pos) {
+	return dest->value_index[pos];
+}
+
+unsigned * getValue(struct hashMapKMA *dest, long unsigned pos) {
+	return (dest->values + pos);
+}
+
+unsigned * getValueS(struct hashMapKMA *dest, long unsigned pos) {
+	return (unsigned *)(dest->values_s + pos);
+}
+
+int getSize(unsigned *values, int pos) {
+	return values[pos] * sizeof(unsigned) + sizeof(unsigned);
+}
+
+int getSizeS(unsigned *values, int pos) {
+	return ((short unsigned *)(values))[pos] * sizeof(short unsigned) + sizeof(short unsigned);
+}
+
+struct hashMap * hashMapKMA_openChains(struct hashMapKMA *src) {
+	
+	long unsigned i, key;
+	unsigned *values;
+	struct hashMap *dest;
+	
+	if(mask != src->size) {
+		free(src->exist);
+	}
+	dest = hashMap_initialize(INITIAL_SIZE);
+	
+	if(dest->size == mask) {
+		addUniqueValues = &megaMap_addUniqueValues;
+	} else {
+		addUniqueValues = &hashMap_addUniqueValues;
+	}
+	
+	if(mask != src->size) {
+		/* norm */
+		i = src->n;
+		while(i--) {
+			key = getKeyPtr(src, i);
+			values = getValuePtr(src, getValueIndexPtr(src, i));
+			values = memdup(values, getSizePtr(values, 0));
+			addUniqueValues(dest, key, values);
+		}
+		free(src->key_index);
+		free(src->value_index);
+	} else {	
+		/* mega */
+		i = src->size + 1;
+		while(i--) {
+			if(getExistPtr(src, i) != 1) {
+				values = getValuePtr(src, i);
+				values = memdup(values, getSizePtr(values, 0));
+				
+				addUniqueValues(dest, i, values);
+			}
+		}
+		free(src->exist);
+	}
+	free(src->values);
+	free(src);
+	
+	return dest;
+}
+
+unsigned ** hashMapKMA_openValues(struct hashMapKMA *src) {
+	
+	long unsigned i, index, pos;
+	unsigned *values, **Values;
+	
+	Values = smalloc(src->n * sizeof(unsigned *));
+	index = src->n;
+	if(mask != (src->size - 1)) {
+		/* norm */
+		i = src->n;
+		while(i--) {
+			/* get key and values */
+			values = getValuePtr(src, getValueIndexPtr(src, i));
+			Values[i] = memdup(values, getSizePtr(values, 0));
+			hashMapKMA_addValue_ptr(src, i, i);
+		}
+	} else {
+		/* mega */
+		i = src->size;
+		getSizePtr = &getSizeS;
+		while(i--) {
+			if((pos = getExistPtr(src, i)) != 1) {
+				/* get key and values */
+				values = getValuePtr(src, pos);
+				Values[--index] = memdup(values, getSizePtr(values, 0));
+				hashMapKMA_addExist_ptr(src, i, index);
+			} else {
+				hashMapKMA_addExist_ptr(src, i, src->n);
+			}
+		}
+	}
+	free(src->values);
+	src->values = 0;
+	
+	return Values;
+}
+
 void hashMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
 	
 	/* dump sizes */
@@ -1554,18 +1359,48 @@ void hashMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
 	fwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
 	fwrite(&dest->prefix, sizeof(long unsigned), 1, out);
 	fwrite(&dest->size, sizeof(long unsigned), 1, out);
-	fwrite(&dest->n, sizeof(unsigned), 1, out);
-	fwrite(&dest->seqsize, sizeof(unsigned), 1, out); //seq size
-	fwrite(&dest->v_index, sizeof(unsigned), 1, out);
-	fwrite(&dest->null_index, sizeof(unsigned), 1, out);
+	fwrite(&dest->n, sizeof(long unsigned), 1, out);
+	fwrite(&dest->v_index, sizeof(long unsigned), 1, out);
+	fwrite(&dest->null_index, sizeof(long unsigned), 1, out);
 	
 	/* dump arrays */
-	fwrite(dest->exist, sizeof(unsigned), dest->size, out);
-	fwrite(dest->seq, sizeof(long unsigned), dest->seqsize, out);
-	fwrite(dest->values, sizeof(int), dest->v_index, out);
-	fwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
-	fwrite(dest->value_index, sizeof(unsigned), dest->n, out);
+	if(dest->n <= U_LIMIT) {
+		fwrite(dest->exist, sizeof(unsigned), dest->size, out);
+		getExistPtr = &getExist;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
+	} else {
+		fwrite(dest->exist_l, sizeof(long unsigned), dest->size, out);
+		getExistPtr = &getExistL;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
+	}
 	
+	if(DB_size < HU_LIMIT) {
+		fwrite(dest->values_s, sizeof(short unsigned), dest->v_index, out);
+		getValuePtr = &getValueS;
+		getSizePtr = &getSizeS;
+	} else {
+		fwrite(dest->values, sizeof(unsigned), dest->v_index, out);
+		getValuePtr = &getValue;
+		getSizePtr = &getSize;
+	}
+	
+	if(dest->kmersize <= 16) {
+		fwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
+		getKeyPtr = &getKey;
+	} else {
+		fwrite(dest->key_index_l, sizeof(long unsigned), dest->n + 1, out);
+		getKeyPtr = &getKeyL;
+	}
+	
+	if(dest->v_index < U_LIMIT) {
+		fwrite(dest->value_index, sizeof(unsigned), dest->n, out);
+		hashMapKMA_addValue_ptr = &hashMapKMA_addValue;
+		getValueIndexPtr = &getValueIndex;
+	} else {
+		fwrite(dest->value_index_l, sizeof(long unsigned), dest->n, out);
+		hashMapKMA_addValue_ptr = &hashMapKMA_addValueL;
+		getValueIndexPtr = &getValueIndexL;
+	}
 }
 
 void megaMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
@@ -1576,334 +1411,151 @@ void megaMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
 	fwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
 	fwrite(&dest->prefix, sizeof(long unsigned), 1, out);
 	fwrite(&dest->size, sizeof(long unsigned), 1, out);
-	fwrite(&dest->n, sizeof(unsigned), 1, out);
-	fwrite(&dest->seqsize, sizeof(unsigned), 1, out); //seq size
-	fwrite(&dest->v_index, sizeof(unsigned), 1, out);
-	fwrite(&dest->null_index, sizeof(unsigned), 1, out);
+	fwrite(&dest->n, sizeof(long unsigned), 1, out);
+	fwrite(&dest->v_index, sizeof(long unsigned), 1, out);
+	fwrite(&dest->null_index, sizeof(long unsigned), 1, out);
 	
 	/* dump arrays */
-	fwrite(dest->exist, sizeof(unsigned), dest->size, out);
-	fwrite(dest->values, sizeof(int), dest->v_index, out);
-	
-}
-
-void hashMap_shm_detach(struct hashMapKMA *dest) {
-	shmdt(dest->exist);
-	shmdt(dest->seq);
-	shmdt(dest->values);
-	shmdt(dest->key_index);
-	shmdt(dest->value_index);
-}
-
-void hashMapKMA_convertSHM(struct hashMapKMA *dest, const char *filename) {
-	
-	int shmid;
-	void *tmp;
-	key_t key;
-	
-	/* check shared memory, else load */
-	key = ftok(filename, 'e');
-	shmid = shmget(key, dest->size * sizeof(unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap e\n");
+	if(dest->v_index <= U_LIMIT) {
+		fwrite(dest->exist, sizeof(unsigned), dest->size, out);
+		getExistPtr = &getExist;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
 	} else {
-		/* found */
-		tmp = shmat(shmid, NULL, 0);
-		memcpy(tmp, dest->exist, dest->size * sizeof(unsigned));
-		shmdt(tmp);
-	}
-	key = ftok(filename, 's');
-	shmid = shmget(key, dest->seqsize * sizeof(long unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap s\n");
-	} else {
-		/* found */
-		tmp = shmat(shmid, NULL, 0);
-		memcpy(tmp, dest->seq, dest->seqsize * sizeof(long unsigned));
-		shmdt(tmp);
-	}
-	key = ftok(filename, 'v');
-	shmid = shmget(key, dest->v_index * sizeof(int), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap v\n");
-	} else {
-		/* found */
-		tmp = shmat(shmid, NULL, 0);
-		memcpy(tmp, dest->values, dest->v_index * sizeof(int));
-		shmdt(tmp);
-	}
-	key = ftok(filename, 'k');
-	shmid = shmget(key, (dest->n + 1) * sizeof(unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap k\n");
-	} else {
-		/* found */
-		tmp = shmat(shmid, NULL, 0);
-		memcpy(tmp, dest->key_index, (dest->n + 1) * sizeof(unsigned));
-		shmdt(tmp);
-	}
-	key = ftok(filename, 'i');
-	shmid = shmget(key, dest->n * sizeof(unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap i\n");
-	} else {
-		/* found */
-		tmp = shmat(shmid, NULL, 0);
-		memcpy(tmp, dest->value_index, dest->n * sizeof(unsigned));
-		shmdt(tmp);
+		fwrite(dest->exist_l, sizeof(long unsigned), dest->size, out);
+		getExistPtr = &getExistL;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 	}
 	
-}
-
-void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
-	
-	int shmid;
-	key_t key;
-	
-	/* load sizes */
-	fread(&dest->kmersize, sizeof(unsigned), 1, file);
-	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
-	fread(&dest->prefix, sizeof(long unsigned), 1, file);
-	fread(&dest->size, sizeof(long unsigned), 1, file);
-	fread(&dest->n, sizeof(unsigned), 1, file);
-	fread(&dest->seqsize, sizeof(unsigned), 1, file);
-	fread(&dest->v_index, sizeof(unsigned), 1, file);
-	fread(&dest->null_index, sizeof(unsigned), 1, file);
-	
-	/* check shared memory, else load */
-	key = ftok(filename, 'e');
-	shmid = shmget(key, dest->size * sizeof(unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap e\n");
-		fseek(file, dest->size * sizeof(unsigned), SEEK_CUR);
-		dest->exist = 0;
+	if(DB_size < HU_LIMIT) {
+		fwrite(dest->values_s, sizeof(short unsigned), dest->v_index, out);
+		getValuePtr = &getValueS;
+		getSizePtr = &getSizeS;
 	} else {
-		dest->exist = shmat(shmid, NULL, 0);
-		fread(dest->exist, sizeof(unsigned), dest->size, file);
-	}
-	key = ftok(filename, 's');
-	shmid = shmget(key, dest->seqsize * sizeof(long unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap s\n");
-		fseek(file, dest->seqsize * sizeof(long unsigned), SEEK_CUR);
-		dest->seq = 0;
-	} else {
-		/* found */
-		dest->seq = shmat(shmid, NULL, 0);
-		fread(dest->seq, sizeof(long unsigned), dest->seqsize, file);
-	}
-	key = ftok(filename, 'v');
-	shmid = shmget(key, dest->v_index * sizeof(int), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap v\n");
-		fseek(file, dest->v_index * sizeof(int), SEEK_CUR);
-		dest->values = 0;
-	} else {
-		/* found */
-		dest->values = shmat(shmid, NULL, 0);
-		fread(dest->values, sizeof(unsigned), dest->v_index, file);
-	}
-	key = ftok(filename, 'k');
-	shmid = shmget(key, (dest->n + 1) * sizeof(unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap k\n");
-		fseek(file, (dest->n + 1) * sizeof(unsigned), SEEK_CUR);
-		dest->key_index = 0;
-	} else {
-		/* found */
-		dest->key_index = shmat(shmid, NULL, 0);
-		fread(dest->key_index, sizeof(unsigned), dest->n + 1, file);
-	}
-	key = ftok(filename, 'i');
-	shmid = shmget(key, dest->n * sizeof(unsigned), IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared hashMap i\n");
-		fseek(file, dest->n * sizeof(unsigned), SEEK_CUR);
-		dest->value_index = 0;
-	} else {
-		/* found */
-		dest->value_index = shmat(shmid, NULL, 0);
-		fread(dest->value_index, sizeof(unsigned), dest->n, file);
+		fwrite(dest->values, sizeof(unsigned), dest->v_index, out);
+		getValuePtr = &getValue;
+		getSizePtr = &getSize;
 	}
 }
 
-void hashMapKMA_destroySHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
+void * allocAndLoad(size_t size, size_t n, FILE *inputfile) {
 	
-	int shmid;
-	key_t key;
+	void *dest;
 	
-	/* load sizes */
-	fread(&dest->kmersize, sizeof(unsigned), 1, file);
-	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
-	fread(&dest->prefix, sizeof(long unsigned), 1, file);
-	fread(&dest->size, sizeof(long unsigned), 1, file);
-	fread(&dest->n, sizeof(unsigned), 1, file);
-	fread(&dest->seqsize, sizeof(unsigned), 1, file);
-	fread(&dest->v_index, sizeof(unsigned), 1, file);
-	fread(&dest->null_index, sizeof(unsigned), 1, file);
-	
-	/* check shared memory, else load */
-	key = ftok(filename, 'e');
-	shmid = shmget(key, dest->size * sizeof(unsigned), 0666);
-	if(shmid >= 0) {
-		shmctl(shmid, IPC_RMID, NULL);
-	}
-	key = ftok(filename, 's');
-	shmid = shmget(key, dest->seqsize * sizeof(long unsigned), 0666);
-	if(shmid >= 0) {
-		shmctl(shmid, IPC_RMID, NULL);
-	}
-	key = ftok(filename, 'v');
-	shmid = shmget(key, dest->v_index * sizeof(int), 0666);
-	if(shmid >= 0) {
-		shmctl(shmid, IPC_RMID, NULL);
-	}
-	key = ftok(filename, 'k');
-	shmid = shmget(key, (dest->n + 1) * sizeof(unsigned), 0666);
-	if(shmid >= 0) {
-		shmctl(shmid, IPC_RMID, NULL);
-	}
-	key = ftok(filename, 'i');
-	shmid = shmget(key, dest->n * sizeof(unsigned), 0666);
-	if(shmid >= 0) {
-		shmctl(shmid, IPC_RMID, NULL);
-	}
-}
-
-void hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) {
-	
-	int shmid;
-	long unsigned seekSize;
-	key_t key;
-	
-	/* load sizes */
-	fread(&dest->kmersize, sizeof(unsigned), 1, file);
-	if(dest->kmersize <= 16) {
-		getKmerP = &getK;
-		addKmer = &addK;
-	}
-	
-	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
-	fread(&dest->prefix, sizeof(long unsigned), 1, file);
-	fread(&dest->size, sizeof(long unsigned), 1, file);
-	fread(&dest->n, sizeof(unsigned), 1, file);
-	fread(&dest->seqsize, sizeof(unsigned), 1, file);
-	fread(&dest->v_index, sizeof(unsigned), 1, file);
-	fread(&dest->null_index, sizeof(unsigned), 1, file);
-	
-	/* check shared memory, else load */
-	seekSize = 0;
-	key = ftok(filename, 'e');
-	shmid = shmget(key, dest->size * sizeof(unsigned), 0666);
-	if(shmid < 0) {
-		/* not shared, load */
-		dest->exist = malloc(dest->size * sizeof(unsigned));
-		if(!dest->exist) {
-			ERROR();
-		}
-		fread(dest->exist, sizeof(unsigned), dest->size, file);
-	} else {
-		/* found */
-		dest->exist = shmat(shmid, NULL, 0);
-		//fseek(file, dest->size * sizeof(unsigned), SEEK_CUR);
-		seekSize += dest->size * sizeof(unsigned);
-	}
-	key = ftok(filename, 's');
-	shmid = shmget(key, dest->seqsize * sizeof(long unsigned), 0666);
-	if(shmid < 0) {
-		/* not shared, load */
-		dest->seq = malloc(dest->seqsize * sizeof(long unsigned));
-		if(!dest->seq) {
-			ERROR();
-		}
-		fseek(file, seekSize, SEEK_CUR);
-		seekSize = 0;
-		fread(dest->seq, sizeof(long unsigned), dest->seqsize, file);
-	} else {
-		/* found */
-		dest->seq = shmat(shmid, NULL, 0);
-		//fseek(file, dest->seqsize * sizeof(long unsigned), SEEK_CUR);
-		seekSize += dest->seqsize * sizeof(long unsigned);
-	}
-	key = ftok(filename, 'v');
-	shmid = shmget(key, dest->v_index * sizeof(int), 0666);
-	if(shmid < 0) {
-		/* not shared, load */
-		dest->values = malloc(dest->v_index * sizeof(int));
-		if(!dest->values) {
-			ERROR();
-		}
-		fseek(file, seekSize, SEEK_CUR);
-		seekSize = 0;
-		fread(dest->values, sizeof(int), dest->v_index, file);
-	} else {
-		/* found */
-		dest->values = shmat(shmid, NULL, 0);
-		//fseek(file, dest->v_index * sizeof(unsigned), SEEK_CUR);
-		seekSize += dest->v_index * sizeof(int);
-	}
-	key = ftok(filename, 'k');
-	shmid = shmget(key, (dest->n + 1) * sizeof(unsigned), 0666);
-	if(shmid < 0) {
-		/* not shared, load */
-		dest->key_index = malloc((dest->n + 1) * sizeof(unsigned));
-		if(!dest->key_index) {
-			ERROR();
-		}
-		fseek(file, seekSize, SEEK_CUR);
-		seekSize = 0;
-		fread(dest->key_index, sizeof(unsigned), dest->n + 1, file);
-	} else {
-		/* found */
-		dest->key_index = shmat(shmid, NULL, 0);
-		//fseek(file, dest->null_index * sizeof(unsigned), SEEK_CUR);
-		seekSize += dest->n * sizeof(unsigned);
-	}
-	key = ftok(filename, 'i');
-	shmid = shmget(key, dest->n * sizeof(unsigned), 0666);
-	if(shmid < 0) {
-		/* not shared, load */
-		dest->value_index = malloc(dest->n * sizeof(unsigned));
-		if(!dest->value_index) {
-			ERROR();
-		}
-		fseek(file, seekSize, SEEK_CUR);
-		seekSize = 0;
-		fread(dest->value_index, sizeof(unsigned), dest->n, file);
-	} else {
-		/* found */
-		dest->value_index = shmat(shmid, NULL, 0);
-	}
-}
-
-void hashMapKMA_load_old(struct hashMapKMA *dest, FILE *file, const char *filename) {
-	
-	/* load sizes */
-	fread(&dest->kmersize, sizeof(unsigned), 1, file);
-	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
-	fread(&dest->prefix, sizeof(long unsigned), 1, file);
-	fread(&dest->size, sizeof(long unsigned), 1, file);
-	fread(&dest->n, sizeof(unsigned), 1, file);
-	fread(&dest->seqsize, sizeof(unsigned), 1, file);
-	fread(&dest->v_index, sizeof(unsigned), 1, file);
-	fread(&dest->null_index, sizeof(unsigned), 1, file);
-	
-	/* allocate arrays */
-	dest->exist = malloc(dest->size * sizeof(unsigned));
-	dest->seq = malloc(dest->seqsize * sizeof(long unsigned));
-	dest->values = malloc(dest->v_index * sizeof(unsigned));
-	dest->key_index = malloc(dest->null_index * sizeof(unsigned));
-	dest->value_index = malloc(dest->null_index * sizeof(unsigned));
-	if(!dest->exist || !dest->seq || !dest->values || !dest->key_index || !dest->value_index) {
+	dest = malloc(n * size);
+	if(!dest) {
 		ERROR();
 	}
 	
-	/* load arrays */
-	fread(dest->exist, sizeof(unsigned), dest->size, file);
-	fread(dest->seq, sizeof(long unsigned), dest->seqsize, file);
-	fread(dest->values, sizeof(int), dest->v_index, file);
-	fread(dest->key_index, sizeof(unsigned), dest->n + 1, file);
-	fread(dest->value_index, sizeof(unsigned), dest->n, file);
+	fread(dest, size, n, inputfile);
+	
+	return dest;
+}
+
+int hashMapKMA_load(struct hashMapKMA *dest, FILE *file) {
+	
+	long unsigned check, size;
+	
+	/* load sizes */
+	fread(&DB_size, sizeof(unsigned), 1, file);
+	fread(&dest->kmersize, sizeof(unsigned), 1, file);
+	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
+	fread(&dest->prefix, sizeof(long unsigned), 1, file);
+	fread(&dest->size, sizeof(long unsigned), 1, file);
+	fread(&dest->n, sizeof(long unsigned), 1, file);
+	fread(&dest->v_index, sizeof(long unsigned), 1, file);
+	fread(&dest->null_index, sizeof(long unsigned), 1, file);
+	kmersize = dest->kmersize;
+	mask = 0;
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	
+	/* exist */
+	size = dest->size;
+	if((dest->size - 1) == mask) {
+		if(dest->v_index <= U_LIMIT) {
+			size *= sizeof(unsigned);
+			getExistPtr = &getExist;
+			hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
+		} else {
+			size *= sizeof(long unsigned);
+			getExistPtr = &getExistL;
+			hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
+		}
+	} else {
+		if(dest->n <= U_LIMIT) {
+			size *= sizeof(unsigned);
+			getExistPtr = &getExist;
+			hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
+		} else {
+			size *= sizeof(long unsigned);
+			getExistPtr = &getExistL;
+			hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
+		}
+	}
+	dest->exist = smalloc(size);
+	check = fread(dest->exist, 1, size, file);
+	if(check != size) {
+		return 1;
+	}
+	dest->exist_l = (long unsigned *)(dest->exist);
+	
+	/* values */
+	size = dest->v_index;
+	if(DB_size < HU_LIMIT) {
+		size *= sizeof(short unsigned);
+		getValuePtr = &getValueS;
+		getSizePtr = &getSizeS;
+	} else {
+		size *= sizeof(unsigned);
+		getValuePtr = &getValue;
+		getSizePtr = &getSize;
+	}
+	dest->values = smalloc(size);
+	check = fread(dest->values, 1, size, file);
+	if(check != size) {
+		return 1;
+	}
+	dest->values_s = (short unsigned *)(dest->values);
+	
+	/* check for megaMap */
+	if((dest->size - 1) == mask) {
+		return 0;
+	}
+	
+	/* kmers */
+	size = dest->n + 1;
+	if(dest->kmersize <= 16) {
+		size *= sizeof(unsigned);
+		getKeyPtr = &getKey;
+	} else {
+		size *= sizeof(long unsigned);
+		getKeyPtr = &getKeyL;
+	}
+	dest->key_index = smalloc(size);
+	check = fread(dest->key_index, 1, size, file);
+	if(check != size) {
+		return 1;
+	}
+	dest->key_index_l = (long unsigned *)(dest->key_index);
+	
+	/* value indexes */
+	size = dest->n;
+	if(dest->v_index < U_LIMIT) {
+		size *= sizeof(unsigned);
+		hashMapKMA_addValue_ptr = &hashMapKMA_addValue;
+		getValueIndexPtr = &getValueIndex;
+	} else {
+		size *= sizeof(long unsigned);
+		hashMapKMA_addValue_ptr = &hashMapKMA_addValueL;
+		getValueIndexPtr = &getValueIndexL;
+	}
+	dest->value_index = smalloc(size);
+	check = fread(dest->value_index, 1, size, file);
+	if(check != size) {
+		return 1;
+	}
+	dest->value_index_l = (long unsigned *)(dest->value_index);
+	
+	return 0;
 }
 
 /* hashMap indexes */
@@ -2061,7 +1713,7 @@ void hashMap_index_dump(struct hashMap_index *src, FILE *seq, FILE *index) {
 
 /* VALUES HASH */
 
-struct valuesHash * initialize_hashValues(unsigned size) {
+struct valuesHash * initialize_hashValues(long unsigned size) {
 	
 	struct valuesHash *dest;
 	
@@ -2082,10 +1734,11 @@ struct valuesHash * initialize_hashValues(unsigned size) {
 
 void valuesHash_destroy(struct valuesHash *src) {
 	
-	unsigned i;
+	long unsigned i;
 	struct valuesTable *node, *next;
 	
-	for(i = 0; i < src->size; ++i) {
+	i = src->size;
+	while(i--) {
 		for(node = src->table[i]; node != 0; node = next) {
 			next = node->next;
 			free(node);
@@ -2095,40 +1748,111 @@ void valuesHash_destroy(struct valuesHash *src) {
 	free(src);
 }
 
-unsigned valuesHash_add(struct valuesHash *dest, int *newValues, unsigned org_index, unsigned v_index) {
+long unsigned valuesKey(unsigned *values) {
 	
+	unsigned i;
 	long unsigned key;
-	unsigned i, index;
-	int *values;
-	struct valuesTable *node;
 	
-	/* construct key */
 	key = 0;
-	for(i = 0; i <= newValues[0]; ++i) {
-		key = key * DB_size + newValues[i];
+	for(i = 0; i <= *values; ++i) {
+		key = key * DB_size + values[i];
 	}
 	
-	/* get index */
-	index = key % dest->size;
+	return key;
+}
+
+long unsigned huValuesKey(unsigned *valuesOrg) {
 	
-	/* search for key */
-	for(node = dest->table[index]; node != 0; node = node->next) {
-		values = templates->values[node->values];
-		if(values[0] == newValues[0] && int_eq(values + 1, newValues + 1, newValues[0])) { // Value exists
-			return node->value_index;
+	unsigned i;
+	long unsigned key;
+	short unsigned *values;
+	
+	values = (short unsigned *)(valuesOrg);
+	key = 0;
+	for(i = 0; i <= *values; ++i) {
+		key = key * DB_size + values[i];
+	}
+	
+	return key;
+}
+
+unsigned uSize(unsigned *values) {
+	return *values + 1;
+}
+
+unsigned huSize(unsigned *valuesOrg) {
+	short unsigned *values;
+	values = (short unsigned *)(valuesOrg);
+	return *values + 1;
+}
+
+int cmpValues(unsigned *s1, unsigned *s2, unsigned len) {
+	
+	if(len == 0) {
+		return 1;
+	}
+	
+	while(len--) {
+		if(s1[len] != s2[len]) {
+			return 0;
+		}
+	}
+	
+	return 1;
+}
+
+int cmpHuValues(unsigned *s1_org, unsigned *s2_org, unsigned len_org) {
+	
+	short unsigned *s1, *s2, len;
+	
+	len = len_org;
+	--len;
+	
+	if(len == 0) {
+		return 1;
+	}
+	s1 = (short unsigned *)(s1_org);
+	s2 = (short unsigned *)(s2_org);
+	
+	while(len--) {
+		if(s1[len] != s2[len]) {
+			return 0;
+		}
+	}
+	
+	return 1;
+}
+
+long unsigned valuesHash_add(struct valuesHash *src, unsigned *newValues, long unsigned v_index) {
+	
+	/* return 0 if values are new, 
+	else return first index of seen value */
+	
+	unsigned *values;
+	long unsigned index;
+	struct valuesTable *node;
+	
+	/* get index */
+	index = valuesKeyPtr(newValues) % src->size;
+	
+	/* search for values */
+	for(node = src->table[index]; node != 0; node = node->next) {
+		values = node->values;
+		if(*values == *newValues && cmpValuesPtr(values + 1, newValues + 1, newValues[0])) { // Value exists
+			return node->v_index;
 		}
 	}
 	
 	/* new values */
-	++dest->n;
+	++src->n;
 	node = malloc(sizeof(struct valuesTable));
 	if(!node) {
 		ERROR();
 	}
-	node->value_index = v_index;
-	node->values = org_index;
-	node->next = dest->table[index];
-	dest->table[index] = node;
+	node->v_index = v_index;
+	node->values = newValues;
+	node->next = src->table[index];
+	src->table[index] = node;
 	
 	return v_index;
 }
@@ -2181,9 +1905,9 @@ void emptyHash(struct hashMap_kmers *dest) {
 /*
 	METHOD SPECIFIC
 */
-int updateDBs(struct compDNA *qseq) {
+int updateDBs(struct hashMap *templates, struct compDNA *qseq, unsigned template) {
 	
-	int i, j, end, extend;
+	int i, j, end;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
@@ -2195,11 +1919,10 @@ int updateDBs(struct compDNA *qseq) {
 	
 	/* iterate sequence */
 	for(i = 1, j = 0; i <= qseq->N[0]; ++i) {
-		extend = kmersize;
 		end = qseq->N[i] - kmersize + 1;
 		for(;j < end; ++j) {
 			/* update hashMap */
-			extend = hashMap_add(getKmer(qseq->seq, j), DB_size, extend) ? 1 : kmersize;
+			hashMap_add(templates, getKmer(qseq->seq, j), template);
 		}
 		j = qseq->N[i] + 1;
 	}
@@ -2208,50 +1931,18 @@ int updateDBs(struct compDNA *qseq) {
 	return 1;
 }
 
-void makeIndexing(struct compDNA *compressor, FILE *seq_out, FILE *index_out) {
-	
-	int i, j, end;
-	struct hashMap_index *template_index;
-	
-	/* allocate index */
-	template_index = malloc(sizeof(struct hashMap_index));
-	if(!template_index) {
-		ERROR();
-	}
-	template_index->len = compressor->seqlen;
-	template_index->size = compressor->seqlen << 1;
-	template_index->index = calloc(template_index->size, sizeof(int));
-	if(!template_index->index) {
-		ERROR();
-	}
-	
-	/* load index */
-	template_index->seq = compressor->seq;
-	compressor->N[0]++;
-	compressor->N[compressor->N[0]] = compressor->seqlen + 1;
-	j = 0;
-	for(i = 1; i <= compressor->N[0]; ++i) {
-		end = compressor->N[i] - kmerindex;
-		for(;j < end; ++j) {
-			hashMap_index_add(template_index, getKmerIndex(compressor->seq, j), j);
-		}
-		j = compressor->N[i] + 1;
-	}
-	compressor->N[0]--;
-	
-	/* dump index */
-	hashMap_index_dump(template_index, seq_out, index_out);
-	
-	free(template_index->index);
-	free(template_index);
-}
-
 int lengthCheck(struct compDNA *qseq) {
 	
 	int i, j, end, rc, thisKlen;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
+	} else if(prefix_len == 0) {
+		if((qseq->seqlen - kmersize + 1) * 2 < MinKlen) {
+			return 0;
+		} else {
+			return 1;
+		}
 	}
 	
 	thisKlen = MinKlen;
@@ -2284,13 +1975,70 @@ int lengthCheck(struct compDNA *qseq) {
 	}
 }
 
+void updateScoreAndTemplate(unsigned *Scores_tot, unsigned *bestTemplates, unsigned *values) {
+	
+	unsigned i;
+	
+	i = *values + 1;
+	while(--i) {
+		if(Scores_tot[*++values] == 0) {
+			bestTemplates[0]++;
+			bestTemplates[*bestTemplates] = *values;
+		}
+		Scores_tot[*values]++;
+	}
+}
+
+void updateScoreAndTemplateHU(unsigned *Scores_tot, unsigned *bestTemplates, unsigned *values_org) {
+	
+	unsigned i;
+	short unsigned *values;
+	
+	values = (short unsigned *)(values_org);
+	i = *values + 1;
+	while(--i) {
+		if(Scores_tot[*++values] == 0) {
+			bestTemplates[0]++;
+			bestTemplates[*bestTemplates] = *values;
+		}
+		Scores_tot[*values]++;
+	}
+}
+
+void addUscore(unsigned *Scores, unsigned *values) {
+	
+	unsigned i;
+	
+	i = *values + 1;
+	while(--i) {
+		Scores[*++values]++;
+	}
+}
+
+void addUscoreHU(unsigned *Scores, unsigned *values_org) {
+	
+	unsigned i;
+	short unsigned *values;
+	
+	values = (short unsigned *)(values_org);
+	i = *values + 1;
+	while(--i) {
+		Scores[*++values]++;
+	}
+}
+
 int queryCheck(struct compDNA *qseq) {
 	
-	int i, j, k, end, rc, thisKlen, *values;
+	unsigned i, j, end, rc, thisKlen, *values;
 	double bestQ, thisQ;
+	long unsigned prefix;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
+	} else if(prefix_len == 0 && templates->prefix != 0) {
+		prefix = 0;
+	} else {
+		prefix = templates->prefix;
 	}
 	
 	thisKlen = 0;
@@ -2323,14 +2071,8 @@ int queryCheck(struct compDNA *qseq) {
 			for(;j < end; ++j) {
 				if(getPrefix(qseq->seq, j) == prefix) {
 					++thisKlen;
-					if((values = hashMap_get(getKmer(qseq->seq, j + prefix_len)))) {
-						for(k = 1; k <= *values; ++k) {
-							Scores_tot[values[k]]++;
-							if(Scores_tot[values[k]] == 1) {
-								bestTemplates[0]++;
-								bestTemplates[bestTemplates[0]] = values[k];
-							}
-						}
+					if((values = hashMap_get(templates, getKmer(qseq->seq, j + prefix_len)))) {
+						updateScoreAndTemplate_ptr(Scores_tot, bestTemplates, values);
 					}
 				}
 			}
@@ -2358,12 +2100,16 @@ int queryCheck(struct compDNA *qseq) {
 
 int templateCheck(struct compDNA *qseq) {
 	
-	int i, j, k, end, rc, thisKlen, *values;
+	unsigned i, j, end, rc, thisKlen, *values;
 	double bestQ, thisQ, bestT, thisT;
-	long unsigned key;
+	long unsigned key, prefix;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
+	} else if(prefix_len == 0 && templates->prefix != 0) {
+		prefix = 0;
+	} else {
+		prefix = templates->prefix;
 	}
 	
 	thisKlen = 0;
@@ -2399,18 +2145,10 @@ int templateCheck(struct compDNA *qseq) {
 				if(getPrefix(qseq->seq, j) == prefix) {
 					++thisKlen;
 					key = getKmer(qseq->seq, j + prefix_len);
-					if((values = hashMap_get(key))) {
-						for(k = 1; k <= *values; ++k) {
-							Scores_tot[values[k]]++;
-							if(Scores_tot[values[k]] == 1) {
-								bestTemplates[0]++;
-								bestTemplates[bestTemplates[0]] = values[k];
-							}
-						}
+					if((values = hashMap_get(templates, key))) {
+						updateScoreAndTemplate_ptr(Scores_tot, bestTemplates, values);
 						if(hashMap_CountKmer(foundKmers, key)) {
-							for(k = 1; k <= *values; ++k) {
-								Scores[values[k]]++;
-							}
+							addUscore_ptr(Scores, values);
 						}
 					}
 				}
@@ -2455,9 +2193,9 @@ int templateCheck(struct compDNA *qseq) {
 	}
 }
 
-int updateDBs_sparse(struct compDNA *qseq) {
+int updateDBs_sparse(struct hashMap *templates, struct compDNA *qseq, unsigned template) {
 	
-	int i, j, end, extend, last, rc;
+	int i, j, end, rc;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
@@ -2465,34 +2203,47 @@ int updateDBs_sparse(struct compDNA *qseq) {
 	
 	/* test homology and length */
 	if(QualCheck(qseq)) {
-		template_slengths[DB_size] = 0;
-		template_ulengths[DB_size] = 0;
+		template_slengths[template] = 0;
+		template_ulengths[template] = 0;
 		for(rc = 0; rc < 2; ++rc) {
 			/* revers complement */
 			if(rc) {
 				rcComp(qseq);
 			}
-			/* set last extender */
-			last = -kmersize;
-			extend = kmersize;
 			
 			/* iterate seq */
 			qseq->N[0]++;
 			qseq->N[qseq->N[0]] = qseq->seqlen;
 			j = 0;
-			for(i = 1; i <= qseq->N[0]; ++i) {
-				end = qseq->N[i] - prefix_len - kmersize + 1;
-				for(;j < end; ++j) {
-					if(getPrefix(qseq->seq, j) == prefix) {
-						/* add kmer */
-						extend = kmersize < (j - last) ? kmersize : (j - last);
-						last = hashMap_add(getKmer(qseq->seq, j + prefix_len), DB_size, extend) ? j : -kmersize;
-						template_slengths[DB_size]++;
+			if(prefix_len) {
+				for(i = 1; i <= qseq->N[0]; ++i) {
+					end = qseq->N[i] - prefix_len - kmersize + 1;
+					for(;j < end; ++j) {
+						if(getPrefix(qseq->seq, j) == prefix) {
+							/* add kmer */
+							if(hashMap_add(templates, getKmer(qseq->seq, j + prefix_len), template)) {
+								template_ulengths[template]++;
+							}
+							template_slengths[template]++;
+						}
 					}
+					j = qseq->N[i] + 1;
 				}
-				j = qseq->N[i] + 1;
+				qseq->N[0]--;
+			} else {
+				for(i = 1; i <= qseq->N[0]; ++i) {
+					end = qseq->N[i] - kmersize + 1;
+					for(;j < end; ++j) {
+						/* add kmer */
+						if(hashMap_add(templates, getKmer(qseq->seq, j), template)) {
+							template_ulengths[template]++;
+						}
+						template_slengths[template]++;
+					}
+					j = qseq->N[i] + 1;
+				}
+				qseq->N[0]--;
 			}
-			qseq->N[0]--;
 		}
 		return 1;
 	}
@@ -2500,187 +2251,34 @@ int updateDBs_sparse(struct compDNA *qseq) {
 	return 0;
 }
 
-struct hashMapKMA * compressKMA_DB_old(FILE *out) {
-	
-	long unsigned i, j;
-	unsigned index, t_index, v_index, v_update, c_index, new_index, null_index;
-	unsigned *tmp;
-	int *values;
-	struct hashMapKMA *finalDB;
-	struct valuesHash *shmValues;
-	struct hashTable *node, *next, *table;
-	
-	/* cut templates down */
-	fprintf(stderr, "# Resizing DB.\n");
-	templates->seq_size = (templates->seq_n / 32 + 1);
-	templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
-	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
-	if(!templates->seq || !templates->values) {
-		ERROR();
-	}
-	table = 0;
-	for(i = 0; i < templates->size; ++i) {
-		for(node = templates->table[i]; node != 0; node = next) {
-			next = node->next;
-			node->next = table;
-			table = node;
-		}
-	}
-	free(templates->table);
-	templates->table = 0;
-	
-	/* prepare final DB */
-	fprintf(stderr, "# Preparing compressed DB.\n");
-	finalDB = malloc(sizeof(struct hashMapKMA));
-	if(!finalDB) {
-		ERROR();
-	}
-	/* Fill in known values */
-	finalDB->size = templates->size + 1;
-	finalDB->n = templates->n;
-	finalDB->seq = templates->seq;
-	finalDB->seqsize = templates->seq_size;
-	finalDB->prefix_len = prefix_len;
-	finalDB->prefix = prefix;
-	finalDB->kmersize = kmersize;
-	
-	/* allocate existence */
-	finalDB->exist = malloc(finalDB->size * sizeof(unsigned));
-	finalDB->key_index = malloc((finalDB->n + 1) * sizeof(unsigned));
-	finalDB->value_index = malloc(finalDB->n * sizeof(unsigned));
-	tmp = malloc(finalDB->n * sizeof(unsigned));
-	if(!finalDB->exist || !finalDB->key_index || !finalDB->value_index || !tmp) {
-		ERROR();
-	}
-	null_index = finalDB->n;
-	finalDB->null_index = null_index;
-	
-	/* mv table to finalDB */
-	fprintf(stderr, "# Initialize cp of DB.\n");
-	for(i = 0; i < finalDB->size; ++i) {
-		finalDB->exist[i] = null_index;
-	}
-	fprintf(stderr, "# Initial cp of DB.\n");
-	node = table;
-	--finalDB->size;
-	t_index = 0;
-	while(node != 0) {
-		/* get index */
-		index = getKmerP(finalDB->seq, node->key) & finalDB->size;
-		finalDB->exist[index] = t_index;
-		
-		/* mv chain */
-		while(node != 0 && (getKmerP(finalDB->seq, node->key) & finalDB->size) == index) {
-			next = node->next;
-			
-			/* cp index */
-			finalDB->key_index[t_index] = node->key;
-			finalDB->value_index[t_index] = node->values;
-			tmp[t_index] = node->values;
-			++t_index;
-			
-			/* clean */
-			free(node);
-			node = next;
-		}
-	}
-	
-	/* get compressed indexes */
-	fprintf(stderr, "# Compressing indexes.\n");
-	v_index = 0;
-	c_index = 0;
-	shmValues = initialize_hashValues(null_index);
-	for(i = 0; i < null_index; ++i) {
-		/* potential increase */
-		v_update = templates->values[finalDB->value_index[i]][0] + 1;
-		
-		/* the actual index */
-		new_index = valuesHash_add(shmValues, templates->values[finalDB->value_index[i]], finalDB->value_index[i], v_index);
-		
-		/* update to new index */
-		finalDB->value_index[i] = new_index;
-		
-		/* update size of compression */
-		if(new_index == v_index) {
-			c_index += v_update;
-			if(v_index < c_index) {
-				v_index = c_index;
-			} else {
-				fprintf(stderr, "Compression overflow.\n");
-				exit(1);
-			}
-		}
-	}
-	/* destroy shmValues */
-	valuesHash_destroy(shmValues);
-	
-	/* make compressed values */
-	fprintf(stderr, "# Finalizing indexes.\n");
-	finalDB->v_index = v_index;
-	finalDB->values = calloc(v_index, sizeof(unsigned));
-	if(!finalDB->values) {
-		ERROR();
-	}
-	for(i = 0; i < finalDB->n; ++i) {
-		if(finalDB->values[finalDB->value_index[i]] == 0) {
-			values = templates->values[tmp[i]];
-			v_index = finalDB->value_index[i];
-			for(j = 0; j <= values[0]; ++j) {
-				finalDB->values[v_index + j] = values[j];
-			}
-		}
-	}
-	
-	/* add terminating key */
-	i = 0;
-	j = getKmerP(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
-	while(j == (getKmerP(templates->seq, i) & finalDB->size)) {
-		++i;
-	}
-	finalDB->key_index[finalDB->n] = i;
-	
-	/* dump final DB */
-	fprintf(stderr, "# Dumping compressed DB\n");	
-	++finalDB->size;
-	hashMapKMA_dump(finalDB, out);
-	
-	/* clean */
-	free(finalDB->value_index);
-	finalDB->value_index = tmp;
-	
-	return finalDB;
-}
-
 struct hashMapKMA * compressKMA_DB(FILE *out) {
 	
-	long unsigned i, j;
-	unsigned index, t_index, v_index, v_update, c_index, new_index, null_index;
-	unsigned *tmp;
-	int *values;
+	long unsigned i, j, check;
+	long unsigned index, t_index, v_index, new_index, null_index;
+	unsigned *values;
+	short unsigned *values_s;
 	struct hashMapKMA *finalDB;
 	struct valuesHash *shmValues;
-	struct hashTable *node, *next, *table;
+	struct valuesTable *node, *next, *table;
+	struct hashTable *node_t, *next_t, *table_t;
 	
-	/* cut templates down */
-	fprintf(stderr, "# Resizing DB.\n");
-	templates->seq_size = (templates->seq_n / 32 + 1);
-	templates->seq = realloc(templates->seq, templates->seq_size * sizeof(long unsigned));
-	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
-	if(!templates->seq || !templates->values) {
-		ERROR();
-	}
-	table = 0;
-	for(i = 0; i < templates->size; ++i) {
-		for(node = templates->table[i]; node != 0; node = next) {
-			next = node->next;
-			node->next = table;
-			table = node;
+	/* convert templates to linked list */
+	table_t = 0;
+	i = templates->size;
+	while(i--) {
+		for(node_t = templates->table[i]; node_t != 0; node_t = next_t) {
+			next_t = node_t->next;
+			node_t->next = table_t;
+			table_t = node_t;
 		}
 	}
 	free(templates->table);
 	templates->table = 0;
 	
 	/* prepare final DB */
+	check = 0;
+	check = ~check;
+	check >>= 32;
 	fprintf(stderr, "# Preparing compressed DB.\n");
 	finalDB = malloc(sizeof(struct hashMapKMA));
 	if(!finalDB) {
@@ -2689,163 +2287,215 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	/* Fill in known values */
 	finalDB->size = templates->size + 1;
 	finalDB->n = templates->n;
-	finalDB->seq = templates->seq;
-	finalDB->seqsize = templates->seq_size;
 	finalDB->prefix_len = prefix_len;
 	finalDB->prefix = prefix;
 	finalDB->kmersize = kmersize;
 	
 	/* allocate existence */
-	finalDB->exist = malloc(finalDB->size * sizeof(unsigned));
-	finalDB->key_index = malloc((finalDB->n + 1) * sizeof(unsigned));
-	finalDB->value_index = malloc(finalDB->n * sizeof(unsigned));
-	tmp = malloc(finalDB->n * sizeof(unsigned));
-	if(!finalDB->exist || !finalDB->key_index || !finalDB->value_index || !tmp) {
-		ERROR();
+	if(finalDB->n <= check) {
+		finalDB->exist = smalloc(finalDB->size * sizeof(unsigned));
+		finalDB->exist_l = 0;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
+	} else {
+		finalDB->exist = 0;
+		finalDB->exist_l = smalloc(finalDB->size * sizeof(long unsigned));
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 	}
+	
+	if(kmersize <= 16) {
+		finalDB->key_index = smalloc((finalDB->n + 1) * sizeof(unsigned));
+		finalDB->key_index_l = 0;
+		hashMapKMA_addKey_ptr = &hashMapKMA_addKey;
+	} else {
+		finalDB->key_index = 0;
+		finalDB->key_index_l = smalloc((finalDB->n + 1) * sizeof(long unsigned));
+		hashMapKMA_addKey_ptr = &hashMapKMA_addKeyL;
+	}
+	finalDB->value_index = smalloc(finalDB->n * sizeof(unsigned));
+	
 	null_index = finalDB->n;
 	finalDB->null_index = null_index;
-	
-	/* mv table to finalDB */
-	fprintf(stderr, "# Initialize cp of DB.\n");
-	for(i = 0; i < finalDB->size; ++i) {
-		finalDB->exist[i] = null_index;
+	/* fill with null_indexes */
+	i = finalDB->size;
+	while(i--) {
+		hashMapKMA_addExist_ptr(finalDB, i, null_index);
 	}
-	fprintf(stderr, "# Initial cp of DB.\n");
-	node = table;
+	
+	/* get relative indexes */
+	fprintf(stderr, "# Calculating relative indexes.\n");
+	hashMapKMA_addValue_ptr = &hashMapKMA_addValue;
+	node_t = table_t;
 	--finalDB->size;
+	shmValues = initialize_hashValues(null_index);
 	t_index = 0;
-	while(node != 0) {
+	v_index = 0;
+	while(node_t != 0) {
 		/* get index */
-		index = getKmerP(finalDB->seq, node->key) & finalDB->size;
-		finalDB->exist[index] = t_index;
-		
+		index = (node_t->key & finalDB->size);
+		hashMapKMA_addExist_ptr(finalDB, index, t_index);
 		/* mv chain */
-		while(node != 0 && (getKmerP(finalDB->seq, node->key) & finalDB->size) == index) {
-			next = node->next;
+		while(node_t != 0 && (node_t->key & finalDB->size) == index) {
+			next_t = node_t->next;
 			
-			/* cp index */
-			finalDB->key_index[t_index] = node->key;
-			finalDB->value_index[t_index] = node->values;
-			tmp[t_index] = node->values;
+			/* add kmer */
+			hashMapKMA_addKey_ptr(finalDB, t_index, node_t->key);
+			
+			/* the actual value index */
+			new_index = valuesHash_add(shmValues, node_t->values, v_index);
+			
+			if(new_index == v_index) {
+				v_index += valuesSize(node_t->values);
+				if(check <= v_index) {
+					fprintf(stderr, "# Compression overflow.\n");
+					check = 0;
+					check = ~check;
+					hashMapKMA_addValue_ptr = &hashMapKMA_addValueL;
+					getValueIndexPtr = &getValueIndexL;
+					finalDB->value_index_l = realloc(finalDB->value_index, finalDB->n * sizeof(long unsigned));
+					if(!finalDB->value_index_l) {
+						ERROR();
+					}
+					finalDB->value_index = (unsigned *)(finalDB->value_index_l);
+					j = finalDB->n;
+					while(j--) {
+						finalDB->value_index_l[j] = finalDB->value_index[j];
+					}
+					finalDB->value_index = 0;
+				}
+			} else {
+				/* values were duplicated, clean up */
+				free(node_t->values);
+			}
+			
+			hashMapKMA_addValue_ptr(finalDB, t_index, new_index);
 			++t_index;
 			
 			/* clean */
-			free(node);
-			node = next;
+			free(node_t);
+			node_t = next_t;
 		}
 	}
-	
-	/* get compressed indexes */
-	fprintf(stderr, "# Compressing indexes.\n");
-	v_index = 0;
-	c_index = 0;
-	shmValues = initialize_hashValues(null_index);
-	for(i = 0; i < null_index; ++i) {
-		/* potential increase */
-		v_update = templates->values[finalDB->value_index[i]][0] + 1;
-		
-		/* the actual index */
-		new_index = valuesHash_add(shmValues, templates->values[finalDB->value_index[i]], finalDB->value_index[i], v_index);
-		
-		/* update to new index */
-		finalDB->value_index[i] = new_index;
-		
-		/* update size of compression */
-		if(new_index == v_index) {
-			c_index += v_update;
-			if(v_index < c_index) {
-				v_index = c_index;
-			} else {
-				fprintf(stderr, "Compression overflow.\n");
-				exit(1);
-			}
+	/* convert valuesHash to a linked list */
+	table = 0;
+	i = shmValues->size;
+	while(i--) {
+		for(node = shmValues->table[i]; node != 0; node = next) {
+			next = node->next;
+			node->next = table;
+			table = node;
 		}
 	}
-	/* destroy shmValues */
-	valuesHash_destroy(shmValues);
+	free(shmValues->table);
 	
 	/* make compressed values */
 	fprintf(stderr, "# Finalizing indexes.\n");
 	finalDB->v_index = v_index;
-	finalDB->values = calloc(v_index, sizeof(unsigned));
-	if(!finalDB->values) {
-		ERROR();
-	}
-	for(i = 0; i < finalDB->n; ++i) {
-		if(finalDB->values[finalDB->value_index[i]] == 0) {
-			values = templates->values[tmp[i]];
-			v_index = finalDB->value_index[i];
-			for(j = 0; j <= values[0]; ++j) {
-				finalDB->values[v_index + j] = values[j];
+	
+	if(DB_size < HU_LIMIT) {
+		finalDB->values = 0;
+		finalDB->values_s = calloc(v_index, sizeof(short unsigned));
+		if(!finalDB->values_s) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
+			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
+				finalDB->values_s[i] = values_s[j];
 			}
+			free(values_s);
+			free(node);
+		}
+	} else {
+		finalDB->values = calloc(v_index, sizeof(unsigned));
+		finalDB->values_s = 0;
+		if(!finalDB->values) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
+				finalDB->values[i] = values[j];
+			}
+			free(values);
+			free(node);
 		}
 	}
 	
 	/* add terminating key */
 	i = 0;
-	j = getKmerP(templates->seq, finalDB->key_index[finalDB->n - 1]) & finalDB->size;
-	while(j == (getKmerP(templates->seq, i) & finalDB->size)) {
-		++i;
+	if(finalDB->kmersize <= 16) { 
+		j = finalDB->key_index[finalDB->n - 1] & finalDB->size;
+		while(j == (finalDB->key_index[i] & finalDB->size)) {
+			++i;
+		}
+		finalDB->key_index[finalDB->n] = finalDB->key_index[i];
+	} else {
+		j = finalDB->key_index_l[finalDB->n - 1] & finalDB->size;
+		while(j == (finalDB->key_index_l[i] & finalDB->size)) {
+			++i;
+		}
+		finalDB->key_index_l[finalDB->n] = finalDB->key_index_l[i];
 	}
-	finalDB->key_index[finalDB->n] = i;
-	
 	/* dump final DB */
 	fprintf(stderr, "# Dumping compressed DB\n");	
 	++finalDB->size;
 	hashMapKMA_dump(finalDB, out);
-	
-	/* clean */
-	free(finalDB->value_index);
-	finalDB->value_index = tmp;
 	
 	return finalDB;
 }
 
 struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	
-	long unsigned i, j;
-	unsigned v_index, v_update, c_index, new_index, null_index, *tmp;
-	int *values;
+	long unsigned i, j, v_index, new_index, null_index;
+	unsigned check, *values;
+	short unsigned *values_s;
 	struct hashMapKMA *finalDB;
 	struct valuesHash *shmValues;
+	struct valuesTable *node, *next, *table;
 	
-	/* cut templates down */
-	fprintf(stderr, "# Resizing DB.\n");
+	/* Fill in known values */
+	hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
+	check = 0;
+	check = ~check;
 	finalDB = malloc(sizeof(struct hashMapKMA));
 	if(!finalDB) {
 		ERROR();
 	}
-	/* Fill in known values */
 	finalDB->size = templates->size + 1;
 	finalDB->n = templates->n;
-	finalDB->seq = 0;
-	finalDB->seqsize = 0;
 	finalDB->prefix_len = prefix_len;
 	finalDB->prefix = prefix;
 	finalDB->kmersize = kmersize;
+	
 	/* allocate existence */
 	finalDB->exist = malloc(finalDB->size * sizeof(unsigned));
+	finalDB->exist_l = 0;
 	finalDB->key_index = 0;
 	finalDB->value_index = 0;
 	if(!finalDB->exist) {
 		ERROR();
 	}
+	
+	/* get relative indexes */
+	fprintf(stderr, "# Calculating relative indexes.\n");
 	null_index = finalDB->n;
-	finalDB->null_index = null_index;
-	for(i = 0; i < finalDB->size; ++i) {
-		finalDB->exist[i] = null_index;
-	}
 	v_index = 0;
 	while(templates->values[v_index] != 0) {
+		finalDB->exist[v_index] = v_index;
 		++v_index;
 	}
-	for(i = v_index; i < finalDB->size; ++i) {
-		if(templates->values[i] != 0) {
+	for(i = v_index; i != finalDB->size; ++i) {
+		if(templates->values[i]) {
 			finalDB->exist[i] = v_index;
 			templates->values[v_index] = templates->values[i];
 			templates->values[i] = 0;
 			++v_index;
+		} else {
+			finalDB->exist[i] = null_index;
 		}
 	}
 	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
@@ -2853,64 +2503,126 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 		ERROR();
 	}
 	
-	/* mv table to finalDB */
-	fprintf(stderr, "# Initial cp of DB.\n");
-	tmp = malloc(finalDB->size * sizeof(unsigned));
-	if(!tmp) {
-		ERROR();
-	}
-	for(i = 0; i < finalDB->size; ++i) {
-		tmp[i] = finalDB->exist[i];
-	}
-	
 	/* get compressed indexes */
 	fprintf(stderr, "# Compressing indexes.\n");
 	v_index = 0;
-	c_index = 0;
 	shmValues = initialize_hashValues(null_index);
-	for(i = 0; i < finalDB->size; ++i) {
+	i = finalDB->size;
+	j = 0;
+	while(i--) {
 		if(finalDB->exist[i] != null_index) {
-			/* potential increase */
-			v_update = templates->values[finalDB->exist[i]][0] + 1;
+			values = templates->values[finalDB->exist[i]];
 			
 			/* the actual index */
-			new_index = valuesHash_add(shmValues, templates->values[finalDB->exist[i]], finalDB->exist[i], v_index);
+			new_index = valuesHash_add(shmValues, values, v_index);
 			
+			
+			if(new_index == v_index) {
+				v_index += valuesSize(values);
+				if(check < v_index) {
+					fprintf(stderr, "# Compression overflow.\n");
+					j = 1;
+					hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
+					break;
+				}
+			} else {
+				/* values were duplicated, clean up */
+				free(values);
+				templates->values[finalDB->exist[i]] = 0;
+			}
 			/* update to new index */
 			finalDB->exist[i] = new_index;
-			
-			/* update size of compression */
-			if(new_index == v_index) {
-				c_index += v_update;
-				if(v_index < c_index) {
-					v_index = c_index;
-				} else {
-					fprintf(stderr, "Compression overflow.\n");
-					exit(1);
-				}
-			}
 		} else {
 			finalDB->exist[i] = 1;
 		}
 	}
-	/* destroy shmValues */
-	valuesHash_destroy(shmValues);
+	if(j) {
+		fprintf(stderr, "# Bypassing overflow.\n");
+		finalDB->exist_l = realloc(finalDB->exist, finalDB->size * sizeof(long unsigned));
+		if(!finalDB->exist_l) {
+			ERROR();
+		}
+		finalDB->exist = (unsigned *)(finalDB->exist_l);
+		j = finalDB->size;
+		while(j--) {
+			finalDB->exist_l[j] = finalDB->exist[j];
+		}
+		finalDB->exist = 0;
+		finalDB->exist_l[i] = new_index;
+		
+		while(i--) {
+			if(finalDB->exist_l[i] != null_index) {
+				values = templates->values[finalDB->exist_l[i]];
+				
+				/* the actual index */
+				new_index = valuesHash_add(shmValues, values, v_index);
+				
+				
+				if(new_index == v_index) {
+					v_index += valuesSize(values);
+				} else {
+					/* values were duplicated, clean up */
+					free(values);
+					templates->values[finalDB->exist_l[i]] = 0;
+				}
+				/* update to new index */
+				finalDB->exist_l[i] = new_index;
+				
+			} else {
+				finalDB->exist_l[i] = 1;
+			}
+		}
+		fprintf(stderr, "# Overflow bypassed.\n");
+	}
+	free(templates->values);
+	/* convert valuesHash to a linked list */
+	table = 0;
+	i = shmValues->size;
+	while(i--) {
+		for(node = shmValues->table[i]; node != 0; node = next) {
+			next = node->next;
+			node->next = table;
+			table = node;
+		}
+	}
+	free(shmValues->table);
 	
 	/* make compressed values */
 	fprintf(stderr, "# Finalizing indexes.\n");
 	finalDB->v_index = v_index;
 	finalDB->null_index = 1;
-	finalDB->values = calloc(v_index, sizeof(unsigned));
-	if(!finalDB->values) {
-		ERROR();
-	}
-	for(i = 0; i < finalDB->size; ++i) {
-		if(finalDB->exist[i] != finalDB->null_index && finalDB->values[finalDB->exist[i]] == 0) {
-			values = templates->values[tmp[i]];
-			v_index = finalDB->exist[i];
-			for(j = 0; j <= values[0]; ++j) {
-				finalDB->values[v_index + j] = values[j];
+	
+	if(DB_size < HU_LIMIT) {
+		finalDB->values = 0;
+		finalDB->values_s = calloc(v_index, sizeof(short unsigned));
+		if(!finalDB->values_s) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
+			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
+				finalDB->values_s[i] = values_s[j];
 			}
+			free(values_s);
+			free(node);
+		}
+	} else {
+		finalDB->values = calloc(v_index, sizeof(unsigned));
+		finalDB->values_s = 0;
+		if(!finalDB->values) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
+				finalDB->values[i] = values[j];
+			}
+			free(values);
+			free(node);
 		}
 	}
 	
@@ -2918,176 +2630,359 @@ struct hashMapKMA * compressKMA_megaDB(FILE *out) {
 	fprintf(stderr, "# Dumping compressed DB\n");
 	megaMapKMA_dump(finalDB, out);
 	
-	/* clean */
-	free(finalDB->exist);
-	finalDB->exist = tmp;
-	
 	return finalDB;
 }
 
-void compressKMA_deconDB(struct hashMapKMA *finalDB) {
+void compressKMA_deconDB(struct hashMapKMA *finalDB, unsigned **Values) {
 	
-	long unsigned i, j;
-	unsigned v_index, c_index, v_update, new_index, *tmp;
-	int *values;
+	long unsigned i, j, v_index, new_index, check;
+	unsigned *values;
+	short unsigned *values_s;
 	struct valuesHash *shmValues;
+	struct valuesTable *node, *next, *table;
 	
-	fprintf(stderr, "# Compressing indexes.\n");
-	tmp = malloc(finalDB->n * sizeof(unsigned));
-	if(!tmp) {
-		ERROR();
+	/* prepare final DB */
+	check = 0;
+	check = ~check;
+	if(finalDB->v_index < U_LIMIT) {
+		check >>= 32;
+		hashMapKMA_addValue_ptr = &hashMapKMA_addValue;
+		getValueIndexPtr = &getValueIndex;
+	} else {
+		hashMapKMA_addValue_ptr = &hashMapKMA_addValueL;
+		getValueIndexPtr = &getValueIndexL;
 	}
-	v_index = 0;
-	c_index = 0;
+	i = finalDB->n;
 	shmValues = initialize_hashValues(finalDB->n);
-	for(i = 0; i < finalDB->n; ++i) {
-		/* potential increase */
-		v_update = templates->values[finalDB->value_index[i]][0] + 1;
+	v_index = 0;
+	while(i--) {
+		/* the actual value index */
+		values = Values[i];
+		new_index = valuesHash_add(shmValues, values, v_index);
 		
-		/* the actual index */
-		new_index = valuesHash_add(shmValues, templates->values[finalDB->value_index[i]], finalDB->value_index[i], v_index);
-		
-		/* update to new index */
-		tmp[i] = finalDB->value_index[i];
-		finalDB->value_index[i] = new_index;
-		
-		/* update size of compression */
 		if(new_index == v_index) {
-			c_index += v_update;
-			if(v_index < c_index) {
-				v_index = c_index;
-			} else {
-				fprintf(stderr, "Compression overflow.\n");
-				exit(1);
+			v_index += valuesSize(values);
+			if(check <= v_index) {
+				fprintf(stderr, "# Compression overflow.\n");
+				check = 0;
+				check = ~check;
+				hashMapKMA_addValue_ptr = &hashMapKMA_addValueL;
+				getValueIndexPtr = &getValueIndexL;
+				finalDB->value_index_l = realloc(finalDB->value_index, finalDB->n * sizeof(long unsigned));
+				if(!finalDB->value_index_l) {
+					ERROR();
+				}
+				finalDB->value_index = (unsigned *)(finalDB->value_index_l);
+				j = finalDB->n;
+				while(j--) {
+					finalDB->value_index_l[j] = finalDB->value_index[j];
+				}
+				finalDB->value_index = 0;
 			}
+		} else {
+			free(values);
+		}
+		
+		hashMapKMA_addValue_ptr(finalDB, i, new_index);
+	}
+	free(Values);
+	/* convert valuesHash to a linked list */
+	table = 0;
+	i = shmValues->size;
+	while(i--) {
+		for(node = shmValues->table[i]; node != 0; node = next) {
+			next = node->next;
+			node->next = table;
+			table = node;
 		}
 	}
-	/* destroy shmValues */
-	valuesHash_destroy(shmValues);
+	free(shmValues->table);
 	
 	/* make compressed values */
 	fprintf(stderr, "# Finalizing indexes.\n");
 	finalDB->v_index = v_index;
-	finalDB->values = calloc(v_index, sizeof(unsigned));
-	if(!finalDB->values) {
-		ERROR();
-	}
-	for(i = 0; i < finalDB->n; ++i) {
-		if(finalDB->values[finalDB->value_index[i]] == 0) {
-			values = templates->values[tmp[i]];
-			v_index = finalDB->value_index[i];
-			for(j = 0; j <= values[0]; ++j) {
-				finalDB->values[v_index + j] = values[j];
+	if(DB_size < HU_LIMIT) {
+		finalDB->values = 0;
+		finalDB->values_s = calloc(v_index, sizeof(short unsigned));
+		if(!finalDB->values_s) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
+			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
+				finalDB->values_s[i] = values_s[j];
 			}
-			free(templates->values[tmp[i]]);
+			free(values_s);
+			free(node);
+		}
+	} else {
+		finalDB->values = calloc(v_index, sizeof(unsigned));
+		finalDB->values_s = 0;
+		if(!finalDB->values) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
+				finalDB->values[i] = values[j];
+			}
+			free(values);
+			free(node);
 		}
 	}
-	
-	/* clean */
-	free(tmp);
-	free(templates->values);
-	free(templates);
 }
 
-void compressKMA_deconMegaDB(struct hashMapKMA *finalDB) {
+void compressKMA_deconMegaDB(struct hashMapKMA *finalDB, unsigned **Values) {
 	
-	long unsigned i, j;
-	unsigned v_index, c_index, v_update, new_index, *tmp;
-	int *values;
+	long unsigned i, j, v_index, new_index, pos, check;
+	unsigned *values;
+	short unsigned *values_s;
 	struct valuesHash *shmValues;
+	struct valuesTable *node, *next, *table;
 	
 	fprintf(stderr, "# Compressing indexes.\n");
-	tmp = malloc(finalDB->size * sizeof(unsigned));
-	if(!tmp) {
-		ERROR();
+	check = 0;
+	check = ~check;
+	if(finalDB->v_index < U_LIMIT) {
+		check >>= 32;
+		getExistPtr = &getExist;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
+	} else {
+		getExistPtr = &getExistL;
+		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 	}
-	v_index = 0;
-	c_index = 0;
+	i = finalDB->size;
 	shmValues = initialize_hashValues(finalDB->n);
-	for(i = 0; i < finalDB->size; ++i) {
-		if(finalDB->exist[i] != finalDB->n) {
-			/* potential increase */
-			v_update = templates->values[finalDB->exist[i]][0] + 1;
+	v_index = 0;
+	while(i--) {
+		if((pos = getExistPtr(finalDB, i)) != finalDB->n) {
+			values = Values[pos];
+			new_index = valuesHash_add(shmValues, values, v_index);
 			
-			/* the actual index */
-			new_index = valuesHash_add(shmValues, templates->values[finalDB->exist[i]], finalDB->exist[i], v_index);
-			
-			/* update to new index */
-			tmp[i] = finalDB->exist[i];
-			finalDB->exist[i] = new_index;
-			
-			/* update size of compression */
 			if(new_index == v_index) {
-				c_index += v_update;
-				if(v_index < c_index) {
-					v_index = c_index;
-				} else {
-					fprintf(stderr, "Compression overflow.\n");
-					exit(1);
+				v_index += valuesSize(values);
+				if(check <= v_index) {
+					fprintf(stderr, "# Compression overflow.\n");
+					check = 0;
+					check = ~check;
+					getExistPtr = &getExistL;
+					hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
+					finalDB->exist_l = realloc(finalDB->exist, finalDB->size * sizeof(long unsigned));
+					if(!finalDB->value_index_l) {
+						ERROR();
+					}
+					finalDB->exist = (unsigned *)(finalDB->exist_l);
+					j = finalDB->size;
+					while(j--) {
+						finalDB->exist_l[j] = finalDB->exist[j];
+					}
+					finalDB->exist = 0;
 				}
 			} else {
-				free(templates->values[tmp[i]]);
+				free(values);
 			}
+			hashMapKMA_addExist_ptr(finalDB, i, new_index);
 		} else {
-			tmp[i] = finalDB->n;
+			hashMapKMA_addExist_ptr(finalDB, i, 1);
 		}
 	}
-	/* destroy shmValues */
-	valuesHash_destroy(shmValues);
+	free(Values);
+	/* convert valuesHash to a linked list */
+	table = 0;
+	i = shmValues->size;
+	while(i--) {
+		for(node = shmValues->table[i]; node != 0; node = next) {
+			next = node->next;
+			node->next = table;
+			table = node;
+		}
+	}
+	free(shmValues->table);
 	
 	/* make compressed values */
 	fprintf(stderr, "# Finalizing indexes.\n");
 	finalDB->v_index = v_index;
-	finalDB->values = calloc(v_index, sizeof(unsigned));
-	if(!finalDB->values) {
-		ERROR();
-	}
-	for(i = 0; i < finalDB->size; ++i) {
-		if(finalDB->exist[i] != finalDB->n) {
-			if(finalDB->values[finalDB->exist[i]] == 0) {
-				values = templates->values[tmp[i]];
-				v_index = finalDB->exist[i];
-				for(j = 0; j <= values[0]; ++j) {
-					finalDB->values[v_index + j] = values[j];
-				}
-				free(templates->values[tmp[i]]);
+	finalDB->null_index = 1;
+	if(DB_size < HU_LIMIT) {
+		finalDB->values = 0;
+		finalDB->values_s = calloc(v_index, sizeof(short unsigned));
+		if(!finalDB->values_s) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
+			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
+				finalDB->values_s[i] = values_s[j];
 			}
-		} else {
-			finalDB->exist[i] = finalDB->null_index;
+			free(values_s);
+			free(node);
+		}
+	} else {
+		finalDB->values = calloc(v_index, sizeof(unsigned));
+		finalDB->values_s = 0;
+		if(!finalDB->values) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
+				finalDB->values[i] = values[j];
+			}
+			free(values);
+			free(node);
 		}
 	}
+}
+
+void compressKMA_deconMegaDB_old(struct hashMapKMA *finalDB, unsigned **Values) {
 	
-	/* clean */
-	free(tmp);
-	free(templates->values);
-	free(templates);
-}
-
-void hashMapKMA_destroy(struct hashMapKMA *dest) {
-	free(dest->exist);
-	free(dest->seq);
-	free(dest->values);
-	free(dest->key_index);
-	free(dest->value_index);
-	free(dest);
-}
-
-void hashMapKMA_NULL(struct hashMapKMA *dest) {
-	dest->prefix = 0;
-	dest->prefix_len = 0;
-	free(dest->exist);
-	free(dest->seq);
-	free(dest->values);
-	free(dest->key_index);
-	free(dest->value_index);
-	dest->size = 0;
-	dest->n = 0;
+	long unsigned i, j, v_index, new_index;
+	unsigned *values, check;
+	short unsigned *values_s;
+	struct valuesHash *shmValues;
+	struct valuesTable *node, *next, *table;
+	
+	fprintf(stderr, "# Compressing indexes.\n");
+	v_index = 0;
+	new_index = 0;
+	shmValues = initialize_hashValues(finalDB->n);
+	i = finalDB->size;
+	check = 0;
+	check = ~check;
+	finalDB->v_index = 0;
+	if(finalDB->v_index < check) {
+		while(i--) {
+			if(finalDB->exist[i] != finalDB->n) {
+				values = Values[finalDB->exist[i]];
+				
+				/* the actual index */
+				new_index = valuesHash_add(shmValues, values, v_index);
+				
+				if(new_index == v_index) {
+					v_index += valuesSize(values);
+					if(check < v_index) {
+						fprintf(stderr, "# Compression overflow.\n");
+						finalDB->v_index = 1;
+						hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
+						break;
+					}
+				} else {
+					/* values were duplicated, clean up */
+					free(values);
+					Values[finalDB->exist[i]] = 0;
+				}
+				
+				/* update to new index */
+				finalDB->exist[i] = new_index;
+			} else {
+				finalDB->exist[i] = 1;
+			}
+		}
+	} else {
+		finalDB->v_index = 1;
+	}
+	if(finalDB->v_index) {
+		fprintf(stderr, "# Bypassing overflow.\n");
+		finalDB->exist_l = realloc(finalDB->exist, finalDB->size * sizeof(long unsigned));
+		if(!finalDB->exist_l) {
+			ERROR();
+		}
+		finalDB->exist = (unsigned *)(finalDB->exist_l);
+		j = finalDB->size;
+		while(j--) {
+			finalDB->exist_l[j] = finalDB->exist[j];
+		}
+		finalDB->exist = 0;
+		finalDB->exist_l[i] = new_index;
+		
+		while(i--) {
+			if(finalDB->exist_l[i] != finalDB->n) {
+				values = Values[finalDB->exist_l[i]];
+				
+				/* the actual index */
+				new_index = valuesHash_add(shmValues, values, v_index);
+				
+				if(new_index == v_index) {
+					v_index += valuesSize(values);
+				} else {
+					/* values were duplicated, clean up */
+					free(values);
+					Values[finalDB->exist_l[i]] = 0;
+				}
+				/* update to new index */
+				finalDB->exist_l[i] = new_index;
+				
+			} else {
+				finalDB->exist_l[i] = 1;
+			}
+		}
+		fprintf(stderr, "# Overflow bypassed.\n");
+	}
+	free(Values);
+	/* convert valuesHash to a linked list */
+	table = 0;
+	i = shmValues->size;
+	while(i--) {
+		for(node = shmValues->table[i]; node != 0; node = next) {
+			next = node->next;
+			node->next = table;
+			table = node;
+		}
+	}
+	free(shmValues->table);
+	
+	/* make compressed values */
+	fprintf(stderr, "# Finalizing indexes.\n");
+	finalDB->v_index = v_index;
+	finalDB->null_index = 1;
+	
+	if(DB_size < HU_LIMIT) {
+		finalDB->values = 0;
+		finalDB->values_s = calloc(v_index, sizeof(short unsigned));
+		if(!finalDB->values_s) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
+			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
+				finalDB->values_s[i] = values_s[j];
+			}
+			free(values_s);
+			free(node);
+		}
+	} else {
+		finalDB->values = calloc(v_index, sizeof(unsigned));
+		finalDB->values_s = 0;
+		if(!finalDB->values) {
+			ERROR();
+		}
+		/* move values */
+		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
+				finalDB->values[i] = values[j];
+			}
+			free(values);
+			free(node);
+		}
+	}
 }
 
 void updateAnnots(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	
 	/* Dump annots */
-	makeIndexing(qseq, seq_out, index_out);
+	dumpIndex(qseq, seq_out, index_out);
 	
 	template_lengths[DB_size] = qseq->seqlen;
 	++DB_size;
@@ -3102,8 +2997,8 @@ void updateAnnots(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 
 void updateAnnots_sparse(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	
-	/* Dump nibble seq */
-	fwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
+	/* Dump annots */
+	dumpIndex(qseq, seq_out, index_out);
 	
 	template_lengths[DB_size] = qseq->seqlen;
 	++DB_size;
@@ -3119,7 +3014,7 @@ void updateAnnots_sparse(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	
 }
 
-int deConNode(struct compDNA *qseq, struct hashMapKMA *finalDB) {
+int deConNode(struct compDNA *qseq, struct hashMapKMA *finalDB, unsigned **Values) {
 	
 	int i, j, end, mapped_cont;
 	
@@ -3134,7 +3029,7 @@ int deConNode(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 	for(i = 1; i <= qseq->N[0]; ++i) {
 		end = qseq->N[i] - kmersize + 1;
 		for(;j < end; ++j) {
-			mapped_cont += addCont(finalDB, getKmer(qseq->seq, j), DB_size);
+			mapped_cont += addCont(finalDB, getKmer(qseq->seq, j), DB_size, Values);
 		}
 		j = qseq->N[i] + 1;
 	}
@@ -3142,7 +3037,7 @@ int deConNode(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 	return mapped_cont;
 }
 
-int deConNode_sparse(struct compDNA *qseq, struct hashMapKMA *finalDB) {
+int deConNode_sparse(struct compDNA *qseq, struct hashMapKMA *finalDB, unsigned **Values) {
 	
 	int i, j, end, mapped_cont;
 	
@@ -3158,7 +3053,7 @@ int deConNode_sparse(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 		end = qseq->N[i] - prefix_len - kmersize + 1;
 		for(;j < end; ++j) {
 			if(getPrefix(qseq->seq, j) == prefix) {
-				mapped_cont += addCont(finalDB, getKmer(qseq->seq, j + prefix_len), DB_size);
+				mapped_cont += addCont(finalDB, getKmer(qseq->seq, j + prefix_len), DB_size, Values);
 			}
 		}
 		j = qseq->N[i] + 1;
@@ -3167,12 +3062,11 @@ int deConNode_sparse(struct compDNA *qseq, struct hashMapKMA *finalDB) {
 	return mapped_cont;
 }
 
-unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, char *outputfilename, char *trans) {
+unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, char *trans, unsigned **Values) {
 	
 	int FASTQ;
-	unsigned fileCounter, mapped_cont, file_len;
+	unsigned fileCounter, mapped_cont;
 	char *filename;
-	FILE *DB_update;
 	struct qseqs *header, *qseq;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
@@ -3190,15 +3084,6 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 	/* set variables */
 	mapped_cont = 0;
 	--finalDB->size;
-	
-	/* open files */
-	file_len = strlen(outputfilename);
-	strcat(outputfilename, 	".decon.b");
-	DB_update = fopen(outputfilename, "wb");
-	outputfilename[file_len] = 0;
-	if(!DB_update) {
-		ERROR();
-	}
 	
 	/* iterate inputfiles */
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
@@ -3219,10 +3104,10 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 					compDNAref(compressor, qseq->seq, qseq->len);
 					
 					/* Add contamination */
-					mapped_cont += deConNode_ptr(compressor, finalDB);
+					mapped_cont += deConNode_ptr(compressor, finalDB, Values);
 					/* rc */
 					rcComp(compressor);
-					mapped_cont += deConNode_ptr(compressor, finalDB);
+					mapped_cont += deConNode_ptr(compressor, finalDB, Values);
 				}
 			}
 			
@@ -3235,11 +3120,6 @@ unsigned deConDB(struct hashMapKMA *finalDB, char **inputfiles, int fileCount, c
 		}
 	}
 	++finalDB->size;
-	
-	/* dump DB */
-	fprintf(stderr, "# Dumping DeCon DB.\n");
-	//deConMap_dump(finalDB, DB_update);
-	fclose(DB_update);
 	
 	/* clean */
 	freeComp(compressor);
@@ -3259,12 +3139,188 @@ int homcmp_and(int t, int q) {
 	return (t && q);
 }
 
+
+void makeIndexing(struct compDNA *compressor, FILE *seq_out, FILE *index_out) {
+	
+	int i, j, end;
+	struct hashMap_index *template_index;
+	
+	/* allocate index */
+	template_index = malloc(sizeof(struct hashMap_index));
+	if(!template_index) {
+		ERROR();
+	}
+	template_index->len = compressor->seqlen;
+	template_index->size = compressor->seqlen << 1;
+	template_index->index = calloc(template_index->size, sizeof(int));
+	if(!template_index->index) {
+		ERROR();
+	}
+	
+	/* load index */
+	template_index->seq = compressor->seq;
+	compressor->N[0]++;
+	compressor->N[compressor->N[0]] = compressor->seqlen + 1;
+	j = 0;
+	for(i = 1; i <= compressor->N[0]; ++i) {
+		end = compressor->N[i] - kmerindex;
+		for(;j < end; ++j) {
+			hashMap_index_add(template_index, getKmerIndex(compressor->seq, j), j);
+		}
+		j = compressor->N[i] + 1;
+	}
+	compressor->N[0]--;
+	
+	/* dump index */
+	hashMap_index_dump(template_index, seq_out, index_out);
+	
+	free(template_index->index);
+	free(template_index);
+}
+
+void dumpSeq(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
+	fwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
+}
+
+struct hashMapKMA * load_DBs(char *templatefilename, char *outputfilename) {
+	
+	int file_len, out_len;
+	FILE *infile;
+	struct hashMapKMA *finalDB;
+	
+	file_len = strlen(templatefilename);
+	out_len = strlen(outputfilename);
+	
+	/* load hash */
+	finalDB = smalloc(sizeof(struct hashMapKMA));
+	strcat(templatefilename, ".comp.b");
+	infile = sfopen(templatefilename, "rb");
+	if(hashMapKMA_load(finalDB, infile)) {
+		fprintf(stderr, "Wrong format of DB\n");
+		exit(1);
+	} else {
+		finalDB->size--;
+	}
+	templatefilename[file_len] = 0;
+	fclose(infile);
+	
+	prefix = finalDB->prefix;
+	prefix_len = finalDB->prefix_len;
+	
+	/* load lengths */
+	strcat(templatefilename, ".length.b");
+	infile = fopen(templatefilename, "rb");
+	if(!infile) {
+		ERROR();
+	}
+	templatefilename[file_len] = 0;
+	fread(&DB_size, sizeof(unsigned), 1, infile);
+	if(prefix_len) {
+		template_lengths = smalloc((DB_size << 1) * sizeof(unsigned));
+		template_slengths = smalloc((DB_size << 1) * sizeof(unsigned));
+		template_ulengths = smalloc((DB_size << 1) * sizeof(unsigned));
+		fread(template_slengths, sizeof(unsigned), DB_size, infile);
+		fread(template_ulengths, sizeof(unsigned), DB_size, infile);
+		fread(template_lengths, sizeof(unsigned), DB_size, infile);
+		kmerindex = *template_lengths;
+		template_ulengths[0] = DB_size << 1;
+		template_slengths[0] = DB_size << 1;
+	} else {
+		template_lengths = smalloc((DB_size << 1) * sizeof(unsigned));
+		template_slengths = 0;
+		template_ulengths = 0;
+		fread(template_lengths, sizeof(unsigned), DB_size, infile);
+		kmerindex = *template_lengths;
+		template_lengths[0] = DB_size << 1;
+	}
+	fclose(infile);
+	
+	/* cp name, seq and index */
+	strcat(templatefilename, ".name");
+	strcat(outputfilename, ".name");
+	CP(templatefilename, outputfilename);
+	templatefilename[file_len] = 0;
+	outputfilename[out_len] = 0;
+	
+	strcat(templatefilename, ".seq.b");
+	strcat(outputfilename, ".seq.b");
+	CP(templatefilename, outputfilename);
+	templatefilename[file_len] = 0;
+	outputfilename[out_len] = 0;
+	
+	strcat(templatefilename, ".index.b");
+	if(dumpIndex == &makeIndexing) {
+		strcat(outputfilename, ".index.b");
+		if(CP(templatefilename, outputfilename) == 2) {
+			dumpIndex = &dumpSeq;
+		}
+		outputfilename[out_len] = 0;
+	} else if((infile = fopen(templatefilename, "rb"))) {
+		fclose(infile);
+		remove(templatefilename);
+	}
+	templatefilename[file_len] = 0;
+	
+	return finalDB;
+}
+
+unsigned * HU2U(unsigned *values) {
+	
+	unsigned i;
+	short unsigned *hu_values;
+	
+	hu_values = (short unsigned *)(values);
+	values = realloc(values, (hu_values[0] + 1) * sizeof(unsigned));
+	if(!values) {
+		ERROR();
+	} else {
+		hu_values = (short unsigned *)(values);
+	}
+	
+	for(i = *hu_values; i != 0; --i) {
+		values[i] = hu_values[i];
+	}
+	
+	return values;
+}
+
+void convertToU(struct hashMap *templates) {
+	
+	long unsigned index;
+	struct hashTable *node;
+	
+	/* convert values */
+	index = templates->size;
+	if(templates->table) {
+		while(index--) {
+			for(node = templates->table[index]; node != 0; node = node->next) {
+				node->values = HU2U(node->values);
+			}
+		}
+	} else {
+		while(index--) {
+			if(templates->values[index]) {
+				templates->values[index] = HU2U(templates->values[index]);
+			}
+		}	
+	}
+	
+	/* here */
+	/* set pointers */
+	updateValuePtr = &updateValue;
+	valuesKeyPtr = &valuesKey;
+	cmpValuesPtr = &cmpValues;
+	valuesSize = &uSize;
+	updateScoreAndTemplate_ptr = &updateScoreAndTemplate;
+	addUscore_ptr = &addUscore;
+}
+
 void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender, char *trans) {
 	
 	int fileCounter, file_len, bias, FASTQ;
 	char *filename;
 	unsigned char *seq;
-	FILE *index_out, *seq_out, *length_out, *name_out, *DB_update;
+	FILE *index_out, *seq_out, *length_out, *name_out;
 	struct qseqs *header, *qseq;
 	struct FileBuff *inputfile;
 	struct compDNA *compressor;
@@ -3281,22 +3337,19 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	
 	/* open files */
 	file_len = strlen(outputfilename);
-	strcat(outputfilename, 	".b");
-	DB_update = fopen(outputfilename, "wb");
-	outputfilename[file_len] = 0;
 	strcat(outputfilename, 	".length.b");
 	length_out = fopen(outputfilename, "wb");
 	outputfilename[file_len] = 0;
 	if(appender) {
 		strcat(outputfilename, 	".name");
-		name_out = fopen(outputfilename, "a");
+		name_out = fopen(outputfilename, "ab");
 		outputfilename[file_len] = 0;
 	} else {
 		strcat(outputfilename, 	".name");
-		name_out = fopen(outputfilename, "w");
+		name_out = fopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 	}
-	if(!DB_update || !length_out || !name_out) {
+	if(!length_out || !name_out) {
 		ERROR();
 	}
 	if(appender) {
@@ -3315,7 +3368,7 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 		}
 	}
 	
-	if(template_ulengths == 0) {
+	if(dumpIndex == &makeIndexing) {
 		if(appender) {
 			strcat(outputfilename, ".index.b");
 			index_out = fopen(outputfilename, "ab");
@@ -3349,10 +3402,10 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
 				if(qseq->len >= compressor->size) {
 					freeComp(compressor);
-					allocComp(compressor, 2 * qseq->len);
+					allocComp(compressor, qseq->len << 1);
 				}
 				bias = compDNAref(compressor, qseq->seq, qseq->len);
-				if(qseq->len > MinLen && update_DB(compressor)) {
+				if(qseq->len > MinLen && update_DB(templates, compressor, DB_size)) {
 					/* Update annots */
 					seq = header->seq + header->len;
 					while(isspace(*--seq)) {
@@ -3366,6 +3419,11 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 					}
 					updateAnnotsPtr(compressor, seq_out, index_out);
 					fprintf(stderr, "# Added:\t%s\n", header->seq + 1);
+					
+					if(DB_size == HU_LIMIT) {
+						/* convert values to unsigned */
+						convertToU(templates);
+					}
 				} else {
 					fprintf(stderr, "# Skipped:\t%s\n", header->seq + 1);
 				}
@@ -3385,23 +3443,21 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	if(template_ulengths != 0) {
 		template_ulengths[0] = 0;
 		template_slengths[0] = 0;
+		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
 		fwrite(template_slengths, sizeof(unsigned), DB_size, length_out);
 		fwrite(template_ulengths, sizeof(unsigned), DB_size, length_out);
-		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
-		fclose(length_out);
 	} else {
 		template_lengths[0] = kmerindex;
 		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
-		fclose(index_out);
-		fclose(seq_out);
-		fclose(length_out);
 	}
+	if(index_out) {
+		fclose(index_out);
+	}
+	fclose(seq_out);
+	fclose(length_out);
 	fclose(name_out);
 	
-	
-	fprintf(stderr, "# Templates key-value pairs:\t%u.\n", templates->n);// / 1048576);
-	hashMap_dump(templates, DB_update);
-	fclose(DB_update);
+	fprintf(stderr, "# Templates key-value pairs:\t%lu.\n", templates->n);// / 1048576);
 	
 	/* clean */
 	freeComp(compressor);
@@ -3409,7 +3465,6 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	destroyQseqs(header);
 	destroyQseqs(qseq);
 	destroyFileBuff(inputfile);
-	
 }
 
 void helpMessage(int exeStatus) {
@@ -3432,8 +3487,9 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-k_t\t\tKmersize for template identification\t16\n");
 	fprintf(helpOut, "#\t-k_i\t\tKmersize for indexing\t\t\t16\n");
 	fprintf(helpOut, "#\t-ML\t\tMinimum length of templates\t\tkmersize (16)\n");
-	fprintf(helpOut, "#\t-CS\t\tStart Chain size\t\t\t\t1 M\n");
+	fprintf(helpOut, "#\t-CS\t\tStart Chain size\t\t\t1 M\n");
 	fprintf(helpOut, "#\t-ME\t\tMega DB\t\t\t\t\tFalse\n");
+	fprintf(helpOut, "#\t-NI\t\tDo not dump *.index.b\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-Sparse\t\tMake Sparse DB ('-' for no prefix)\tNone/False\n");
 	fprintf(helpOut, "#\t-ht\t\tHomology template\t\t\t1.0\n");
 	fprintf(helpOut, "#\t-hq\t\tHomology query\t\t\t\t1.0\n");
@@ -3447,13 +3503,14 @@ void helpMessage(int exeStatus) {
 int main(int argc, char *argv[]) {
 	
 	int i, args, stop, filecount, deconcount, sparse_run;
-	int size, l_len, mapped_cont, file_len, appender;
-	unsigned megaDB;
+	int size, mapped_cont, file_len, appender;
+	unsigned megaDB, **Values;
 	char **inputfiles, *outputfilename, *templatefilename, **deconfiles;
 	char *to2Bit, *line;
 	unsigned char *update;
 	struct hashMapKMA *finalDB;
 	FILE *inputfile, *out;
+	time_t t0, t1;
 	
 	if (argc == 1) {
 		fprintf(stderr, "# Too few arguments handed.\n");
@@ -3464,6 +3521,7 @@ int main(int argc, char *argv[]) {
 	
 	/* set defaults */
 	INITIAL_SIZE = 1048576;
+	templates = 0;
 	kmersize = 16;
 	kmerindex = 16;
 	sparse_run = 0;
@@ -3475,8 +3533,7 @@ int main(int argc, char *argv[]) {
 	homQ = 1;
 	homT = 1;
 	homcmp = &homcmp_or;
-	getKmerP = &getKmer;
-	addKmer = &addKmerC;
+	dumpIndex = &makeIndexing;
 	template_ulengths = 0;
 	template_slengths = 0;
 	DB_size = 1;
@@ -3812,7 +3869,7 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				if(strcmp(argv[args], "-") == 0) {
 					prefix_len = 0;
-					prefix = 0;
+					prefix = 1;
 				} else {
 					prefix_len = strlen(argv[args]);
 					prefix = 0;
@@ -3832,6 +3889,8 @@ int main(int argc, char *argv[]) {
 			}
 		} else if(strcmp(argv[args], "-ME") == 0) {
 			megaDB = 1;
+		} else if(strcmp(argv[args], "-NI") == 0) {
+			dumpIndex = &dumpSeq;
 		} else if(strcmp(argv[args], "-v") == 0) {
 			fprintf(stdout, "KMA_index-%d.%d.%d\n", version[0], version[1], version[2]);
 			exit(0);
@@ -3849,68 +3908,49 @@ int main(int argc, char *argv[]) {
 	if(filecount == 0 && deconcount == 0) {
 		fprintf(stderr, "No inputfiles defined.\n");
 		helpMessage(-1);
+	} else if(filecount == 0 && deconcount != 0 && templatefilename == 0) {
+		fprintf(stderr, "Nothing to update.\n");
+		exit(0);
 	} else if(outputfilename == 0 && templatefilename == 0) {
 		fprintf(stderr, "Output destination not defined.\n");
 		helpMessage(-1);
 	} else if(outputfilename == 0 && templatefilename != 0) {
-		outputfilename = malloc((strlen(templatefilename) + 64));
-		if(!outputfilename) {
-			ERROR();
-		}
+		outputfilename = smalloc((strlen(templatefilename) + 64));
 		strcpy(outputfilename, templatefilename);
 	}
+	file_len = strlen(outputfilename);
+	
 	mask = 0;
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
 	if(megaDB) {
 		INITIAL_SIZE = mask;
 		++INITIAL_SIZE;
+	} else if(INITIAL_SIZE == (mask + 1)) {
+		megaDB = 1;
 	}
-	/* load or allocate DB */
+	
+	/* load DB */
 	if(templatefilename != 0) {
 		/* load */
-		appender = load_DBs(templatefilename, outputfilename);
+		fprintf(stderr, "# Loading database: %s\n", outputfilename);
+		finalDB = load_DBs(templatefilename, outputfilename);
 		
 		/* determine params based on loaded DB */
-		if(prefix_len == 0) {
+		if(prefix_len == 0 && prefix == 0) {
 			sparse_run = 0;
 		} else {
 			sparse_run = 1;
 		}
-		if(mask == templates->size) {
+		if(mask == finalDB->size) {
 			megaDB = 1;
-		} else {
-			megaDB = 0;
+			INITIAL_SIZE = mask + 1;
+		} else if(megaDB == 0) {
+			INITIAL_SIZE = finalDB->size + 1;
 		}
+		appender = 1;
 	} else {
-		/* create */
-		templates = hashMap_initialize(INITIAL_SIZE);
-		if(templates->seq_size == 0) {
-			megaDB = 1;
-		}
-		
-		DB_size = 1;
-		if(sparse_run) {
-			templates->prefix = prefix;
-			templates->prefix_len = prefix_len;
-			
-			template_lengths = malloc(1024 * sizeof(unsigned));;
-			template_slengths = malloc(1024 * sizeof(unsigned));
-			template_ulengths = malloc(1024 * sizeof(unsigned));
-			if(!template_lengths || !template_slengths || !template_ulengths) {
-				ERROR();
-			}
-			*template_lengths = kmerindex;
-			template_slengths[0] = 1024;
-			template_ulengths[0] = 1024;
-		} else {
-			template_lengths = malloc(1024 * sizeof(unsigned));
-			template_slengths = 0;
-			template_ulengths = 0;
-			if(!template_lengths) {
-				ERROR();
-			}
-			template_lengths[0] = 1024;
-		}
+		finalDB = 0;
+		appender = 0;
 	}
 	
 	/* set pointers and dependent global variables */
@@ -3919,37 +3959,47 @@ int main(int argc, char *argv[]) {
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
 	shifterI = sizeof(long unsigned) * sizeof(long unsigned) - (kmerindex << 1);
 	prefix_shifter = sizeof(long unsigned) * sizeof(long unsigned) - (prefix_len << 1);
+	
 	/* function pointers */
+	hashMap_add = &hashMap_addKMA;
+	hashMap_get = &hashMap_getValue;
+	addCont = &hashMap_addCont;
+	
+	if(DB_size < HU_LIMIT) {
+		updateValuePtr = &updateShortValue;
+		valuesKeyPtr = &huValuesKey;
+		cmpValuesPtr = &cmpHuValues;
+		valuesSize = &huSize;
+		updateScoreAndTemplate_ptr = &updateScoreAndTemplateHU;
+		addUscore_ptr = &addUscoreHU;
+	} else {
+		updateValuePtr = &updateValue;
+		valuesKeyPtr = &valuesKey;
+		cmpValuesPtr = &cmpValues;
+		valuesSize = &uSize;
+		updateScoreAndTemplate_ptr = &updateScoreAndTemplate;
+		addUscore_ptr = &addUscore;
+	}
 	if(sparse_run) {
 		update_DB = &updateDBs_sparse;
 		updateAnnotsPtr = &updateAnnots_sparse;
-		hashMap_add = &hashMap_addKMASparse;
-		hashMap_get = &hashMap_getValue;
-		addCont = &hashMap_addCont;
+		if(prefix_len == 0) {
+			prefix = 1;
+		}
 	} else {
 		update_DB = &updateDBs;
 		updateAnnotsPtr = &updateAnnots;
-		hashMap_add = &hashMap_addKMA;
-		hashMap_get = &hashMap_getValue;
-		addCont = &hashMap_addCont;
 	}
+	
 	if(prefix_len != 0) {
 		deConNode_ptr = &deConNode_sparse;
 	} else {
 		deConNode_ptr = &deConNode;
 	}
 	if(megaDB) {
-		if(prefix_len) {
-			hashMap_add = &megaMap_addKMA_sparse;
-		} else {
-			hashMap_add = &megaMap_addKMA;
-		}
+		hashMap_add = &megaMap_addKMA;
 		hashMap_get = &megaMap_getValue;
 		addCont = &megaMap_addCont;
-	}
-	if(kmersize <= 16) {
-		getKmerP = &getK;
-		addKmer = &addK;
 	}
 	
 	/* set homology check */
@@ -3988,54 +4038,96 @@ int main(int argc, char *argv[]) {
 	
 	/* update DBs */
 	if(filecount != 0) {
-		makeDB(inputfiles, filecount, outputfilename, appender, to2Bit);	
-	}
-	
-	/* compress db */
-	fprintf(stderr, "# Compressing templates\n");
-	file_len = strlen(outputfilename);
-	strcat(outputfilename, ".comp.b");
-	out = fopen(outputfilename, "wb");
-	if(!out) {
-		ERROR();
-	} else if(templates->table != 0) {
-		finalDB = compressKMA_DB(out);
+		if(finalDB) {
+			/* convert */
+			templates = hashMapKMA_openChains(finalDB);
+		} else {
+			/* create */
+			templates = hashMap_initialize(INITIAL_SIZE);
+			
+			DB_size = 1;
+			if(sparse_run) {
+				templates->prefix = prefix;
+				templates->prefix_len = prefix_len;
+				
+				template_lengths = malloc(1024 * sizeof(unsigned));;
+				template_slengths = malloc(1024 * sizeof(unsigned));
+				template_ulengths = malloc(1024 * sizeof(unsigned));
+				if(!template_lengths || !template_slengths || !template_ulengths) {
+					ERROR();
+				}
+				*template_lengths = kmerindex;
+				template_slengths[0] = 1024;
+				template_ulengths[0] = 1024;
+			} else {
+				template_lengths = malloc(1024 * sizeof(unsigned));
+				template_slengths = 0;
+				template_ulengths = 0;
+				if(!template_lengths) {
+					ERROR();
+				}
+				template_lengths[0] = 1024;
+			}
+		}
+		
+		fprintf(stderr, "# Indexing databases.\n");
+		t0 = clock();
+		makeDB(inputfiles, filecount, outputfilename, appender, to2Bit);
+		t1 = clock();
+		fprintf(stderr, "#\n# Total time used for DB indexing: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+		
+		
+		/* compress db */
+		fprintf(stderr, "# Compressing templates\n");
+		t0 = clock();
+		strcat(outputfilename, ".comp.b");
+		out = fopen(outputfilename, "wb");
+		if(!out) {
+			ERROR();
+		} else if(templates->table != 0) {
+			finalDB = compressKMA_DB(out);
+		} else {
+			finalDB = compressKMA_megaDB(out);
+		}
+		fclose(out);
+		outputfilename[file_len] = 0;
+		free(templates);
+		fprintf(stderr, "# Template database created.\n");
+		t1 = clock();
+		fprintf(stderr, "#\n# Total time used for DB compression: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 	} else {
-		finalDB = compressKMA_megaDB(out);
+		++finalDB->size;
 	}
-	fclose(out);
-	outputfilename[file_len] = 0;
-	fprintf(stderr, "# Template database created.\n");
 	
 	/* decontaminate */
 	if(deconcount != 0) {
-		/* clear compression values,
-		as only these are changed under decontamination */
-		free(finalDB->values);
+		/* open values */
+		fprintf(stderr, "# Openning values\n");
+		Values = hashMapKMA_openValues(finalDB);
 		
 		/* get decontamination info */
 		fprintf(stderr, "# Adding decontamination information\n");
-		mapped_cont = deConDB(finalDB, deconfiles, deconcount, outputfilename, to2Bit);
+		t0 = clock();
+		mapped_cont = deConDB(finalDB, deconfiles, deconcount, to2Bit, Values);
 		fprintf(stderr, "# Contamination information added.\n");
 		fprintf(stderr, "# %d kmers mapped to the DB.\n", mapped_cont);
-		fprintf(stderr, "# Contamination mapped to %f %% of the DB.\n", 100.0 * mapped_cont / templates->n);
+		fprintf(stderr, "# Contamination mapped to %f %% of the DB.\n", 100.0 * mapped_cont / finalDB->n);
 		
 		/* compress DB */
 		fprintf(stderr, "# Compressing templates\n");
 		if((finalDB->size - 1) != mask) {
-			compressKMA_deconDB(finalDB);
+			compressKMA_deconDB(finalDB, Values);
 		} else {
-			compressKMA_deconMegaDB(finalDB); /* here */
+			compressKMA_deconMegaDB(finalDB, Values);
 		}
+		t1 = clock();
+		fprintf(stderr, "#\n# Total time used for DB decontamination: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 		
 		/* dump DB */
 		fprintf(stderr, "# Dumping DB.\n");
 		strcat(outputfilename, ".decon.comp.b");
-		out = fopen(outputfilename, "wb");
+		out = sfopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
-		if(!out) {
-			ERROR();
-		}
 		if((finalDB->size - 1) != mask) {
 			hashMapKMA_dump(finalDB, out);
 		} else {
