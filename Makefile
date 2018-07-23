@@ -13,7 +13,7 @@ kma_shm: KMA_SHM.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 kma_update: KMA_update.c
-        $(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
 	$(RM) $(BINS)
