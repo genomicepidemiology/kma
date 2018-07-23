@@ -572,8 +572,8 @@ int intpos_bin_contamination(unsigned *str1, const int str2) {
 	}
 	
 	downLim = 1;
-	template = 0;
 	pos = (upLim + downLim) / 2;
+	template = getTemplatePtr(str1, pos);
 	while(0 < (upLim - downLim)) {
 		template = getTemplatePtr(str1, pos);
 		if(template == str2) {
@@ -3274,10 +3274,9 @@ void load_DBs_Sparse(char *templatefilename) {
 			ERROR();
 		}
 		/* load lengths */
-		fseek(DB_file, DB_size * sizeof(int), SEEK_END);
+		fseek(DB_file, DB_size * sizeof(int), SEEK_SET);
 		fread(template_lengths, sizeof(int), DB_size, DB_file);
 		fread(template_ulengths, sizeof(int), DB_size, DB_file);
-		
 	}
 	templatefilename[file_len] = 0;
 	fclose(DB_file);
@@ -6359,7 +6358,6 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 						}
 						
 						*regionTemplates = bestHits;
-						
 						if(bestScore > 0) {
 							/* find limits of match */
 							start_cut = j;
