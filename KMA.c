@@ -218,7 +218,7 @@ struct alnPoints {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 1};
+int version[3] = {0, 15, 2};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -925,7 +925,8 @@ void updateMatrix(struct FileBuff *dest, char *template_name, long unsigned *tem
 	i = 0;
 	for(pos = 0; asm_len != 0; --asm_len, pos = assembly[pos].next) {
 		/* check buffer capacity */
-		if(dest->bytes < 38) {
+		if(avail < 38) {
+			dest->bytes = avail;
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
 			update = (char *) dest->next;
@@ -9154,17 +9155,13 @@ int chainSeeds(struct alnPoints *points, int q_len, int t_len) {
 	pM = MM + M;
 	nMems = points->len;
 	i = nMems - 1;
-	bestScore = points->weight[i];
 	bestPos = i;
+	bestScore = points->weight[i];
 	points->score[i] = bestScore;
 	points->next[i] = 0;
 	
 	while(i--) {
-		
 		weight = points->weight[i];
-		/* here */
-		/* W1 is deprecated, new pen for non-pairing is needed */
-		//score = weight + W1;
 		points->next[i] = 0;
 		tEnd = points->tEnd[i];
 		qEnd = points->qEnd[i];
@@ -9172,7 +9169,7 @@ int chainSeeds(struct alnPoints *points, int q_len, int t_len) {
 		if(0 < --score) {
 			score *= U;
 			score += W1;
-		} else {
+		} else if(score == 0) {
 			score = W1;
 		}
 		score += weight;
@@ -9211,7 +9208,7 @@ int chainSeeds(struct alnPoints *points, int q_len, int t_len) {
 				//gap += weight + points->score[j];
 				gap += weight;
 				/* cut mem */	
-				gap += (points->score[j] - (tEnd - points->tStart[j]) * M);
+				gap += (points->score[j] - (points->tStart[j] - tEnd) * M);
 				
 				/* check if score is max */
 				if(score < gap) {
@@ -9337,13 +9334,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 	}
 	
 	if(mem_count) {
-		if(points->qEnd[mem_count - 1] != q_len && points->tEnd[mem_count - 1] != t_len) {
-			--mem_count;
-			score = (MIN(q_len - points->qEnd[mem_count], t_len - points->tEnd[mem_count])) * (MM + M);
-			/* W1 is deprecated, new pen for non-pairing is needed */
-			points->weight[mem_count] += MAX(W1, score);
-			++mem_count;
-		}
 		points->len = mem_count;
 	} else {
 		Stat.score = 0;
@@ -9378,7 +9368,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 	value = points->tStart[start] - 1;
 	Stat.pos = value;
 	i = points->qStart[start];
-	
 	/* align leading tail */
 	if(i != 0) {
 		/* get boundaries */
@@ -9399,7 +9388,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
 			} else {
 				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band);
-				//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
 			}
 			/* trim leading gaps */
 			bias = 0;
@@ -9427,17 +9415,10 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 	}
 	
 	/* piece seeds together */
-	prev = 0;
 	stop = 1;
 	while(stop) {
-		/* check MEM boundaries */
-		if(prev < points->tStart[start]) {
-			q_s = points->qStart[start];
-		} else {
-			q_s = points->qStart[start] + (points->tStart[start] - prev + 1);
-		}
-		
 		/* MEM */
+		q_s = points->qStart[start];
 		end = points->qEnd[start] - q_s;
 		memcpy(aligned->t + Stat.len, qseq + q_s, end);
 		memset(aligned->s + Stat.len, '|', end);
@@ -9448,7 +9429,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 			nuc = qseq[i];
 			Stat.score += d[nuc][nuc];
 		}
-		prev = points->tEnd[start] - 1;
 		
 		/* join MEMs */
 		if(points->next[start]) {
@@ -9456,12 +9436,13 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 			q_s = points->qEnd[start];
 			t_s = points->tEnd[start] - 1;
 			start = points->next[start];
-			q_e = points->qStart[start];
 			t_e = points->tStart[start] - 1;
-			if(t_e < prev) {
-				q_e = points->qStart[start] + (prev - t_e);
+			/* check if next MEM is a semi match */
+			if(t_e < t_s) {
+				points->qStart[start] += (t_s - t_e);
 				t_e = t_s;
 			}
+			q_e = points->qStart[start];
 			
 			/* piece seed-extends together */
 			if(abs(t_e - t_s - q_e + q_s) * U > q_len * M || t_e - t_s > q_len || q_e - q_s > (q_len >> 1)) {
@@ -9679,17 +9660,10 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 	}
 	
 	/* piece seeds together */
-	prev = 0;
 	stop = 1;
 	while(stop) {
-		/* check MEM boundaries */
-		if(prev < points->tStart[start]) {
-			q_s = points->qStart[start];
-		} else {
-			q_s = points->qStart[start] + (points->tStart[start] - prev + 1);
-		}
-		
 		/* MEM */
+		q_s = points->qStart[start];
 		end = points->qEnd[start] - q_s;
 		Stat.len += end;
 		end = points->qEnd[start];
@@ -9697,7 +9671,6 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 			nuc = qseq[i];
 			Stat.score += d[nuc][nuc];
 		}
-		prev = points->tEnd[start] - 1;
 		
 		/* join MEMs */
 		if(points->next[start]) {
@@ -9705,12 +9678,12 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 			q_s = points->qEnd[start];
 			t_s = points->tEnd[start] - 1;
 			start = points->next[start];
-			q_e = points->qStart[start];
 			t_e = points->tStart[start] - 1;
-			if(t_e < prev) {
-				q_e = points->qStart[start] + (prev - t_e);
+			if(t_e < t_s) {
+				points->qStart[start] += (t_s - t_e);
 				t_e = t_s;
 			}
+			q_e = points->qStart[start];
 			
 			/* piece seed-extends together */
 			if(abs(t_e - t_s - q_e + q_s) * U > q_len * M || t_e - t_s > q_len || q_e - q_s > (q_len >> 1)) {
@@ -9781,6 +9754,13 @@ int preseed(struct hashMap_index *template_index, unsigned char *qseq, int q_len
 	return i;
 }
 
+void intcpy(int *dest, int *src, int size) {
+	
+	while(size--) {
+		*dest++ = *src++;
+	}
+}
+
 int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct alnPoints *points) {
 	
 	int i, j, rc, end, score, score_r, bestScore, value, t_len, stop;
@@ -9844,7 +9824,6 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 					points->qStart[totMems] = j + 1;
 					points->tStart[totMems] = prev + 2;
 					
-					
 					/* skip k-mer bases */
 					value += (kmersize - 1);
 					i += kmersize;
@@ -9867,7 +9846,7 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 					++totMems;
 					
 					/* realloc seeding points */
-					if(mem_count == points->size) {
+					if(totMems == points->size) {
 						seedPoint_realloc(points, points->size << 1);
 					}
 					
@@ -9892,15 +9871,24 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {
+		//fprintf(stderr, "FS\n");
 		strrc(qseq, q_len);
 		if(Score) {
 			Score[template_name] += bestScore;
 		}
 	} else {
+		//fprintf(stderr, "RS\n");
 		/* move mems down */
 		if(points->len) {
-			points->len += mem_count;
-			for(i = points->len, j = 0; i < totMems; ++i, ++j) {
+			intcpy(points->tStart, points->tStart + points->len, mem_count);
+			intcpy(points->tEnd, points->tEnd + points->len, mem_count);
+			intcpy(points->qStart, points->qStart + points->len, mem_count);
+			intcpy(points->qEnd, points->qEnd + points->len, mem_count);
+			intcpy(points->weight, points->weight + points->len, mem_count);
+			
+			//points->len += mem_count;
+			/*
+			for(i = points->len, j = 0; j < mem_count; ++i, ++j) {
 				points->tStart[j] = points->tStart[i];
 				points->tEnd[j] = points->tEnd[i];
 				points->qStart[j] = points->qStart[i];
@@ -9909,6 +9897,7 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 				points->score[j] = points->score[i];
 				points->next[j] = points->next[i];
 			}
+			*/
 		}
 		points->len = mem_count;
 		if(Score) {
@@ -10122,14 +10111,12 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 									if(myBias > 0) {
 										--myBias;
 									}
-									
 									/* find position of insertion */
 									gaps = pos;
 									--pos;
 									while(assembly[pos].next != gaps) {
 										pos = assembly[pos].next;
 									}
-									
 									while(i < aln_len && aligned->t[i] == 5) {
 										assembly[pos].next = nextGap;
 										pos = assembly[pos].next;
@@ -10141,6 +10128,8 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 											if(!assembly) {
 												ERROR();
 											}
+											matrix->size = max_asmlen;
+											matrix->assmb = assembly;
 										}
 										
 										assembly[pos].counts[0] = 0;
@@ -10159,11 +10148,23 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 							} else if(t_len <= pos) { // Old template gap, not present in this read
 								assembly[pos].counts[5]++;
 								pos = assembly[pos].next;
-							} else { // (Match, mismatch) and (Query gap, deletion)
+							} else {
 								assembly[pos].counts[aligned->q[i]]++;
 								++i;
 								pos = assembly[pos].next;
 							}
+							/* debug info */
+							/*
+							else if(aligned->t[i] == getNuc(templates_index[template]->seq, pos)) { // (Match, mismatch) and (Query gap, deletion)
+								assembly[pos].counts[aligned->q[i]]++;
+								++i;
+								pos = assembly[pos].next;
+							} else {
+								fprintf(stderr, "KMA is out of sync\n");
+								exit(1);
+								++i;
+							}
+							*/
 						}
 						
 						/* Convert fragment */
