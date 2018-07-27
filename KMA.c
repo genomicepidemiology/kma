@@ -672,9 +672,6 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 		if(strm->avail_in == 0) {
 			dest->bytes = 0;
 			dest->next = dest->buffer;
-			if(dest->z_err != Z_STREAM_END) {
-				fprintf(stderr, "Unexpected end of file\n");
-			}
 			return 0;
 		}
 	}
@@ -790,6 +787,9 @@ void gzcloseFileBuff(struct FileBuff *dest) {
 	int status;
 	if((status = inflateEnd(dest->strm)) != Z_OK) {
 		fprintf(stderr, "Gzip error %d\n", status);
+	}
+	if(dest->z_err != Z_STREAM_END) {
+		fprintf(stderr, "Unexpected end of file\n");
 	}
 	dest->file = 0;
 	dest->strm->avail_out = 0;

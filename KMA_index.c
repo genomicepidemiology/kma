@@ -35,6 +35,8 @@
 #define ENABLE_ZLIB_GZIP 32
 #define getNuc(Comp,pos)((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
 #define SetNuc(seq, nuc, pos)(seq[pos >> 5] |= (nuc << (62-((pos & 31) << 1))))
+#define MIN(X, Y) ((X < Y) ? X : Y)
+#define MAX(X, Y) ((X < Y) ? Y : X)
 
 /*
 	STRUCTURES
@@ -135,13 +137,14 @@ struct FileBuff {
 	unsigned char *next;
 	FILE *file;
 	z_stream *strm;
+	int z_err;
 };
 
 
 /*
 	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 0};
+int version[3] = {0, 15, 1};
 struct hashMap *templates;
 struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
@@ -599,9 +602,9 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	
 	/* check compressed buffer, and load it */
 	strm = dest->strm;
-	if(strm->avail_out != 0) {
+	if(strm->avail_in == 0) {
 		strm->avail_in = fread(dest->inBuffer, 1, dest->buffSize, dest->file);
-		strm->next_in = dest->inBuffer;
+		strm->next_in = (unsigned char*) dest->inBuffer;
 		if(strm->avail_in == 0) {
 			dest->bytes = 0;
 			dest->next = dest->buffer;
@@ -611,21 +614,31 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	
 	/* reset uncompressed buffer */
 	strm->avail_out = dest->buffSize;
-	strm->next_out = dest->buffer;
+	strm->next_out = (unsigned char*) dest->buffer;
 	
 	/* uncompress buffer */
 	status = inflate(strm, Z_NO_FLUSH);
+	dest->z_err = status;
 	
-	if(status == Z_OK || status == Z_STREAM_END || status == Z_BUF_ERROR) {
+	/* concatenated file */
+	if(status == Z_STREAM_END && strm->avail_out == dest->buffSize) {
+		inflateReset(strm);
+		return BuffgzFileBuff(dest);
+	}
+	
+	if(status == Z_OK || status == Z_STREAM_END) {
 		dest->bytes = dest->buffSize - strm->avail_out;
 		dest->next = dest->buffer;
+		if(status == Z_OK && dest->bytes == 0) {
+			return BuffgzFileBuff(dest);
+		}
 	} else {
 		dest->bytes = 0;
 		dest->next = dest->buffer;
+		fprintf(stderr, "Gzip error %d\n", status);
 	}
 	
 	return dest->bytes;
-	
 }
 
 void init_gzFile(struct FileBuff *inputfile) {
@@ -663,8 +676,8 @@ void init_gzFile(struct FileBuff *inputfile) {
 	}
 	strm->next_in = inputfile->inBuffer;
 	strm->avail_in = inputfile->bytes;
-	
 	inputfile->strm = strm;
+	inputfile->z_err = Z_OK;
 	
 	inputfile->bytes = BuffgzFileBuff(inputfile);
 }
@@ -701,6 +714,9 @@ void gzcloseFileBuff(struct FileBuff *dest) {
 	int status;
 	if((status = inflateEnd(dest->strm)) != Z_OK) {
 		fprintf(stderr, "Gzip error %d\n", status);
+	}
+	if(dest->z_err != Z_STREAM_END) {
+		fprintf(stderr, "Unexpected end of file\n");
 	}
 	dest->file = 0;
 	dest->strm->avail_out = 0;
@@ -1072,7 +1088,7 @@ void hashMap2megaMap(struct hashMap *templates, struct hashTable *table) {
 unsigned * updateValue(unsigned *values, unsigned value) {
 	
 	if(!values) {
-		values = malloc(2 * sizeof(unsigned));
+		values = smalloc(2 * sizeof(unsigned));
 		values[0] = 1;
 		values[1] = value;
 	} else if(values[*values] == value) {
@@ -2264,7 +2280,7 @@ struct hashMapKMA * compressKMA_DB(FILE *out) {
 	
 	/* convert templates to linked list */
 	table_t = 0;
-	i = templates->size;
+	i = templates->size + 1;
 	while(i--) {
 		for(node_t = templates->table[i]; node_t != 0; node_t = next_t) {
 			next_t = node_t->next;
@@ -3266,7 +3282,7 @@ struct hashMapKMA * load_DBs(char *templatefilename, char *outputfilename) {
 
 unsigned * HU2U(unsigned *values) {
 	
-	unsigned i;
+	int i;
 	short unsigned *hu_values;
 	
 	hu_values = (short unsigned *)(values);
@@ -3277,7 +3293,8 @@ unsigned * HU2U(unsigned *values) {
 		hu_values = (short unsigned *)(values);
 	}
 	
-	for(i = *hu_values; i != 0; --i) {
+	i = *hu_values + 1;
+	while(i--) {
 		values[i] = hu_values[i];
 	}
 	
@@ -3290,7 +3307,7 @@ void convertToU(struct hashMap *templates) {
 	struct hashTable *node;
 	
 	/* convert values */
-	index = templates->size;
+	index = templates->size + 1;
 	if(templates->table) {
 		while(index--) {
 			for(node = templates->table[index]; node != 0; node = node->next) {
@@ -3305,7 +3322,6 @@ void convertToU(struct hashMap *templates) {
 		}	
 	}
 	
-	/* here */
 	/* set pointers */
 	updateValuePtr = &updateValue;
 	valuesKeyPtr = &valuesKey;
@@ -3526,7 +3542,7 @@ int main(int argc, char *argv[]) {
 	kmerindex = 16;
 	sparse_run = 0;
 	appender = 0;
-	MinLen = kmersize - 1;
+	MinLen = 0;
 	MinKlen = 1;
 	prefix_len = 0;
 	prefix = 0;
@@ -3737,6 +3753,7 @@ int main(int argc, char *argv[]) {
 				MinLen = atoi(argv[args]);
 				if(MinLen <= 0) {
 					fprintf(stderr, "# Invalid minimum length parsed, using default\n");
+					MinLen = 0;
 				}
 			}
 		} else if(strcmp(argv[args], "-hq") == 0) {
@@ -4008,6 +4025,8 @@ int main(int argc, char *argv[]) {
 		for(i = 0; i < prefix_len; ++i) {
 			MinKlen /= 4;
 		}
+	} else {
+		MinLen = MAX(kmersize, kmerindex);
 	}
 	if(homT < 1) {
 		QualCheck = &templateCheck;
