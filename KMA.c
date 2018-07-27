@@ -122,6 +122,7 @@ struct FileBuff {
 	unsigned char *next;
 	FILE *file;
 	z_stream *strm;
+	int z_err;
 };
 
 static struct pid {
@@ -218,7 +219,7 @@ struct alnPoints {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 2};
+int version[3] = {0, 15, 3};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -665,12 +666,15 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	
 	/* check compressed buffer, and load it */
 	strm = dest->strm;
-	if(strm->avail_out != 0) {
+	if(strm->avail_in == 0) {
 		strm->avail_in = fread(dest->inBuffer, 1, dest->buffSize, dest->file);
 		strm->next_in = (unsigned char*) dest->inBuffer;
 		if(strm->avail_in == 0) {
 			dest->bytes = 0;
 			dest->next = dest->buffer;
+			if(dest->z_err != Z_STREAM_END) {
+				fprintf(stderr, "Unexpected end of file\n");
+			}
 			return 0;
 		}
 	}
@@ -681,17 +685,27 @@ int BuffgzFileBuff(struct FileBuff *dest) {
 	
 	/* uncompress buffer */
 	status = inflate(strm, Z_NO_FLUSH);
+	dest->z_err = status;
 	
-	if(status == Z_OK || status == Z_STREAM_END || status == Z_BUF_ERROR) {
+	/* concatenated file */
+	if(status == Z_STREAM_END && strm->avail_out == dest->buffSize) {
+		inflateReset(strm);
+		return BuffgzFileBuff(dest);
+	}
+	
+	if(status == Z_OK || status == Z_STREAM_END) {
 		dest->bytes = dest->buffSize - strm->avail_out;
 		dest->next = dest->buffer;
+		if(status == Z_OK && dest->bytes == 0) {
+			return BuffgzFileBuff(dest);
+		}
 	} else {
 		dest->bytes = 0;
 		dest->next = dest->buffer;
+		fprintf(stderr, "Gzip error %d\n", status);
 	}
 	
 	return dest->bytes;
-	
 }
 
 void init_gzFile(struct FileBuff *inputfile) {
@@ -729,8 +743,9 @@ void init_gzFile(struct FileBuff *inputfile) {
 	}
 	strm->next_in = inputfile->inBuffer;
 	strm->avail_in = inputfile->bytes;
-	
+	strm->avail_out = 0;
 	inputfile->strm = strm;
+	inputfile->z_err = Z_OK;
 	
 	inputfile->bytes = BuffgzFileBuff(inputfile);
 }
@@ -11332,6 +11347,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	if(!index_in) {
 		alignLoadPtr = &alignLoad_fly_build;
 		index_in = 0;
+		if(kmersize < 4 || 32 < kmersize) {
+			kmersize = 16;
+		}
 	} else if(shm & 8) {
 		templates_index[0] = alignLoad_shm_initial(templatefilename, file_len, seq_in, index_in);
 		alignLoadPtr = &alignLoad_fly_shm;
@@ -11806,6 +11824,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	} else {
 		alignLoadPtr = &alignLoad_fly_build_mem;
 		index_in = 0;
+		if(kmersize < 4 || 32 < kmersize) {
+			kmersize = 16;
+		}
 	}
 	
 	strcat(templatefilename, ".seq.b");
@@ -12719,7 +12740,6 @@ int main(int argc, char *argv[]) {
 	significantBase = &significantNuc; //-bc
 	baseCall = &baseCaller;
 	inputfiles = 0;
-	kmersize = 16;
 	
 	/* PARSE COMMAND LINE OPTIONS */
 	args = 1;
