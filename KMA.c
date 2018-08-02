@@ -3289,7 +3289,7 @@ void load_DBs_Sparse(char *templatefilename) {
 			ERROR();
 		}
 		/* load lengths */
-		fseek(DB_file, DB_size * sizeof(int), SEEK_SET);
+		fseek(DB_file, DB_size * sizeof(int), SEEK_CUR);
 		fread(template_lengths, sizeof(int), DB_size, DB_file);
 		fread(template_ulengths, sizeof(int), DB_size, DB_file);
 	}
