@@ -39,15 +39,15 @@
 #define GZIP_ENCODING 16
 #define ENABLE_ZLIB_GZIP 32
 #define getNuc(Comp,pos) ((Comp[pos >> 5] << ((pos & 31) << 1)) >> 62)
-//#define cpu_relax() asm volatile("pause\n": : :"memory")
-//#define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(&sleepTimer, NULL);}}
 #define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {usleep(100);}}
 #define unlock(exclude) (__sync_lock_release(exclude))
+#define wait_atomic(src) while(src) {usleep(100);}
 #define MIN(X, Y) ((X < Y) ? X : Y)
 #define MAX(X, Y) ((X < Y) ? Y : X)
 #define setEx(src, pos)(src[pos >> 3] |= (1 << (pos & 7)))
 #define unsetEx(src, pos)(src[pos >> 3] ^= (1 << (pos & 7)))
 #define getEx(src, pos)((src[pos >> 3] >> (pos & 7)) & 1)
+#define ERROR() fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno)); exit(errno);
 
 /*
  STRUCTURES
@@ -58,7 +58,6 @@ struct aln {
 	unsigned char *q;  /* query */
 	unsigned pos; /* start of aln, relative to template */
 	int score; /* aln score */
-	/* start of aln, relative to query */
 };
 
 struct assem {
@@ -179,20 +178,6 @@ struct diskOffsets {
 	FILE *file;			// filedes of templates
 };
 
-struct kmerScan_thread {
-	pthread_t id;
-	int num;
-	int bestScore;
-	int bestScore_r;
-	int *bestTemplates;
-	int *bestTemplates_r;
-	FILE *inputfile;
-	struct compDNA *qseq;
-	struct compDNA *qseq_r;
-	struct qseqs *header;
-	struct kmerScan_thread *next;
-};
-
 struct assembly {
 	short unsigned counts[6];
 	unsigned next;
@@ -216,10 +201,72 @@ struct alnPoints {
 	int *next;
 };
 
+struct NWmat {
+	long NW_s;
+	long NW_q;
+	unsigned char *E;
+	int *D[2];
+	int *P[2];
+};
+
+struct kmerScan_thread {
+	pthread_t id;
+	int num;
+	int bestScore;
+	int bestScore_r;
+	int *bestTemplates;
+	int *bestTemplates_r;
+	FILE *inputfile;
+	struct compDNA *qseq;
+	struct compDNA *qseq_r;
+	struct qseqs *header;
+	struct kmerScan_thread *next;
+};
+
+struct assemble_thread {
+	pthread_t id;
+	int num;
+	int template;
+	int file_count;
+	FILE **files;
+	struct FileBuff *frag_out;
+	struct assem *aligned_assem;
+	struct aln *aligned, *gap_align;
+	struct qseqs *qseq, *header;
+	struct assemInfo *matrix;
+	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	struct assemble_thread *next;
+};
+
+struct aln_thread {
+	pthread_t id;
+	int *matched_templates;
+	int *bestTemplates;
+	int *bestTemplates_r;
+	int *best_start_pos;
+	int *best_end_pos;
+	long *index_indexes;
+	long *seq_indexes;
+	FILE *inputfile;
+	FILE *frag_out_raw;
+	FILE *index_in;
+	FILE *seq_in;
+	struct compDNA *qseq_comp;
+	struct compDNA *qseq_r_comp;
+	struct qseqs *qseq;
+	struct qseqs *qseq_r;
+	struct qseqs *header;
+	struct qseqs *header_r;
+	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	struct aln_thread *next;
+};
+
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 3};
+int version[3] = {0, 15, 4};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -233,9 +280,7 @@ unsigned shifter, shifterS, r_shifter, shm, thread_num;
 unsigned *alignment_scores, *uniq_alignment_scores;
 long unsigned mask;
 double evalue, ID_t, scoreT, HMM_param[8];
-int *D[2], *P[2], W1, U, d[5][5], M, MM, PE;
-long NW_s, NW_q;
-unsigned char *E;
+int d[5][5], W1, U, M, MM, PE;
 extern char **environ;
 volatile int *excludeIn, *excludeOut;
 
@@ -246,24 +291,25 @@ void (*printPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*printPairPtr)(int*, struct compDNA*, int, struct qseqs*, struct compDNA*, int, struct qseqs*);
 void (*deConPrintPtr)(int*, struct compDNA*, int, struct qseqs*);
 void (*ankerPtr)(int*, int*, int*, unsigned**, unsigned**, int*, struct compDNA*, int, int, int, int, struct qseqs*);
-int (*assemblyPtr)(struct assem*, int, FILE**, int, struct FileBuff*, char*, struct aln*, struct aln*, struct qseqs*, struct qseqs*, struct assemInfo *, struct alnPoints *);
+int (*assemblyPtr)(struct assem*, int, FILE**, int, struct FileBuff*, struct aln*, struct aln*, struct qseqs*, struct qseqs*, struct assemInfo *, struct alnPoints *, struct NWmat *);
+void * (*assembly_KMA_Ptr)(void *);
 void (*destroyPtr)(int);
 struct hashMap_index * (*alignLoadPtr)(FILE*, FILE*, int, long unsigned, long unsigned);
-unsigned * (*hashMap_get)(struct hashMapKMA *, long unsigned);
+unsigned * (*hashMap_get)(const struct hashMapKMA *, const long unsigned);
 void (*kmerScan)(int*, int*, int*, int*, struct compDNA*, struct compDNA*, struct qseqs*, int*);
 void (*save_kmers_pair)(int*, int*, int*, int*, int*, int*, struct compDNA*, struct compDNA*, struct qseqs*, struct qseqs*, int*);
 void (*printFsa_ptr)(struct qseqs*, struct qseqs*, struct compDNA*);
 void (*printFsa_pair_ptr)(struct qseqs*, struct qseqs*, struct qseqs*, struct qseqs*, struct compDNA*);
-void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, unsigned char*, unsigned char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*, struct alnPoints *);
+void (*alnFragsPE)(int*, struct compDNA*, struct compDNA*, unsigned char*, unsigned char*, struct qseqs*, struct qseqs*, int*, int*, int*, int*, FILE*, FILE*, long*, long*, FILE*, struct alnPoints *, struct NWmat *, volatile int *, volatile int *);
 int (*cmp)(int, int);
 int (*significantBase)(int, int);
 char (*baseCall)(unsigned char, int, int, int, struct assem*, struct assembly*);
 int (*buffFileBuff)(struct FileBuff *);
-long unsigned (*getExistPtr)(struct hashMapKMA *, long unsigned);
-long unsigned (*getKeyPtr)(struct hashMapKMA *, long unsigned);
-long unsigned (*getValueIndexPtr)(struct hashMapKMA *, long unsigned);
-unsigned * (*getValuePtr)(struct hashMapKMA *, long unsigned);
-int (*getTemplatePtr)(unsigned *, int);
+long unsigned (*getExistPtr)(const struct hashMapKMA *, const long unsigned);
+long unsigned (*getKeyPtr)(const struct hashMapKMA *, const long unsigned);
+long unsigned (*getValueIndexPtr)(const struct hashMapKMA *, const long unsigned);
+unsigned * (*getValuePtr)(const struct hashMapKMA *, const long unsigned);
+int (*getTemplatePtr)(const unsigned *, const int);
 int (*get_kmers_for_pair_ptr)(int *, int *, int *, int *, struct compDNA *, int *);
 
 /*
@@ -271,16 +317,9 @@ int (*get_kmers_for_pair_ptr)(int *, int *, int *, int *, struct compDNA *, int 
 */
 
 /* BASIC FUNCTIONS */
-void ERROR() {
-	fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-	exit(errno);
-}
-
-void * smalloc(size_t size) {
+void * smalloc(const size_t size) {
 	
-	void *dest;
-	
-	dest = malloc(size);
+	void *dest = malloc(size);
 	if(!dest) {
 		ERROR();
 	}
@@ -290,9 +329,7 @@ void * smalloc(size_t size) {
 
 FILE * sfopen(char *filename, char *mode) {
 	
-	FILE *file;
-	
-	file = fopen(filename, mode);
+	FILE *file = fopen(filename, mode);
 	if(!file) {
 		fprintf(stderr, "Filename:\t%s\n", filename);
 		ERROR();
@@ -2174,47 +2211,47 @@ int getCompKmers(struct compKmers *compressor, FILE *file) {
 }
 
 /* HASHMAP FUNCTIONS */
-long unsigned getExist(struct hashMapKMA *dest, long unsigned pos) {
+long unsigned getExist(const struct hashMapKMA *dest, const long unsigned pos) {
 	return dest->exist[pos];
 }
 
-long unsigned getExistL(struct hashMapKMA *dest, long unsigned pos) {
+long unsigned getExistL(const struct hashMapKMA *dest, const long unsigned pos) {
 	return dest->exist_l[pos];
 }
 
-long unsigned getKey(struct hashMapKMA *dest, long unsigned pos) {
+long unsigned getKey(const struct hashMapKMA *dest, const long unsigned pos) {
 	return dest->key_index[pos];
 }
 
-long unsigned getKeyL(struct hashMapKMA *dest, long unsigned pos) {
+long unsigned getKeyL(const struct hashMapKMA *dest, const long unsigned pos) {
 	return dest->key_index_l[pos];
 }
 
-long unsigned getValueIndex(struct hashMapKMA *dest, long unsigned pos) {
+long unsigned getValueIndex(const struct hashMapKMA *dest, const long unsigned pos) {
 	return dest->value_index[pos];
 }
 
-long unsigned getValueIndexL(struct hashMapKMA *dest, long unsigned pos) {
+long unsigned getValueIndexL(const struct hashMapKMA *dest, const long unsigned pos) {
 	return dest->value_index[pos];
 }
 
-unsigned * getValue(struct hashMapKMA *dest, long unsigned pos) {
+unsigned * getValue(const struct hashMapKMA *dest, const long unsigned pos) {
 	return (dest->values + pos);
 }
 
-unsigned * getValueS(struct hashMapKMA *dest, long unsigned pos) {
+unsigned * getValueS(const struct hashMapKMA *dest, const long unsigned pos) {
 	return (unsigned *)(dest->values_s + pos);
 }
 
-int getTemplate(unsigned *values, int pos) {
+int getTemplate(const unsigned *values, const int pos) {
 	return values[pos];
 }
 
-int getTemplateS(unsigned *values, int pos) {
+int getTemplateS(const unsigned *values, const int pos) {
 	return ((short unsigned *)(values))[pos];
 }
 
-unsigned * hashMap_getGlobal(struct hashMapKMA *templates, long unsigned key) {
+unsigned * hashMap_getGlobal(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	long unsigned pos, kpos, kmer;
 	
@@ -2314,7 +2351,7 @@ long unsigned getKmerFromFile(long offset, unsigned pos, FILE *file) {
 	}
 }
 
-unsigned * hashMap_getGlobal_disk(struct hashMapKMA *templates, long unsigned key) {
+unsigned * hashMap_getGlobal_disk(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	unsigned i, pos, kpos, key_index[4];
 	long unsigned kmer;
@@ -2360,7 +2397,7 @@ unsigned * hashMap_getGlobal_disk(struct hashMapKMA *templates, long unsigned ke
 	return 0;
 }
 
-unsigned * megaMap_getGlobal_disk(struct hashMapKMA *templates, long unsigned key) {
+unsigned * megaMap_getGlobal_disk(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	unsigned pos;
 	
@@ -2377,7 +2414,7 @@ unsigned * megaMap_getGlobal_disk(struct hashMapKMA *templates, long unsigned ke
 	return 0;
 }
 
-unsigned * hashMap_getGlobal_semDisk(struct hashMapKMA *templates, long unsigned key) {
+unsigned * hashMap_getGlobal_semDisk(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	unsigned i, pos, kpos, key_index[4];
 	long unsigned kmer;
@@ -2419,7 +2456,7 @@ unsigned * hashMap_getGlobal_semDisk(struct hashMapKMA *templates, long unsigned
 	return 0;
 }
 
-unsigned * megaMap_getGlobal_semDisk(struct hashMapKMA *templates, long unsigned key) {
+unsigned * megaMap_getGlobal_semDisk(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	unsigned pos;
 	
@@ -2457,7 +2494,7 @@ void getPrefix(struct hashMapKMA *dest, FILE *file) {
 	dest->value_index_l = 0;
 }
 
-unsigned * megaMap_getGlobal(struct hashMapKMA *templates, long unsigned key) {
+unsigned * megaMap_getGlobal(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	long unsigned pos;
 	
@@ -2968,7 +3005,6 @@ struct hashMap_index *hashMap_index_load(FILE *seq, FILE *index, int len) {
 		ERROR();
 	}
 	hashMap_index_initialize(src, len);
-	
 	fread(src->seq, sizeof(long unsigned), (src->len >> 5) + 1, seq);
 	fread(src->index, sizeof(int), src->size, index);
 	
@@ -2992,7 +3028,6 @@ struct hashMap_index *hashMap_index_build(FILE *seq, int len) {
 	for(i = 0; i < end; ++i) {
 		hashMap_index_add(src, getKmer(src->seq, i), i);
 	}
-	
 	return src;
 }
 
@@ -3160,11 +3195,7 @@ void load_DBs_KMA(char *templatefilename) {
 	/* allocate DBs */
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".length.b");
-	DB_file = fopen(templatefilename, "rb");
-	if(!DB_file) {
-		fprintf(stderr, "Wrong format of DB, or DB does not exist.\n");
-		exit(errno);
-	}
+	DB_file = sfopen(templatefilename, "rb");
 	fread(&DB_size, sizeof(int), 1, DB_file);
 	contamination = DB_size;
 	if(shm & 4) {
@@ -3199,11 +3230,7 @@ void load_DBs_KMA(char *templatefilename) {
 	
 	/* load names */
 	strcat(templatefilename, ".name");
-	DB_file = fopen(templatefilename, "rb");
-	if(!DB_file) {
-		fprintf(stderr, "File coruption: %s\n", templatefilename);
-		ERROR();
-	}
+	DB_file = sfopen(templatefilename, "rb");
 	
 	/* get size of file */
 	fseek(DB_file, 0, SEEK_END);
@@ -3260,11 +3287,7 @@ void load_DBs_Sparse(char *templatefilename) {
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".length.b");
 	templatefilename[file_len + 9] = 0;
-	DB_file = fopen(templatefilename, "rb");
-	if(!DB_file) {
-		fprintf(stderr, "File coruption: %s\n", templatefilename);
-		ERROR();
-	}
+	DB_file = sfopen(templatefilename, "rb");
 	
 	/* allocate DBs */
 	fread(&DB_size, sizeof(int), 1, DB_file);
@@ -3291,7 +3314,7 @@ void load_DBs_Sparse(char *templatefilename) {
 		/* load lengths */
 		fseek(DB_file, DB_size * sizeof(int), SEEK_CUR);
 		fread(template_lengths, sizeof(int), DB_size, DB_file);
-		fread(template_ulengths, sizeof(int), DB_size, DB_file);
+		fread(template_ulengths, sizeof(int), DB_size, DB_file);	
 	}
 	templatefilename[file_len] = 0;
 	fclose(DB_file);
@@ -3299,11 +3322,8 @@ void load_DBs_Sparse(char *templatefilename) {
 	/* load names */
 	strcat(templatefilename, ".name");
 	templatefilename[file_len + 5] = 0;
-	DB_file = fopen(templatefilename, "rb");
-	if(!DB_file) {
-		fprintf(stderr, "File coruption: %s\n", templatefilename);
-		ERROR();
-	}
+	DB_file = sfopen(templatefilename, "rb");
+	
 	/* get size of file */
 	fseek(DB_file, 0, SEEK_END);
 	file_size = ftell(DB_file);
@@ -7293,11 +7313,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev) {
 	} else {
 		strcat(templatefilename, ".comp.b");
 	}
-	templatefile = fopen(templatefilename, "rb" );
-	if(!templatefile) {
-		fprintf(stderr, "Wrong format of DB, or DB does not exist.\n");
-		ERROR();
-	}
+	templatefile = sfopen(templatefilename, "rb" );
 	
 	templates = malloc(sizeof(struct hashMapKMA));
 	if(!templates) {
@@ -7430,11 +7446,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev) {
 		
 		/* load lengths */
 		strcat(templatefilename, ".length.b");
-		templatefile = fopen(templatefilename, "rb");
-		if(!templatefile) {
-			fprintf(stderr, "File coruption: %s\n", templatefilename);
-			ERROR();
-		}
+		templatefile = sfopen(templatefilename, "rb");
+		
 		fread(&DB_size, sizeof(int), 1, templatefile);
 		if(shm & 4) {
 			key = ftok(templatefilename, 'l');
@@ -7574,11 +7587,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	} else {
 		strcat(templatefilename, ".comp.b");
 	}
-	templatefile = fopen(templatefilename, "rb" );
-	if(!templatefile) {
-		fprintf(stderr, "Wrong format of DB, or DB does not exist. 3\n");
-		ERROR();
-	}
+	templatefile = sfopen(templatefilename, "rb" );
 	templates = malloc(sizeof(struct hashMapKMA));
 	if(!templates) {
 		ERROR();
@@ -7642,7 +7651,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	} else {
 		file_len = strlen(outputfilename);
 		strcat(outputfilename, ".spa");
-		sparse_out = fopen(outputfilename, "w");
+		sparse_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 	}
 	if(!sparse_out) {
@@ -7693,7 +7702,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	q_value = 0;
 	p_value = 0;
 	
-	fprintf(sparse_out, "#Template\tNum\tScore\tExpected\tTemplate length\tquery_coverage\tCoverage\tDepth\ttot_query_coverage\ttot_coverage\ttot_depth\tq_value\tp_value\n");
+	fprintf(sparse_out, "#Template\tNum\tScore\tExpected\tTemplate_length\tQuery_Coverage\tTemplate_Coverage\tDepth\ttot_query_Coverage\ttot_template_Coverage\ttot_depth\tq_value\tp_value\n");
 	stop = 0;
 	if(deCon) {
 		
@@ -8041,11 +8050,11 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	return status;
 }
 
-struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned) {
+struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned, struct NWmat *matrices) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	unsigned char *query, t_nuc, *E_ptr, e;
+	unsigned char *query, t_nuc, *E, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
@@ -8081,32 +8090,27 @@ struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg,
 	}
 	
 	/* check matrix size */
-	if(NW_q <= q_len) {
-		NW_q = q_len << 1;
-		free(D[0]);
-		free(P[0]);
-		D[0] = malloc((NW_q << 1) * sizeof(int));
-		P[0] = malloc((NW_q << 1) * sizeof(int));
-		if(!D[0] || !P[0]) {
-			ERROR();
-		}
-		D[1] = D[0] + NW_q;
-		P[1] = P[0] + NW_q;
+	if(matrices->NW_q <= q_len) {
+		matrices->NW_q = q_len << 1;
+		free(matrices->D[0]);
+		free(matrices->P[0]);
+		matrices->D[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->P[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->D[1] = matrices->D[0] + matrices->NW_q;
+		matrices->P[1] = matrices->P[0] + matrices->NW_q;
 	}
-	if(NW_s <= ((q_len + 1) * (t_len + 1))) {
-		NW_s = ((q_len + 2) * (t_len + 2));
-		free(E);
-		E = malloc(NW_s);
-		if(!E) {
-			ERROR();
-		}
+	if(matrices->NW_s <= ((q_len + 1) * (t_len + 1))) {
+		matrices->NW_s = ((q_len + 2) * (t_len + 2));
+		free(matrices->E);
+		matrices->E = smalloc(matrices->NW_s);
 	}
 	
 	/* fill in start penalties */
-	D_ptr = D[0];
-	D_prev = D[1];
-	P_ptr = P[0];
-	P_prev = P[1];
+	D_ptr = matrices->D[0];
+	D_prev = matrices->D[1];
+	P_ptr = matrices->P[0];
+	P_prev = matrices->P[1];
+	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
 	Stat.pos = 0;
@@ -8296,12 +8300,12 @@ struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg,
 	return Stat;
 }
 
-struct alnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned, int band) {
+struct alnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct aln *aligned, int band, struct NWmat *matrices) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int bq_len, halfBand, sn, en, sq, eq, q_pos, c_pos;
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	unsigned char *query, t_nuc, *E_ptr, e;
+	unsigned char *query, t_nuc, *E, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
@@ -8343,33 +8347,28 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 	halfBand = band >> 1;
 	
 	/* check matrix size */
-	if(NW_q <= band) {
-		NW_q = band << 1;
-		free(D[0]);
-		free(P[0]);
-		D[0] = malloc((NW_q << 1) * sizeof(int));
-		P[0] = malloc((NW_q << 1) * sizeof(int));
-		if(!D[0] || !P[0]) {
-			ERROR();
-		}
-		D[1] = D[0] + NW_q;
-		P[1] = P[0] + NW_q;
+	if(matrices->NW_q <= band) {
+		matrices->NW_q = band << 1;
+		free(matrices->D[0]);
+		free(matrices->P[0]);
+		matrices->D[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->P[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->D[1] = matrices->D[0] + matrices->NW_q;
+		matrices->P[1] = matrices->P[0] + matrices->NW_q;
 	}
-	if(NW_s <= ((band + 2) * (t_len + 1))) {
-		NW_s = ((band + 3) * (t_len + 2));
-		free(E);
-		E = malloc(NW_s);
-		if(!E) {
-			ERROR();
-		}
+	if(matrices->NW_s <= ((band + 2) * (t_len + 1))) {
+		matrices->NW_s = ((band + 3) * (t_len + 2));
+		free(matrices->E);
+		matrices->E = smalloc(matrices->NW_s);
 	}
 	
 	/* fill in start penalties */
 	bq_len = band + 1; /* (band + 1) ~ q_len */
-	D_ptr = D[0];
-	D_prev = D[1];
-	P_ptr = P[0];
-	P_prev = P[1];
+	D_ptr = matrices->D[0];
+	D_prev = matrices->D[1];
+	P_ptr = matrices->P[0];
+	P_prev = matrices->P[1];
+	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
 	Stat.pos = 0;
@@ -8602,11 +8601,11 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 	return Stat;
 }
 
-struct alnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e) {
+struct alnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, struct NWmat *matrices) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	unsigned char *query, t_nuc, *E_ptr, e;
+	unsigned char *query, t_nuc, *E, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
@@ -8631,32 +8630,27 @@ struct alnScore NW_score(const long unsigned *template, const unsigned char *que
 	}
 	
 	/* check matrix size */
-	if(NW_q <= q_len) {
-		NW_q = q_len << 1;
-		free(D[0]);
-		free(P[0]);
-		D[0] = malloc((NW_q << 1) * sizeof(int));
-		P[0] = malloc((NW_q << 1) * sizeof(int));
-		if(!D[0] || !P[0]) {
-			ERROR();
-		}
-		D[1] = D[0] + NW_q;
-		P[1] = P[0] + NW_q;
+	if(matrices->NW_q <= q_len) {
+		matrices->NW_q = q_len << 1;
+		free(matrices->D[0]);
+		free(matrices->P[0]);
+		matrices->D[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->P[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->D[1] = matrices->D[0] + matrices->NW_q;
+		matrices->P[1] = matrices->P[0] + matrices->NW_q;
 	}
-	if(NW_s <= ((q_len + 1) * (t_len + 1))) {
-		NW_s = ((q_len + 2) * (t_len + 2));
-		free(E);
-		E = malloc(NW_s);
-		if(!E) {
-			ERROR();
-		}
+	if(matrices->NW_s <= ((q_len + 1) * (t_len + 1))) {
+		matrices->NW_s = ((q_len + 2) * (t_len + 2));
+		free(matrices->E);
+		matrices->E = smalloc(matrices->NW_s);
 	}
 	
 	/* fill in start penalties */
-	D_ptr = D[0];
-	D_prev = D[1];
-	P_ptr = P[0];
-	P_prev = P[1];
+	D_ptr = matrices->D[0];
+	D_prev = matrices->D[1];
+	P_ptr = matrices->P[0];
+	P_prev = matrices->P[1];
+	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
 	Stat.pos = 0;
@@ -8830,12 +8824,12 @@ struct alnScore NW_score(const long unsigned *template, const unsigned char *que
 	return Stat;
 }
 
-struct alnScore NW_band_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, int band) {
+struct alnScore NW_band_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, int band, struct NWmat *matrices) {
 	
 	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int bq_len, halfBand, sn, en, sq, eq, q_pos, c_pos;
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp;
-	unsigned char *query, t_nuc, *E_ptr, e;
+	unsigned char *query, t_nuc, *E, *E_ptr, e;
 	struct alnScore Stat;
 	
 	t_len = t_e - t_s;
@@ -8866,33 +8860,28 @@ struct alnScore NW_band_score(const long unsigned *template, const unsigned char
 	halfBand = band >> 1;
 	
 	/* check matrix size */
-	if(NW_q <= band) {
-		NW_q = band << 1;
-		free(D[0]);
-		free(P[0]);
-		D[0] = malloc((NW_q << 1) * sizeof(int));
-		P[0] = malloc((NW_q << 1) * sizeof(int));
-		if(!D[0] || !P[0]) {
-			ERROR();
-		}
-		D[1] = D[0] + NW_q;
-		P[1] = P[0] + NW_q;
+	if(matrices->NW_q <= band) {
+		matrices->NW_q = band << 1;
+		free(matrices->D[0]);
+		free(matrices->P[0]);
+		matrices->D[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->P[0] = smalloc((matrices->NW_q << 1) * sizeof(int));
+		matrices->D[1] = matrices->D[0] + matrices->NW_q;
+		matrices->P[1] = matrices->P[0] + matrices->NW_q;
 	}
-	if(NW_s <= ((band + 2) * (t_len + 1))) {
-		NW_s = ((band + 3) * (t_len + 2));
-		free(E);
-		E = malloc(NW_s);
-		if(!E) {
-			ERROR();
-		}
+	if(matrices->NW_s <= ((band + 2) * (t_len + 1))) {
+		matrices->NW_s = ((band + 3) * (t_len + 2));
+		free(matrices->E);
+		matrices->E = smalloc(matrices->NW_s);
 	}
 	
 	/* fill in start penalties */
 	bq_len = band + 1; /* (band + 1) ~ q_len */
-	D_ptr = D[0];
-	D_prev = D[1];
-	P_ptr = P[0];
-	P_prev = P[1];
+	D_ptr = matrices->D[0];
+	D_prev = matrices->D[1];
+	P_ptr = matrices->P[0];
+	P_prev = matrices->P[1];
+	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
 	Stat.pos = 0;
@@ -9253,7 +9242,7 @@ int chainSeeds(struct alnPoints *points, int q_len, int t_len) {
 	return bestPos;
 }
 
-struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_len, struct aln *aligned, struct aln *Frag_align, int min, int max, struct alnPoints *points) {
+struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_len, struct aln *aligned, struct aln *Frag_align, int min, int max, struct alnPoints *points, struct NWmat *matrices) {
 	
 	int i, j, bias, prev, start, stop, t_len, value, end, band;
 	int t_s, t_e, q_s, q_e, mem_count, score;
@@ -9400,9 +9389,9 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 		if(t_e - t_s > 0 && q_e - q_s > 0) {
 			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
 			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align);
+				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
 			} else {
-				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band);
+				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 			}
 			/* trim leading gaps */
 			bias = 0;
@@ -9472,9 +9461,9 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 			if((t_e - t_s > 0 || q_e - q_s > 0)) {
 				band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
 				if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
+					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
 				} else {
-					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band);
+					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
 				}
 				memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
@@ -9505,9 +9494,9 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
 		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
 		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
-			NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align);
+			NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices);
 		} else {
-			NWstat = NW_band(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, band);
+			NWstat = NW_band(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 			//NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align);
 		}
 		/* trim trailing gaps */
@@ -9541,7 +9530,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 	return Stat;
 }
 
-struct alnScore KMA_score(const int template_name, const unsigned char *qseq, int q_len, const struct compDNA *qseq_comp, struct alnPoints *points) {
+struct alnScore KMA_score(const int template_name, const unsigned char *qseq, int q_len, const struct compDNA *qseq_comp, struct alnPoints *points, struct NWmat *matrices) {
 	
 	int i, j, k, prev, start, stop, t_len, value, end, band;
 	int t_s, t_e, q_s, q_e, mem_count, score;
@@ -9663,9 +9652,9 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 		if(t_e - t_s > 0 && q_e - q_s > 0) {
 			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
 			if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e);
+				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices);
 			} else {
-				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band);
+				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band, matrices);
 			}
 			Stat.pos -= (NWstat.len - NWstat.gaps);
 			Stat.score = NWstat.score;
@@ -9711,9 +9700,9 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 			if((t_e - t_s > 0 || q_e - q_s > 0)) {
 				band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
 				if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {
-					NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e);
+					NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, matrices);
 				} else {
-					NWstat = NW_band_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, band);
+					NWstat = NW_band_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, band, matrices);
 				}
 				Stat.score += NWstat.score;
 				Stat.len += NWstat.len;
@@ -9740,9 +9729,9 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
 		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
 		if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
-			NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e);
+			NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, matrices);
 		} else {
-			NWstat = NW_band_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, band);
+			NWstat = NW_band_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, band, matrices);
 		}
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
@@ -9953,7 +9942,7 @@ char baseCaller(unsigned char bestNuc, int i, int bestScore, int depthUpdate, st
 char nanoCaller(unsigned char bestNuc, int i, int bestScore, int depthUpdate, struct assem *aligned_assem, struct assembly *calls) {
 	
 	int j, bestBaseScore;
-	char bases[] = "ACGTN-";
+	const char bases[] = "ACGTN-";
 	
 	/* determine base at current position */
 	if(depthUpdate == 0) {
@@ -9983,13 +9972,13 @@ char nanoCaller(unsigned char bestNuc, int i, int bestScore, int depthUpdate, st
 	return bestNuc;
 }
 
-int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix, struct alnPoints *points) {
+int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix, struct alnPoints *points, struct NWmat *NWmatrices) {
 	
 	int i, j, t_len, aln_len, asm_len, start, end, bias, myBias, gaps, pos;
 	int read_score, depthUpdate, bestBaseScore, status, bestScore, buffer[7];
-	int nextTemplate, file_i, max_asmlen, nextGap, stats[4];
+	int nextTemplate, file_i, max_asmlen, nextGap, delta, stats[4];
 	unsigned depth, coverScore;
-	char bases[] = "ACGTN-";
+	const char bases[] = "ACGTN-";
 	double score;
 	unsigned char bestNuc;
 	FILE *file;
@@ -9997,6 +9986,7 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 	struct assembly *assembly;
 	
 	/* Allocate assembly arrays */
+	delta = qseq->size;
 	status = 0;
 	t_len = template_lengths[template];
 	asm_len = t_len;
@@ -10045,7 +10035,7 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 				stats[3] = buffer[5];
 				header->len = buffer[6];
 				
-				if(delta < qseq->len) {
+				if(qseq->size < qseq->len) {
 					free(qseq->seq);
 					qseq->size = qseq->len << 1;
 					qseq->seq = malloc(qseq->size);
@@ -10087,7 +10077,7 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 				/* Update assembly with read */
 				if(read_score || anker_rc(template, qseq->seq, qseq->len, points)) {
 					/* Start with alignment */
-					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points);
+					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points, NWmatrices);
 					
 					/* get read score */
 					aln_len = alnStat.len;
@@ -10197,7 +10187,7 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 				if(template) {
 					fclose(file);
 				} else {
-					status += kmaPclose(file);
+					status |= kmaPclose(file);
 				}
 				files[file_i] = 0;
 				++file_i;
@@ -10315,12 +10305,12 @@ int assemble_KMA(struct assem *aligned_assem, int template, FILE **files, int fi
 	return status;
 }
 
-int assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, char *outputfilename, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix, struct alnPoints *points) {
+int assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, int file_count, struct FileBuff *frag_out, struct aln *aligned, struct aln *gap_align, struct qseqs *qseq, struct qseqs *header, struct assemInfo *matrix, struct alnPoints *points, struct NWmat *NWmatrices) {
 	
 	int i, j, t_len, aln_len, start, end, file_i, stats[4], buffer[7], status;
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
-	unsigned depth, coverScore;
-	char bases[] = "ACGTN-";
+	unsigned depth, coverScore, delta;
+	const char bases[] = "ACGTN-";
 	double score;
 	unsigned char bestNuc;
 	FILE *file;
@@ -10328,6 +10318,7 @@ int assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, 
 	struct assembly *assembly;
 	
 	/* Allocate assembly arrays */
+	delta = qseq->size;
 	status = 0;
 	t_len = template_lengths[template];
 	if(aligned_assem->size <= t_len) {
@@ -10421,7 +10412,7 @@ int assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, 
 				/* Update assembly with read */
 				if(read_score || anker_rc(template, qseq->seq, qseq->len, points)) {
 					/* Start with alignment */
-					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points);
+					alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points, NWmatrices);
 					
 					/* get read score */
 					aln_len = alnStat.len;
@@ -10464,7 +10455,7 @@ int assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, 
 				if(template) {
 					fclose(file);
 				} else {
-					status += kmaPclose(file);
+					status |= kmaPclose(file);
 				}
 				files[file_i] = 0;
 				++file_i;
@@ -10546,6 +10537,725 @@ int assemble_KMA_dense(struct assem *aligned_assem, int template, FILE **files, 
 	return status;
 }
 
+void * assemble_KMA_threaded(void *arg) {
+	
+	static volatile int excludeIn = 0, excludeOut = 0, excludeMatrix = 0, mainTemplate = -2, thread_wait = 0;
+	static int asm_len, nextGap;
+	struct assemble_thread *thread = arg;
+	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos;
+	int read_score, depthUpdate, bestBaseScore, bestScore, template;
+	int nextTemplate, file_i, file_count, max_asmlen, delta;
+	int stats[4], buffer[7];
+	unsigned depth, coverScore;
+	const char bases[] = "ACGTN-";
+	double score;
+	unsigned char bestNuc;
+	FILE **files, *file;
+	struct alnScore alnStat;
+	struct assembly *assembly;
+	struct FileBuff *frag_out;
+	struct assem *aligned_assem;
+	struct aln *aligned, *gap_align;
+	struct qseqs *qseq, *header;
+	struct assemInfo *matrix;
+	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	
+	/* get input */
+	template = thread->template;
+	file_count = thread->file_count;
+	files = thread->files;
+	frag_out = thread->frag_out;
+	aligned_assem = thread->aligned_assem;
+	aligned = thread->aligned;
+	gap_align = thread->gap_align;
+	qseq = thread->qseq;
+	header = thread->header;
+	matrix = thread->matrix;
+	points = thread->points;
+	NWmatrices = thread->NWmatrices;
+	delta = qseq->size;
+	
+	if(template != -2) {
+		/* all assemblies done, 
+		signal threads to return */
+		if(template == -1) {
+			lock(&excludeOut);
+			mainTemplate = template;
+			unlock(&excludeOut);
+			return NULL;
+		}
+		
+		/* Allocate assembly arrays */
+		t_len = template_lengths[template];
+		asm_len = t_len;
+		nextGap = t_len;
+		max_asmlen = t_len << 1;
+		if(max_asmlen < matrix->size) {
+			max_asmlen = matrix->size;
+		}
+		
+		if(matrix->size < max_asmlen) {
+			free(matrix->assmb);
+			matrix->assmb = malloc(max_asmlen * sizeof(struct assembly));
+			if(!matrix->assmb) {
+				ERROR();
+			}
+			matrix->size = max_asmlen;
+		} else {
+			max_asmlen = matrix->size;
+		}
+		assembly = matrix->assmb;
+		
+		/* cpy template seq */
+		for(i = 0, j = 1; i < t_len; ++i, ++j) {
+			assembly[i].counts[0] = 0;
+			assembly[i].counts[1] = 0;
+			assembly[i].counts[2] = 0;
+			assembly[i].counts[3] = 0;
+			assembly[i].counts[4] = 0;
+			assembly[i].counts[5] = 0;
+			assembly[i].next = j;
+		}
+		/* circularize */
+		assembly[i - 1].next = 0;
+		
+		/* start threads */
+		lock(&excludeOut);
+		mainTemplate = template;
+		thread_wait = thread_num;
+		unlock(&excludeOut);
+		template = -2;
+	}
+	
+	do {
+		while(template == mainTemplate) {
+			usleep(100);
+		}
+		if((template = mainTemplate) == -1) {
+			return NULL;
+		} else {
+			lock(&excludeOut);
+			t_len = template_lengths[template];
+			assembly = matrix->assmb;
+			max_asmlen = matrix->size;
+			unlock(&excludeOut);
+		}
+		
+		/* load reads of this template */
+		file_i = 0;
+		while(file_i < file_count) {
+			lock(&excludeIn);
+			file = files[file_i];
+			if(file != 0) {
+				fread(buffer, sizeof(int), 7, file);
+				if((nextTemplate = buffer[0]) == template) {
+					/* load frag */
+					qseq->len = buffer[1];
+					stats[0] = buffer[2];
+					read_score = buffer[3];
+					stats[2] = buffer[4];
+					stats[3] = buffer[5];
+					header->len = buffer[6];
+					
+					if(qseq->size < qseq->len) {
+						free(qseq->seq);
+						qseq->size = qseq->len << 1;
+						qseq->seq = malloc(qseq->size);
+						if(!qseq->seq) {
+							ERROR();
+						}
+					}
+					if(header->size < header->len) {
+						header->size = header->len + 1;
+						free(header->seq);
+						header->seq = malloc(header->size);
+						if(!header->seq) {
+							ERROR();
+						}
+					}
+					fread(qseq->seq, 1, qseq->len, file);
+					fread(header->seq, 1, header->len, file);
+					header->seq[header->len] = 0;
+					unlock(&excludeIn);
+					
+					if(delta < qseq->len) {
+						delta = qseq->len << 1;
+						free(aligned->t);
+						free(aligned->s);
+						free(aligned->q);
+						free(gap_align->t);
+						free(gap_align->s);
+						free(gap_align->q);
+						aligned->t = malloc((delta + 1) << 1);
+						aligned->s = malloc((delta + 1) << 1);
+						aligned->q = malloc((delta + 1) << 1);
+						gap_align->t = malloc((delta + 1) << 1);
+						gap_align->s = malloc((delta + 1) << 1);
+						gap_align->q = malloc((delta + 1) << 1);
+						if(!aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
+							ERROR();
+						}
+					}
+					
+					/* Update assembly with read */
+					if(read_score || anker_rc(template, qseq->seq, qseq->len, points)) {
+						/* Start with alignment */
+						alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points, NWmatrices);
+						
+						/* get read score */
+						aln_len = alnStat.len;
+						start = alnStat.pos;
+						end = start + aln_len - alnStat.gaps;
+						
+						/* Get normed score */
+						read_score = alnStat.score;
+						if(aln_len >= kmersize) {
+							score = 1.0 * read_score / aln_len;
+						} else {
+							score = 0;
+						}
+						
+						if(read_score > kmersize && score > scoreT) {
+							
+							stats[1] = read_score;
+							stats[2] = start;
+							stats[3] = end;
+							
+							/* Update backbone and counts */
+							lock(&excludeMatrix);
+							i = 0;
+							pos = start;
+							assembly = matrix->assmb;
+							max_asmlen = matrix->size;
+							while(i < aln_len) {
+								if(aligned->t[i] == 5) { // Template gap, insertion
+									if(t_len <= pos) {
+										assembly[pos].counts[aligned->q[i]]++;
+										++i;
+										pos = assembly[pos].next;
+									} else {
+										/* get estimate for non insertions */
+										myBias = 0;
+										for(j = 0; j < 6; ++j) {
+											myBias += assembly[pos].counts[j];
+										}
+										if(myBias > 0) {
+											--myBias;
+										}
+										/* find position of insertion */
+										gaps = pos;
+										--pos;
+										while(assembly[pos].next != gaps) {
+											pos = assembly[pos].next;
+										}
+										while(i < aln_len && aligned->t[i] == 5) {
+											assembly[pos].next = nextGap;
+											pos = assembly[pos].next;
+											assembly[pos].next = gaps;
+											++nextGap;
+											if(nextGap == max_asmlen) {
+												max_asmlen <<= 1;
+												assembly = realloc(assembly, max_asmlen * sizeof(struct assembly));
+												if(!assembly) {
+													ERROR();
+												}
+												matrix->size = max_asmlen;
+												matrix->assmb = assembly;
+											}
+											
+											assembly[pos].counts[0] = 0;
+											assembly[pos].counts[1] = 0;
+											assembly[pos].counts[2] = 0;
+											assembly[pos].counts[3] = 0;
+											assembly[pos].counts[4] = 0;
+											assembly[pos].counts[5] = myBias;
+											assembly[pos].counts[aligned->q[i]]++;
+											
+											++i;
+											++asm_len;
+										}
+										pos = assembly[pos].next;
+									}
+								} else if(t_len <= pos) { // Old template gap, not present in this read
+									assembly[pos].counts[5]++;
+									pos = assembly[pos].next;
+								} else {
+									assembly[pos].counts[aligned->q[i]]++;
+									++i;
+									pos = assembly[pos].next;
+								}
+								/* debug info */
+								/*
+								else if(aligned->t[i] == getNuc(templates_index[template]->seq, pos)) { // (Match, mismatch) and (Query gap, deletion)
+									assembly[pos].counts[aligned->q[i]]++;
+									++i;
+									pos = assembly[pos].next;
+								} else {
+									fprintf(stderr, "KMA is out of sync\n");
+									exit(1);
+									++i;
+								}
+								*/
+							}
+							unlock(&excludeMatrix);
+							
+							/* Convert fragment */
+							for(i = 0; i < qseq->len; ++i) {
+								 qseq->seq[i] = bases[qseq->seq[i]];
+							}
+							qseq->seq[qseq->len] = 0;
+							
+							/* Save fragment */
+							lock(&excludeOut);
+							updateFrags(frag_out, qseq, header, template_names[template], stats);
+							unlock(&excludeOut);
+							//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+						}
+					}
+				} else if(nextTemplate == -1) {
+					if(template) {
+						fclose(file);
+					} else {
+						errno |= kmaPclose(file);
+					}
+					files[file_i] = 0;
+					unlock(&excludeIn);
+					++file_i;
+				} else if(nextTemplate < template) {
+					/* Move pointer forward */
+					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					unlock(&excludeIn);
+				} else {
+					/* Move pointer back */
+					fseek(file, (-7) * sizeof(int), SEEK_CUR);
+					unlock(&excludeIn);
+					++file_i;
+				}
+			} else {
+				unlock(&excludeIn);
+				++file_i;
+			}
+		}
+		lock(&excludeIn);
+		--thread_wait;
+		unlock(&excludeIn);
+		
+	} while(thread->num != 0);
+	
+	wait_atomic(thread_wait);
+	assembly = matrix->assmb;
+	/* Make consensus assembly by majority voting */
+	/* Pepare and make alignment on consensus */
+	if(aligned_assem->size <= asm_len) {
+		aligned_assem->size = (asm_len + 1) << 1;
+		free(aligned_assem->t);
+		free(aligned_assem->s);
+		free(aligned_assem->q);
+		aligned_assem->t = malloc(aligned_assem->size);
+		aligned_assem->s = malloc(aligned_assem->size);
+		aligned_assem->q = malloc(aligned_assem->size);
+		if(!aligned_assem->t || !aligned_assem->s || !aligned_assem->q) {
+			ERROR();
+		}
+	}
+	
+	/* Call nucleotides for the consensus */
+	i = 0;
+	pos = 0;
+	depth = 0;
+	while(i < asm_len) {
+		/* call template */
+		if(pos < t_len) {
+			aligned_assem->t[i] = bases[getNuc(templates_index[template]->seq, pos)]; 
+		} else {
+			aligned_assem->t[i] = '-';
+		}
+		
+		/* call query */
+		bestNuc = 5;
+		bestScore = 0;
+		depthUpdate = 0;
+		for(j = 0; j < 6; ++j) {
+			if(bestScore < assembly[pos].counts[j]) {
+				bestScore = assembly[pos].counts[j];
+				bestNuc = j;
+			}
+			depthUpdate += assembly[pos].counts[j];
+		}
+		bestNuc = bases[bestNuc];
+		
+		/* check for minor base call */
+		if((bestScore << 1) < depthUpdate) {
+			if(bestNuc == '-') {
+				bestBaseScore = 0;
+				bestNuc = 4;
+				for(j = 0; j < 5; ++j) {
+					if(bestBaseScore < assembly[pos].counts[j]) {
+						bestBaseScore = assembly[pos].counts[j];
+						bestNuc = j;
+					}
+				}
+				bestNuc = tolower(bases[bestNuc]);
+			} else {
+				bestNuc = tolower(bestNuc);
+			}
+			bestScore = depthUpdate - assembly[pos].counts[5];
+		}
+		
+		/* determine base at current position */
+		bestNuc = baseCall(bestNuc, i, bestScore, depthUpdate, aligned_assem, &assembly[pos]);
+		
+		if(bestNuc != '-') {
+			depth += depthUpdate;
+		}
+		
+		++i;
+		pos = assembly[pos].next;
+	}
+	
+	/* Trim alignment on consensus */
+	matrix->len = asm_len;
+	coverScore = 0;
+	bias = 0;
+	for(i = 0; i < asm_len; ++i) {
+		if(aligned_assem->t[i] == '-' && aligned_assem->q[i] == '-') {
+			++bias;
+		} else {
+			aligned_assem->t[i - bias] = aligned_assem->t[i];
+			aligned_assem->q[i - bias] = aligned_assem->q[i];
+			if(tolower(aligned_assem->t[i]) == tolower(aligned_assem->q[i])) {
+				aligned_assem->s[i - bias] = '|';
+				++coverScore;
+			} else {
+				aligned_assem->s[i - bias] = '_';
+			}
+		}
+	}
+	aligned_assem->cover = coverScore;
+	aligned_assem->depth = depth;
+	asm_len -= bias;
+	aligned_assem->t[asm_len] = 0;
+	aligned_assem->s[asm_len] = 0;
+	aligned_assem->q[asm_len] = 0;
+	aligned_assem->len = asm_len;
+	
+	matrix->assmb = assembly;
+	matrix->size = max_asmlen;
+	
+	return NULL;
+}
+
+void * assemble_KMA_dense_threaded(void *arg) {
+	
+	static volatile int excludeIn = 0, excludeOut = 0, excludeMatrix = 0, mainTemplate = -2, thread_wait = 0;
+	struct assemble_thread *thread = arg;
+	int i, j, t_len, aln_len, start, end, file_i, file_count, template;
+	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
+	int stats[4], buffer[7];
+	unsigned depth, coverScore, delta;
+	const char bases[] = "ACGTN-";
+	double score;
+	unsigned char bestNuc;
+	FILE **files, *file;
+	struct alnScore alnStat;
+	struct assembly *assembly;
+	struct FileBuff *frag_out;
+	struct assem *aligned_assem;
+	struct aln *aligned, *gap_align;
+	struct qseqs *qseq, *header;
+	struct assemInfo *matrix;
+	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	
+	/* get input */
+	template = thread->template;
+	file_count = thread->file_count;
+	files = thread->files;
+	frag_out = thread->frag_out;
+	aligned_assem = thread->aligned_assem;
+	aligned = thread->aligned;
+	gap_align = thread->gap_align;
+	qseq = thread->qseq;
+	header = thread->header;
+	matrix = thread->matrix;
+	points = thread->points;
+	NWmatrices = thread->NWmatrices;
+	delta = qseq->size;
+	
+	if(template != -2) {
+		/* all assemblies done, 
+		signal threads to return */
+		if(template == -1) {
+			lock(&excludeOut);
+			mainTemplate = template;
+			unlock(&excludeOut);
+			return NULL;
+		}
+		
+		/* Allocate assembly arrays */
+		t_len = template_lengths[template];
+		if(aligned_assem->size <= t_len) {
+			aligned_assem->size = t_len + 1;
+			free(aligned_assem->t);
+			free(aligned_assem->s);
+			free(aligned_assem->q);
+			aligned_assem->t = malloc(t_len + 1);
+			aligned_assem->s = malloc(t_len + 1);
+			aligned_assem->q = malloc(t_len + 1);
+			if(!aligned_assem->t || !aligned_assem->s || !aligned_assem->q) {
+				ERROR();
+			}
+		}
+		if(matrix->size < t_len) {
+			matrix->size = t_len << 1;
+			free(matrix->assmb);
+			matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
+			if(!matrix->assmb) {
+				ERROR();
+			}
+		}
+		assembly = matrix->assmb;
+		/* cpy template seq */
+		for(i = 0, j = 1; i < t_len; ++i, ++j) {
+			aligned_assem->t[i] = getNuc(templates_index[template]->seq, i);
+			assembly[i].counts[0] = 0;
+			assembly[i].counts[1] = 0;
+			assembly[i].counts[2] = 0;
+			assembly[i].counts[3] = 0;
+			assembly[i].counts[4] = 0;
+			assembly[i].counts[5] = 0;
+			assembly[i].next = j;
+		}
+		/* circularize */
+		assembly[i - 1].next = 0;
+		
+		/* start threads */
+		lock(&excludeOut);
+		mainTemplate = template;
+		thread_wait = thread_num;
+		unlock(&excludeOut);
+		template = -2;
+	}
+	
+	do {
+		while(template == mainTemplate) {
+			usleep(100);
+		}
+		if((template = mainTemplate) == -1) {
+			return NULL;
+		} else {
+			lock(&excludeOut);
+			t_len = template_lengths[template];
+			assembly = matrix->assmb;
+			unlock(&excludeOut);
+		}
+		
+		/* load reads of this template */
+		file_i = 0;
+		while(file_i < file_count) {
+			lock(&excludeIn);
+			file = files[file_i];
+			if(file != 0) {
+				fread(buffer, sizeof(int), 7, file);
+				if((nextTemplate = buffer[0]) == template) {
+					/* load frag */
+					qseq->len = buffer[1];
+					stats[0] = buffer[2];
+					read_score = buffer[3];
+					stats[2] = buffer[4];
+					stats[3] = buffer[5];
+					header->len = buffer[6];
+					
+					if(qseq->size < qseq->len) {
+						free(qseq->seq);
+						qseq->size = qseq->len << 1;
+						qseq->seq = malloc(qseq->size);
+						if(!qseq->seq) {
+							ERROR();
+						}
+					}
+					if(header->size < header->len) {
+						header->size = header->len + 1;
+						free(header->seq);
+						header->seq = malloc(header->size);
+						if(!header->seq) {
+							ERROR();
+						}
+					}
+					fread(qseq->seq, 1, qseq->len, file);
+					fread(header->seq, 1, header->len, file);
+					header->seq[header->len] = 0;
+					unlock(&excludeIn);
+					
+					if(delta < qseq->size) {
+						delta = qseq->size;
+						free(aligned->t);
+						free(aligned->s);
+						free(aligned->q);
+						free(gap_align->t);
+						free(gap_align->s);
+						free(gap_align->q);
+						aligned->t = malloc((delta + 1) << 1);
+						aligned->s = malloc((delta + 1) << 1);
+						aligned->q = malloc((delta + 1) << 1);
+						gap_align->t = malloc((delta + 1) << 1);
+						gap_align->s = malloc((delta + 1) << 1);
+						gap_align->q = malloc((delta + 1) << 1);
+						if(!aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
+							ERROR();
+						}
+					}
+					
+					/* Update assembly with read */
+					if(read_score || anker_rc(template, qseq->seq, qseq->len, points)) {
+						/* Start with alignment */
+						alnStat = KMA(template, qseq->seq, qseq->len, aligned, gap_align, stats[2], MIN(t_len, stats[3]), points, NWmatrices);
+						
+						/* get read score */
+						aln_len = alnStat.len;
+						start = alnStat.pos;
+						end = start + aln_len - alnStat.gaps;
+						
+						/* Get normed score */
+						read_score = alnStat.score;
+						if(aln_len > 0) {
+							score = 1.0 * read_score / aln_len;
+						} else {
+							score = 0;
+						}
+						
+						if(read_score > kmersize && score > scoreT) {
+							
+							stats[1] = read_score;
+							stats[2] = start;
+							stats[3] = end;
+							
+							/* Update backbone and counts */
+							lock(&excludeMatrix);
+							for(i = 0, pos = start; i < aln_len; ++i) {
+								if(aligned->t[i] == aligned_assem->t[pos]) {
+									assembly[pos].counts[aligned->q[i]]++;
+									++pos;
+									/* here */
+									/* when circular aln is enabled this 
+									should be turned on, instead of ++pos. */
+									//pos = assembly[pos].next;
+								}
+							}
+							unlock(&excludeMatrix);
+							
+							/* Convert fragment */
+							for(i = 0; i < qseq->len; ++i) {
+								 qseq->seq[i] = bases[qseq->seq[i]];
+							}
+							qseq->seq[qseq->len] = 0;
+							
+							/* Save fragment */
+							lock(&excludeOut);
+							updateFrags(frag_out, qseq, header, template_names[template], stats);
+							unlock(&excludeOut);
+							//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+						}
+					}
+				} else if (nextTemplate == -1) {
+					if(template) {
+						fclose(file);
+					} else {
+						errno |= kmaPclose(file);
+					}
+					files[file_i] = 0;
+					unlock(&excludeIn);
+					++file_i;
+				} else if(nextTemplate < template) {
+					/* Move pointer forward */
+					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					unlock(&excludeIn);
+				} else {
+					/* Move pointer back */
+					fseek(file, (-7) * sizeof(int), SEEK_CUR);
+					unlock(&excludeIn);
+					++file_i;
+				}
+			} else {
+				unlock(&excludeIn);
+				++file_i;
+			}
+		}
+		
+		lock(&excludeIn);
+		--thread_wait;
+		unlock(&excludeIn);
+		
+	} while(thread->num != 0);
+	
+	wait_atomic(thread_wait);
+	
+	/* Make consensus assembly by majority voting */
+	depth = 0;
+	coverScore = 0;
+	for(i = 0; i < t_len; ++i) {
+		/* call template */
+		aligned_assem->t[i] = bases[aligned_assem->t[i]];
+		
+		/* call query */
+		bestNuc = 5;
+		bestScore = 0;
+		depthUpdate = 0;
+		for(j = 0; j < 6; ++j) {
+			if(bestScore < assembly[i].counts[j]) {
+				bestScore = assembly[i].counts[j];
+				bestNuc = j;
+			}
+			depthUpdate += assembly[i].counts[j];
+		}
+		bestNuc = bases[bestNuc];
+		
+		/* Check for minor base call */
+		if((bestScore << 1) < depthUpdate) {
+			if(bestNuc == '-') {
+				bestBaseScore = 0;
+				bestNuc = 4;
+				for(j = 0; j < 5; ++j) {
+					if(bestBaseScore < assembly[i].counts[j]) {
+						bestBaseScore = assembly[i].counts[j];
+						bestNuc = j;
+					}
+				}
+				bestNuc = tolower(bases[bestNuc]);
+			} else {
+				bestNuc = tolower(bestNuc);
+			}
+			bestScore = depthUpdate - assembly[i].counts[5];
+		}
+		
+		/* determine base at current position */
+		bestNuc = baseCall(bestNuc, i, bestScore, depthUpdate, aligned_assem, &assembly[i]);
+		
+		if(bestNuc != '-') {
+			depth += depthUpdate;
+		}
+		
+		if(tolower(aligned_assem->q[i]) == tolower(aligned_assem->t[i])) {
+			aligned_assem->s[i] = '|';
+			++coverScore;
+		} else {
+			aligned_assem->s[i] = '_';
+		}
+	}
+	aligned_assem->t[t_len] = 0;
+	aligned_assem->s[t_len] = 0;
+	aligned_assem->q[t_len] = 0;
+	aligned_assem->cover = coverScore;
+	aligned_assem->depth = depth;
+	aligned_assem->len = t_len;
+	
+	matrix->assmb = assembly;
+	matrix->len = t_len;
+	
+	return NULL;
+}
+
 void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, struct qseqs *header, FILE *frag_out_raw) {
 	
 	int i, buffer[4];
@@ -10580,7 +11290,7 @@ void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *
 	}
 }
 
-void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
+void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, struct qseqs *header, int *bestTemplates, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points, struct NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
 	int t_i, template, read_score, best_read_score, bestHits, aln_len;
 	int start, end;
@@ -10609,17 +11319,19 @@ void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, 
 	for(t_i = 1; t_i <= *matched_templates; ++t_i) {
 		template = matched_templates[t_i];
 		/* check if index DB is loaded */
+		lock(excludeDB);
 		if(template >= 0 && templates_index[template] == 0) {
 			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
 		} else if(template < 0 && templates_index[-template] == 0) {
 			templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
 		}
+		unlock(excludeDB);
 		
 		/* align qseq */
 		if(template < 0) {
-			alnStat = KMA_score(-template, qseq_r, q_len, qseq_r_comp, points);
+			alnStat = KMA_score(-template, qseq_r, q_len, qseq_r_comp, points, NWmatrices);
 		} else {
-			alnStat = KMA_score(template, qseq, q_len, qseq_comp, points);
+			alnStat = KMA_score(template, qseq, q_len, qseq_comp, points, NWmatrices);
 		}
 		
 		/* get read score */
@@ -10667,11 +11379,13 @@ void alnFragsSE(int *matched_templates, int rc_flag, struct compDNA *qseq_comp, 
 		}
 	}
 	if(best_read_score > kmersize) {
+		lock(excludeOut);
 		update_Scores(qseq, q_len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+		unlock(excludeOut);
 	}
 }
 
-void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
+void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points, struct NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
 	int t_i, template, read_score, best_read_score, best_read_score_r;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, rc;
@@ -10711,17 +11425,20 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 				
 				rc = 0;
 			}
-			if(templates_index[-template] == 0) {
-				templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
-			}
-		} else if(templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
 		}
+		
+		lock(excludeDB);
+		if(0 <= template && templates_index[template] == 0) {
+			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
+		} else if(template < 0 && templates_index[-template] == 0) {
+			templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
+		}
+		unlock(excludeDB);
 		
 		template = abs(template);
 		
 		/* align qseqs */
-		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points);
+		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points, NWmatrices);
 		
 		/* get read score */
 		if(0 < alnStat.score) {
@@ -10751,7 +11468,7 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 			best_end_pos[t_i] = -1;
 		}
 		
-		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points);
+		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points, NWmatrices);
 		/* get read score */
 		if(0 < alnStat.score) {
 			aln_len = alnStat.len;
@@ -10819,16 +11536,22 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 				for(t_i = 0; t_i < bestHits; ++t_i) {
 					bestTemplates[t_i] = -bestTemplates[t_i];
 				}
+				lock(excludeOut);
 				update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score_r, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
 				update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+				unlock(excludeOut);
 			} else if(!rc) {
 				strrc(qseq, qseq_comp->seqlen);
 				strrc(qseq_r, qseq_r_comp->seqlen);
+				lock(excludeOut);
 				update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 				update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score_r, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+				unlock(excludeOut);
 			} else {
+				lock(excludeOut);
 				update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 				update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score_r, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+				unlock(excludeOut);
 			}
 		} else {
 			/* unmaided pair */
@@ -10862,8 +11585,10 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 			} else if(!rc) {
 				strrc(qseq_r, qseq_r_comp->seqlen);
 			}
+			lock(excludeOut);
 			update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 			update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits_r, best_read_score_r, best_start_pos, best_end_pos, bestTemplates_r, header_r, frag_out_raw);
+			unlock(excludeOut);
 		}
 	} else if(best_read_score) {
 		bestHits = 0;
@@ -10883,7 +11608,9 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 		} else if(!rc) {
 			strrc(qseq, qseq_comp->seqlen);
 		}
+		lock(excludeOut);
 		update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+		unlock(excludeOut);
 	} else if(best_read_score_r) {
 		bestHits_r = 0;
 		for(t_i = 1; t_i <= *matched_templates; ++t_i) {
@@ -10902,11 +11629,13 @@ void alnFragsUnionPE(int *matched_templates, struct compDNA *qseq_comp, struct c
 		} else if(!rc) {
 			strrc(qseq_r, qseq_r_comp->seqlen);
 		}
+		lock(excludeOut);
 		update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits_r, best_read_score_r, best_start_pos, best_end_pos, bestTemplates_r, header_r, frag_out_raw);
+		unlock(excludeOut);
 	}
 }
 
-void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
+void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points, struct NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
 	int t_i, template, read_score, best_read_score, best_read_score_r;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, rc;
@@ -10946,17 +11675,20 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 				
 				rc = 0;
 			}
-			if(templates_index[-template] == 0) {
-				templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
-			}
-		} else if(templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
 		}
+		
+		lock(excludeDB);
+		if(0 <= template && templates_index[template] == 0) {
+			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
+		} else if(template < 0 && templates_index[-template] == 0) {
+			templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
+		}
+		unlock(excludeDB);
 		
 		template = abs(template);
 		
 		/* align qseqs */
-		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points);
+		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points, NWmatrices);
 		
 		/* get read score */
 		if(0 < alnStat.score) {
@@ -10986,7 +11718,7 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 			best_end_pos[t_i] = -1;
 		}
 		
-		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points);
+		alnStat = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points, NWmatrices);
 		/* get read score */
 		if(0 < alnStat.score) {
 			aln_len = alnStat.len;
@@ -11052,16 +11784,22 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 				for(t_i = 0; t_i < bestHits; ++t_i) {
 					bestTemplates[t_i] = -bestTemplates[t_i];
 				}
+				lock(excludeOut);
 				update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score_r, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
 				update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+				unlock(excludeOut);
 			} else if(!rc) {
 				strrc(qseq, qseq_comp->seqlen);
 				strrc(qseq_r, qseq_r_comp->seqlen);
+				lock(excludeOut);
 				update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 				update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score_r, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+				unlock(excludeOut);
 			} else {
+				lock(excludeOut);
 				update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 				update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score_r, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+				unlock(excludeOut);
 			}
 		} else {
 			/* unmaided pair */
@@ -11095,8 +11833,10 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 			} else if(!rc) {
 				strrc(qseq_r, qseq_r_comp->seqlen);
 			}
+			lock(excludeOut);
 			update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 			update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits_r, best_read_score_r, best_start_pos, best_end_pos, bestTemplates_r, header_r, frag_out_raw);
+			unlock(excludeOut);
 		}
 	} else if(best_read_score) {
 		bestHits = 0;
@@ -11116,7 +11856,9 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 		} else if(!rc) {
 			strrc(qseq, qseq_comp->seqlen);
 		}
+		lock(excludeOut);
 		update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+		unlock(excludeOut);
 	} else if(best_read_score_r) {
 		bestHits_r = 0;
 		for(t_i = 1; t_i <= *matched_templates; ++t_i) {
@@ -11135,11 +11877,13 @@ void alnFragsPenaltyPE(int *matched_templates, struct compDNA *qseq_comp, struct
 		} else if(!rc) {
 			strrc(qseq_r, qseq_r_comp->seqlen);
 		}
+		lock(excludeOut);
 		update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits_r, best_read_score_r, best_start_pos, best_end_pos, bestTemplates_r, header_r, frag_out_raw);
+		unlock(excludeOut);
 	}
 }
 
-void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points) {
+void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct compDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, struct qseqs *header, struct qseqs *header_r, int *bestTemplates, int *bestTemplates_r, int *best_start_pos, int *best_end_pos, FILE *seq_in, FILE *index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, struct alnPoints *points, struct NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
 	int t_i, template, read_score, best_read_score, bestHits, aln_len;
 	int start, end, rc;
@@ -11178,19 +11922,22 @@ void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct c
 				
 				rc = 0;
 			}
-			if(templates_index[-template] == 0) {
-				templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
-			}
-		} else if(templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
 		}
+		
+		lock(excludeDB);
+		if(0 <= template && templates_index[template] == 0) {
+			templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], seq_indexes[template], index_indexes[template]);
+		} else if(template < 0 && templates_index[-template] == 0) {
+			templates_index[-template] = alignLoadPtr(seq_in, index_in, template_lengths[-template], seq_indexes[-template], index_indexes[-template]);
+		}
+		unlock(excludeDB);
 		
 		template = abs(template);
 		
 		/* align qseq */
-		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points);
+		alnStat = KMA_score(template, qseq, qseq_comp->seqlen, qseq_comp, points, NWmatrices);
 		if(0 < alnStat.score) {
-			alnStat_r = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points);
+			alnStat_r = KMA_score(template, qseq_r, qseq_r_comp->seqlen, qseq_r_comp, points, NWmatrices);
 			
 			/* get read score */
 			if(0 < alnStat_r.score) {
@@ -11249,16 +11996,22 @@ void alnFragsForcePE(int *matched_templates, struct compDNA *qseq_comp, struct c
 			for(t_i = 0; t_i < bestHits; ++t_i) {
 				bestTemplates[t_i] = -bestTemplates[t_i];
 			}
+			lock(excludeOut);
 			update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
 			update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
+			unlock(excludeOut);
 		} else if(!rc) {
 			strrc(qseq, qseq_comp->seqlen);
 			strrc(qseq_r, qseq_r_comp->seqlen);
+			lock(excludeOut);
 			update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 			update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+			unlock(excludeOut);
 		} else {
+			lock(excludeOut);
 			update_Scores(qseq, qseq_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_raw);
 			update_Scores(qseq_r, qseq_r_comp->seqlen, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_raw);
+			unlock(excludeOut);
 		}
 	}
 }
@@ -11300,11 +12053,85 @@ void printConsensus(struct assem *aligned_assem, char *header, FILE *alignment_o
 	}
 }
 
+void * alnFrags_threaded(void * arg) {
+	
+	static volatile int excludeIn = 0, excludeOut = 0, excludeDB = 0;
+	struct aln_thread *thread = arg;
+	int rc_flag, read_score, delta, *matched_templates;
+	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
+	long *index_indexes, *seq_indexes;
+	FILE *inputfile, *frag_out_raw, *index_in, *seq_in;
+	struct compDNA *qseq_comp, *qseq_r_comp;
+	struct qseqs *qseq, *qseq_r, *header, *header_r;
+	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	
+	/* get input */
+	matched_templates = thread->matched_templates;
+	bestTemplates = thread->bestTemplates;
+	bestTemplates_r = thread->bestTemplates_r;
+	best_start_pos = thread->best_start_pos;
+	best_end_pos = thread->best_end_pos;
+	index_indexes = thread->index_indexes;
+	seq_indexes = thread->seq_indexes;
+	inputfile = thread->inputfile;
+	frag_out_raw = thread->frag_out_raw;
+	index_in = thread->index_in;
+	seq_in = thread->seq_in;
+	qseq_comp = thread->qseq_comp;
+	qseq_r_comp = thread->qseq_r_comp;
+	qseq = thread->qseq;
+	qseq_r = thread->qseq_r;
+	header = thread->header;
+	header_r = thread->header_r;
+	points = thread->points;
+	NWmatrices = thread->NWmatrices;
+	
+	delta = qseq->size;
+	read_score = 0;
+	lock(&excludeIn);
+	while((rc_flag = get_ankers(matched_templates, qseq_comp, header, inputfile)) != 0) {
+		if(*matched_templates) { // SE
+			read_score = 0;
+		} else { // PE
+			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, inputfile);
+			read_score = abs(read_score);
+			qseq_r->len = qseq_r_comp->seqlen;
+		}
+		unlock(&excludeIn);
+		qseq->len = qseq_comp->seqlen;
+		
+		if(delta <= MAX(qseq->len, qseq_r->len)) {
+			delta = MAX(qseq->len, qseq_r->len);
+			delta <<= 1;
+			qseq->size = delta;
+			qseq_r->size = delta;
+			free(qseq->seq);
+			free(qseq_r->seq);
+			qseq->seq = malloc(delta);
+			qseq_r->seq = malloc(delta);
+			if(!qseq->seq || !qseq_r->seq) {
+				ERROR();
+			}
+		}
+		
+		if(read_score) { // PE
+			alnFragsPE(matched_templates, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, header, header_r, bestTemplates, bestTemplates_r, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points, NWmatrices, &excludeOut, &excludeDB);
+		} else { // SE
+			alnFragsSE(matched_templates, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, header, bestTemplates, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points, NWmatrices, &excludeOut, &excludeDB);
+		}
+		lock(&excludeIn);
+	}
+	unlock(&excludeIn);
+	
+	return NULL;
+}
+
 int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	int i, tmp_template, tmp_tmp_template, file_len, best_read_score;
 	int template, bestHits, t_len, start, end, aln_len, status;
-	int bestTemplate, fragCount, fileCount, maxFrag, read_score, rc_flag;
+	int bestTemplate, fragCount, fileCount, maxFrag, read_score;
 	int coverScore, tmp_start, tmp_end, stats[4], *matched_templates;
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
 	unsigned Nhits, template_tot_ulen, bestNum, *w_scores;
@@ -11322,6 +12149,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	struct qseqs *qseq, *qseq_r, *header, *header_r;
 	struct assemInfo *matrix;
 	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	struct assemble_thread *threads, *thread;
+	struct aln_thread *alnThreads, *alnThread;
 	
 	/* open pipe */
 	//inputfile = popen(exePrev, "r");
@@ -11364,21 +12194,8 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
-	qseq_comp = malloc(sizeof(struct compDNA));
-	qseq_r_comp = malloc(sizeof(struct compDNA));
-	index_indexes = malloc((DB_size + 1) * sizeof(long));
-	seq_indexes = malloc((DB_size + 1) * sizeof(long));
-	if(!qseq_comp || !qseq_r_comp || !index_indexes || !seq_indexes) {
-		ERROR();
-	}
-	qseq = setQseqs(delta);
-	qseq_r = setQseqs(delta);
-	header = setQseqs(256);
-	header_r = setQseqs(256);
-	allocComp(qseq_comp, delta);
-	allocComp(qseq_r_comp, delta);
-	points = seedPoint_init(delta);
-	
+	index_indexes = smalloc((DB_size + 1) * sizeof(long));
+	seq_indexes = smalloc((DB_size + 1) * sizeof(long));
 	/* make file indexes of template indexing */
 	*index_indexes = 0;
 	*seq_indexes = 0;
@@ -11389,38 +12206,26 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		seq_indexes[i] = seq_indexes[i - 1] + ((template_lengths[i - 1] >> 5) + 1) * sizeof(long unsigned);
 	}
 	
-	/* allocate matrcies for NW */
-	NW_s = delta * delta;
-	NW_q = delta;
-	E = malloc(NW_s);
-	if(!E) {
-		ERROR();
-	}
-	D[0] = malloc((NW_q << 1) * sizeof(int));
-	P[0] = malloc((NW_q << 1) * sizeof(int));
-	if(!D[0] || !P[0]) {
-		ERROR();
-	}
-	D[1] = D[0] + NW_q;
-	P[1] = P[0] + NW_q;
-	
 	/* etta = small value to avoid zero-divisio */
 	etta = 1.0e-6;
 	/* open outputfiles */
 	if(outputfilename) {
 		strcat(outputfilename, ".res");
-		res_out = fopen(outputfilename, "w");
+		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
 		frag_out = gzInitFileBuff(CHUNK);
 		openFileBuff(frag_out, outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
-		alignment_out = fopen(outputfilename, "w");
+		alignment_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".fsa");
-		consensus_out = fopen(outputfilename, "w");
+		consensus_out = sfopen(outputfilename, "w");
 		frag_out_raw = tmpfile();
+		if(!frag_out_raw) {
+			ERROR();
+		}
 		if(print_matrix) {
 			matrix_out = gzInitFileBuff(CHUNK);
 			strcat(outputfilename, ".mat.gz");
@@ -11441,65 +12246,174 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		fprintf(stderr, " No output file specified!\n");
 		exit(2);
 	}
-	if(!res_out || !consensus_out || !frag_out_raw || !alignment_out) {
-		ERROR();
-	}
+	
 	fprintf(stderr, "# Running KMA.\n");
 	t0 = clock();
 	
+	/* allocate stuff */
+	i = 1;
+	alnThreads = 0;
+	while(i < thread_num) {
+		/* allocate stuff */
+		matched_templates = smalloc(((DB_size + 1) << 1) * sizeof(int));
+		bestTemplates = smalloc(((DB_size + 1) << 1) * sizeof(int));
+		bestTemplates_r = smalloc(((DB_size + 1) << 1) * sizeof(int));
+		best_start_pos = smalloc((DB_size << 1) * sizeof(int));
+		best_end_pos = smalloc((DB_size << 1) * sizeof(int));
+		qseq_comp = smalloc(sizeof(struct compDNA));
+		qseq_r_comp = smalloc(sizeof(struct compDNA));
+		allocComp(qseq_comp, delta);
+		allocComp(qseq_r_comp, delta);
+		
+		/* allocate matrcies for NW */
+		NWmatrices = smalloc(sizeof(struct NWmat));
+		NWmatrices->NW_s = delta * delta;
+		NWmatrices->NW_q = delta;
+		NWmatrices->E = smalloc(NWmatrices->NW_s);
+		NWmatrices->D[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+		NWmatrices->P[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+		NWmatrices->D[1] = NWmatrices->D[0] + NWmatrices->NW_q;
+		NWmatrices->P[1] = NWmatrices->P[0] + NWmatrices->NW_q;
+		
+		/* move it to the thread */
+		alnThread = smalloc(sizeof(struct aln_thread));
+		alnThread->matched_templates = matched_templates;
+		alnThread->bestTemplates = bestTemplates;
+		alnThread->bestTemplates_r = bestTemplates_r;
+		alnThread->best_start_pos = best_start_pos;
+		alnThread->best_end_pos = best_end_pos;
+		alnThread->index_indexes = index_indexes;
+		alnThread->seq_indexes = seq_indexes;
+		alnThread->inputfile = inputfile;
+		alnThread->frag_out_raw = frag_out_raw;
+		alnThread->index_in = index_in;
+		alnThread->seq_in = seq_in;
+		alnThread->qseq_comp = qseq_comp;
+		alnThread->qseq_r_comp = qseq_r_comp;
+		alnThread->qseq = setQseqs(delta);
+		alnThread->qseq_r = setQseqs(delta);
+		alnThread->header = setQseqs(256);
+		alnThread->header_r = setQseqs(256);
+		alnThread->points = seedPoint_init(delta);
+		alnThread->NWmatrices = NWmatrices;
+		
+		alnThread->next = alnThreads;
+		alnThreads = alnThread;
+		
+		
+		/* start thread */
+		if((errno = pthread_create(&alnThread->id, NULL, &alnFrags_threaded, alnThread))) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			fprintf(stderr, "Will continue with %d threads.\n", i);
+			alnThreads = alnThread->next;
+			free(alnThread);
+			i = thread_num;
+		} else {
+			++i;
+		}
+	}
+	
+	/* allocate stuff */
+	matched_templates = smalloc(((DB_size + 1) << 1) * sizeof(int));
+	bestTemplates = smalloc(((DB_size + 1) << 1) * sizeof(int));
+	bestTemplates_r = smalloc(((DB_size + 1) << 1) * sizeof(int));
+	best_start_pos = smalloc((DB_size << 1) * sizeof(int));
+	best_end_pos = smalloc((DB_size << 1) * sizeof(int));
+	qseq = setQseqs(delta);
+	qseq_r = setQseqs(delta);
+	header = setQseqs(256);
+	header_r = setQseqs(256);
+	qseq_comp = smalloc(sizeof(struct compDNA));
+	qseq_r_comp = smalloc(sizeof(struct compDNA));
+	allocComp(qseq_comp, delta);
+	allocComp(qseq_r_comp, delta);
+	points = seedPoint_init(delta);
+	
+	/* allocate matrcies for NW */
+	NWmatrices = smalloc(sizeof(struct NWmat));
+	NWmatrices->NW_s = delta * delta;
+	NWmatrices->NW_q = delta;
+	NWmatrices->E = smalloc(NWmatrices->NW_s);
+	NWmatrices->D[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+	NWmatrices->P[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+	NWmatrices->D[1] = NWmatrices->D[0] + NWmatrices->NW_q;
+	NWmatrices->P[1] = NWmatrices->P[0] + NWmatrices->NW_q;
+	
+	/* strat main thread */
+	alnThread = smalloc(sizeof(struct aln_thread));
+	alnThread->matched_templates = matched_templates;
+	alnThread->bestTemplates = bestTemplates;
+	alnThread->bestTemplates_r = bestTemplates_r;
+	alnThread->best_start_pos = best_start_pos;
+	alnThread->best_end_pos = best_end_pos;
+	alnThread->index_indexes = index_indexes;
+	alnThread->seq_indexes = seq_indexes;
+	alnThread->inputfile = inputfile;
+	alnThread->frag_out_raw = frag_out_raw;
+	alnThread->index_in = index_in;
+	alnThread->seq_in = seq_in;
+	alnThread->qseq_comp = qseq_comp;
+	alnThread->qseq_r_comp = qseq_r_comp;
+	alnThread->qseq = qseq;
+	alnThread->qseq_r = qseq_r;
+	alnThread->header = header;
+	alnThread->header_r = header_r;
+	alnThread->points = points;
+	alnThread->NWmatrices = NWmatrices;
+	alnThread->next = 0;
+	
 	/* Get alignments */
-	matched_templates = malloc(((DB_size + 1) << 1) * sizeof(int));
-	bestTemplates = malloc(((DB_size + 1) << 1) * sizeof(int));
-	bestTemplates_r = malloc(((DB_size + 1) << 1) * sizeof(int));
-	best_start_pos = malloc((DB_size << 1) * sizeof(int));
-	best_end_pos = malloc((DB_size << 1) * sizeof(int));
-	if(!matched_templates || !bestTemplates || !best_start_pos || !best_end_pos || !bestTemplates_r) {
-		ERROR();
-	}
-	//bestTemplates = (matched_templates + 1);
+	alnFrags_threaded(alnThread);
+	free(alnThread);
 	
-	/* consider printPair */
-	t_len = 0;
-	read_score = 0;
-	while((rc_flag = get_ankers(matched_templates, qseq_comp, header, inputfile)) != 0) {
-		
-		if(*matched_templates) { // SE
-			read_score = 0;
-		} else { // PE
-			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, inputfile);
-			read_score = abs(read_score);
-			qseq_r->len = qseq_r_comp->seqlen;
+	/* join threads */
+	for(alnThread = alnThreads; alnThread != 0; alnThread = alnThread->next) {
+		/* join thread */
+		if((errno = pthread_join(alnThread->id, NULL))) {
+			ERROR();
 		}
-		
-		qseq->len = qseq_comp->seqlen;
-		
-		if(delta <= MAX(qseq->len, qseq_r->len)) {
-			delta = MAX(qseq->len, qseq_r->len);
-			delta <<= 1;
-			qseq->size = delta;
-			qseq_r->size = delta;
-			free(qseq->seq);
-			free(qseq_r->seq);
-			qseq->seq = malloc(delta);
-			qseq_r->seq = malloc(delta);
-			if(!qseq->seq || !qseq_r->seq) {
-				ERROR();
-			}
-		}
-		
-		if(read_score) { // PE
-			alnFragsPE(matched_templates, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, header, header_r, bestTemplates, bestTemplates_r, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points);
-		} else { // SE
-			alnFragsSE(matched_templates, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, header, bestTemplates, best_start_pos, best_end_pos, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points);
-		}
-	
 	}
-	status += kmaPclose(inputfile);
+	status |= kmaPclose(inputfile);
 	rewind(frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
 	free(qseq_r_comp);
+	
+	/* clean threads */
+	i = 1;
+	threads = 0;
+	for(alnThread = alnThreads; alnThread != 0; alnThread = alnThreads) {
+		alnThreads = alnThread->next;
+		
+		/* reuse what is possible */
+		thread = smalloc(sizeof(struct assemble_thread));
+		thread->num = i;
+		thread->template = -2;
+		thread->frag_out = frag_out;
+		thread->NWmatrices = alnThread->NWmatrices;
+		thread->qseq = alnThread->qseq;
+		thread->header = alnThread->header;
+		thread->points = alnThread->points;
+		thread->points->len = 0;
+		thread->next = threads;
+		threads = thread;
+		++i;
+		
+		/* free the rest */
+		free(alnThread->matched_templates);
+		free(alnThread->bestTemplates);
+		free(alnThread->bestTemplates_r);
+		free(alnThread->best_start_pos);
+		free(alnThread->best_end_pos);
+		freeComp(alnThread->qseq_comp);
+		free(alnThread->qseq_comp);
+		freeComp(alnThread->qseq_r_comp);
+		free(alnThread->qseq_r_comp);
+		destroyQseqs(alnThread->qseq_r);
+		destroyQseqs(alnThread->header_r);
+		free(alnThread);
+	}
 	
 	t1 = clock();
 	fprintf(stderr, "#\n# KMA mapping time\t%.2f s.\n", difftime(t1, t0) / 1000000);
@@ -11670,6 +12584,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
 	
 	/* Get expected values */
+	points->len = 0;
 	template_tot_ulen = 0;
 	Nhits = 0;
 	for(i = 0; i < DB_size; ++i) {
@@ -11677,25 +12592,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		template_tot_ulen += template_lengths[i];
 	}
 	
-	/* Do local assemblies of fragments mapping to the same template */
-	points->len = 0;
-	aligned = malloc(sizeof(struct aln));
-	gap_align = malloc(sizeof(struct aln));
-	if(!aligned || !gap_align) {
-		ERROR();
-	}
-	aligned_assem = malloc(sizeof(struct assem));
-	matrix = malloc(sizeof(struct assemInfo));
-	aligned->t = malloc((delta + 1) << 1);
-	aligned->s = malloc((delta + 1) << 1);
-	aligned->q = malloc((delta + 1) << 1);
-	gap_align->t = malloc((delta + 1) << 1);
-	gap_align->s = malloc((delta + 1) << 1);
-	gap_align->q = malloc((delta + 1) << 1);
-	if(!matrix || !aligned_assem || !aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
-		ERROR();
-	}
-	
+	/* preallocate assembly matrices */
+	aligned_assem = smalloc(sizeof(struct assem));
+	matrix = smalloc(sizeof(struct assemInfo));
 	matrix->size = delta;
 	for(i = 0; i < DB_size; ++i) {
 		if(matrix->size < template_lengths[i]) {
@@ -11703,15 +12602,66 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 	}
 	matrix->size <<= 1;
+	matrix->assmb = smalloc(matrix->size * sizeof(struct assembly));
 	aligned_assem->size = matrix->size;
-	aligned_assem->t = malloc(aligned_assem->size);
-	aligned_assem->s = malloc(aligned_assem->size);
-	aligned_assem->q = malloc(aligned_assem->size);
-	matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
-	if(!matrix->assmb || !aligned_assem->t || !aligned_assem->s || !aligned_assem->q) {
-		ERROR();
+	aligned_assem->t = smalloc(aligned_assem->size);
+	aligned_assem->s = smalloc(aligned_assem->size);
+	aligned_assem->q = smalloc(aligned_assem->size);
+	
+	/* allocate matrcies for NW */
+	for(thread = threads; thread != 0; thread = thread->next) {
+		/* get remaining thread info */
+		aligned = smalloc(sizeof(struct aln));
+		gap_align = smalloc(sizeof(struct aln));
+		aligned->t = smalloc((delta + 1) << 1);
+		aligned->s = smalloc((delta + 1) << 1);
+		aligned->q = smalloc((delta + 1) << 1);
+		gap_align->t = smalloc((delta + 1) << 1);
+		gap_align->s = smalloc((delta + 1) << 1);
+		gap_align->q = smalloc((delta + 1) << 1);
+		thread->aligned = aligned;
+		thread->gap_align = gap_align;
+		thread->file_count = fileCount;
+		thread->files = template_fragments;
+		thread->aligned_assem = aligned_assem;
+		thread->matrix = matrix;
+		
+		/* start thread */
+		if((errno = pthread_create(&thread->id, NULL, assembly_KMA_Ptr, thread))) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			fprintf(stderr, "Will continue with %d threads.\n", i);
+			threads = thread->next;
+			free(thread);
+		}
 	}
 	
+	/* start main thread */
+	aligned = smalloc(sizeof(struct aln));
+	gap_align = smalloc(sizeof(struct aln));
+	aligned->t = smalloc((delta + 1) << 1);
+	aligned->s = smalloc((delta + 1) << 1);
+	aligned->q = smalloc((delta + 1) << 1);
+	gap_align->t = smalloc((delta + 1) << 1);
+	gap_align->s = smalloc((delta + 1) << 1);
+	gap_align->q = smalloc((delta + 1) << 1);
+	thread = smalloc(sizeof(struct assemble_thread));
+	thread->num = 0;
+	thread->template = 0;
+	thread->file_count = fileCount;
+	thread->files = template_fragments;
+	thread->frag_out = frag_out;
+	thread->aligned_assem = aligned_assem;
+	thread->aligned = aligned;
+	thread->gap_align = gap_align;
+	thread->NWmatrices = NWmatrices;
+	thread->matrix = matrix;
+	thread->qseq = qseq;
+	thread->header = header;
+	thread->points = points;
+	thread->points->len = 0;
+	thread->next = 0;
+	
+	/* Do local assemblies of fragments mapping to the same template */
 	depth = 0;
 	q_id = 0;
 	cover = 0;
@@ -11727,7 +12677,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 			
 			if(cmp((p_value <= evalue && read_score > expected), ((1.0 * read_score / t_len) > scoreT))) {
 				/* Do assembly */
-				status += assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix, points);
+				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
+				thread->template = template;
+				assembly_KMA_Ptr(thread);
 				
 				/* Depth, ID and coverage */
 				if(aligned_assem->cover > 0) {
@@ -11754,6 +12706,20 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 					}
 				}
 			}
+		}
+		if(templates_index[template]) {
+			/* destroy this DB index */
+			destroyPtr(template);
+		}
+	}
+	
+	/* join threads */
+	thread->template = -1;
+	assembly_KMA_Ptr(thread);
+	for(thread = threads; thread != 0; thread = thread->next) {
+		/* join thread */
+		if((errno = pthread_join(thread->id, NULL))) {
+			ERROR();
 		}
 	}
 	
@@ -11801,6 +12767,8 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	struct qseqs *qseq, *qseq_r, *header, *header_r;
 	struct assemInfo *matrix;
 	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	struct assemble_thread *threads, *thread;
 	
 	/* open pipe */
 	status = 0;
@@ -11858,19 +12826,22 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	/* open outputfiles */
 	if(outputfilename) {
 		strcat(outputfilename, ".res");
-		res_out = fopen(outputfilename, "w");
+		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
 		frag_out = gzInitFileBuff(CHUNK);
 		openFileBuff(frag_out, outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
-		alignment_out = fopen(outputfilename, "w");
+		alignment_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".fsa");
-		consensus_out = fopen(outputfilename, "w");
+		consensus_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		frag_out_raw = tmpfile();
+		if(!frag_out_raw) {
+			ERROR();
+		}
 		if(print_matrix) {
 			matrix_out = gzInitFileBuff(CHUNK);
 			strcat(outputfilename, ".mat.gz");
@@ -11890,9 +12861,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	} else {
 		fprintf(stderr, " No output file specified!\n");
 		exit(2);
-	}
-	if(!res_out || !consensus_out || !frag_out_raw || !alignment_out) {
-		ERROR();
 	}
 	
 	fprintf(stderr, "# Collecting k-mer scores.\n");
@@ -11963,7 +12931,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 			}
 		}
 	}
-	status += kmaPclose(inputfile);
+	status |= kmaPclose(inputfile);
 	rewind(frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
@@ -12129,21 +13097,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
 	
-	/* allocate matrcies for NW */
-	NW_s = 1024 * 1024;
-	NW_q = 1024;
-	E = malloc(NW_s);
-	if(!E) {
-		ERROR();
-	}
-	D[0] = malloc((NW_q << 1) * sizeof(int));
-	P[0] = malloc((NW_q << 1) * sizeof(int));
-	if(!D[0] || !P[0]) {
-		ERROR();
-	}
-	D[1] = D[0] + NW_q;
-	P[1] = P[0] + NW_q;
-	
 	/* Get expected values */
 	template_tot_ulen = 0;
 	Nhits = 0;
@@ -12152,23 +13105,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		template_tot_ulen += template_lengths[i];
 	}
 	
-	/* Do local assemblies of fragments mapping to the same template */
-	aligned = malloc(sizeof(struct aln));
-	gap_align = malloc(sizeof(struct aln));
-	if(!aligned || !gap_align) {
-		ERROR();
-	}
-	aligned_assem = malloc(sizeof(struct assem));
-	matrix = malloc(sizeof(struct assemInfo));
-	aligned->t = malloc((delta + 1) << 1);
-	aligned->s = malloc((delta + 1) << 1);
-	aligned->q = malloc((delta + 1) << 1);
-	gap_align->t = malloc((delta + 1) << 1);
-	gap_align->s = malloc((delta + 1) << 1);
-	gap_align->q = malloc((delta + 1) << 1);
-	if(!matrix || !aligned_assem || !aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
-		ERROR();
-	}
+	/* preallocate assembly matrices */
+	matrix = smalloc(sizeof(struct assemInfo));
+	aligned_assem = smalloc(sizeof(struct assem));
 	matrix->size = delta;
 	for(i = 0; i < DB_size; ++i) {
 		if(matrix->size < template_lengths[i]) {
@@ -12176,15 +13115,106 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 	}
 	matrix->size <<= 1;
+	matrix->assmb = smalloc(matrix->size * sizeof(struct assembly));
 	aligned_assem->size = matrix->size;
-	aligned_assem->t = malloc(aligned_assem->size);
-	aligned_assem->s = malloc(aligned_assem->size);
-	aligned_assem->q = malloc(aligned_assem->size);
-	matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
-	if(!matrix->assmb || !aligned_assem->t || !aligned_assem->s || !aligned_assem->q) {
-		ERROR();
+	aligned_assem->t = smalloc(aligned_assem->size);
+	aligned_assem->s = smalloc(aligned_assem->size);
+	aligned_assem->q = smalloc(aligned_assem->size);
+	
+	/* allocate matrcies for NW */
+	i = 1;
+	threads = 0;
+	while(i < thread_num) {
+		/* allocate matrices */
+		NWmatrices = smalloc(sizeof(struct NWmat));
+		NWmatrices->NW_s = 1024 * 1024;
+		NWmatrices->NW_q = 1024;
+		NWmatrices->E = smalloc(NWmatrices->NW_s);
+		NWmatrices->D[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+		NWmatrices->P[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+		NWmatrices->D[1] = NWmatrices->D[0] + NWmatrices->NW_q;
+		NWmatrices->P[1] = NWmatrices->P[0] + NWmatrices->NW_q;
+		
+		aligned = smalloc(sizeof(struct aln));
+		gap_align = smalloc(sizeof(struct aln));
+		aligned->t = smalloc((delta + 1) << 1);
+		aligned->s = smalloc((delta + 1) << 1);
+		aligned->q = smalloc((delta + 1) << 1);
+		gap_align->t = smalloc((delta + 1) << 1);
+		gap_align->s = smalloc((delta + 1) << 1);
+		gap_align->q = smalloc((delta + 1) << 1);
+		
+		/* move it to the thread */
+		thread = smalloc(sizeof(struct assemble_thread));
+		thread->num = i;
+		
+		thread->template = -2;
+		thread->file_count = fileCount;
+		thread->files = template_fragments;
+		thread->frag_out = frag_out;
+		thread->aligned_assem = aligned_assem;
+		thread->aligned = aligned;
+		thread->gap_align = gap_align;
+		thread->NWmatrices = NWmatrices;
+		thread->matrix = matrix;
+		thread->qseq = setQseqs(qseq->size);
+		thread->header = setQseqs(header->size);
+		thread->points = seedPoint_init(delta);
+		thread->points->len = 0;
+		
+		thread->next = threads;
+		threads = thread;
+		
+		/* start thread */
+		if((errno = pthread_create(&thread->id, NULL, assembly_KMA_Ptr, thread))) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			fprintf(stderr, "Will continue with %d threads.\n", i);
+			threads = thread->next;
+			free(thread);
+			i = thread_num;
+		} else {
+			++i;
+		}
 	}
 	
+	/* start main thread */
+	NWmatrices = smalloc(sizeof(struct NWmat));
+	NWmatrices->NW_s = 1024 * 1024;
+	NWmatrices->NW_q = 1024;
+	NWmatrices->E = smalloc(NWmatrices->NW_s);
+	NWmatrices->D[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+	NWmatrices->P[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+	NWmatrices->D[1] = NWmatrices->D[0] + NWmatrices->NW_q;
+	NWmatrices->P[1] = NWmatrices->P[0] + NWmatrices->NW_q;
+	
+	aligned = smalloc(sizeof(struct aln));
+	gap_align = smalloc(sizeof(struct aln));
+	aligned->t = smalloc((delta + 1) << 1);
+	aligned->s = smalloc((delta + 1) << 1);
+	aligned->q = smalloc((delta + 1) << 1);
+	gap_align->t = smalloc((delta + 1) << 1);
+	gap_align->s = smalloc((delta + 1) << 1);
+	gap_align->q = smalloc((delta + 1) << 1);
+	
+	/* move it to the thread */
+	thread = smalloc(sizeof(struct assemble_thread));
+	thread->num = 0;
+	thread->template = 0;
+	thread->file_count = fileCount;
+	thread->files = template_fragments;
+	thread->frag_out = frag_out;
+	thread->aligned_assem = aligned_assem;
+	thread->aligned = aligned;
+	thread->gap_align = gap_align;
+	thread->NWmatrices = NWmatrices;
+	thread->matrix = matrix;
+	thread->qseq = qseq;
+	thread->header = header;
+	thread->points = points;
+	thread->points->len = 0;
+	thread->next = 0;
+	
+	/* Do local assemblies of fragments mapping to the same template */
 	depth = 0;
 	q_id = 0;
 	cover = 0;
@@ -12207,7 +13237,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 				templates_index[template] = alignLoadPtr(seq_in, index_in, template_lengths[template], 0, 0);
 				
 				/* Do assembly */
-				status += assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix, points);
+				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
+				thread->template = template;
+				assembly_KMA_Ptr(thread);
 				
 				/* Depth, ID and coverage */
 				if(aligned_assem->cover > 0) {
@@ -12248,6 +13280,16 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev) {
 		}
 	}
 	
+	/* join threads */
+	thread->template = -1;
+	assembly_KMA_Ptr(thread);
+	for(thread = threads; thread != 0; thread = thread->next) {
+		/* join thread */
+		if((errno = pthread_join(thread->id, NULL))) {
+			ERROR();
+		}
+	}
+	
 	/* Close files */
 	if(index_in) {
 		fclose(index_in);
@@ -12281,6 +13323,8 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	struct qseqs *qseq, *header;
 	struct assemInfo *matrix;
 	struct alnPoints *points;
+	struct NWmat *NWmatrices;
+	struct assemble_thread *threads, *thread;
 	
 	/* open pipe */
 	//template_fragments = popen(exePrev, "r");
@@ -12301,17 +13345,17 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	/* open outputfiles */
 	if(outputfilename) {
 		strcat(outputfilename, ".res");
-		res_out = fopen(outputfilename, "w");
+		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".frag.gz");
 		frag_out = gzInitFileBuff(CHUNK);
 		openFileBuff(frag_out, outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".aln");
-		alignment_out = fopen(outputfilename, "w");
+		alignment_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".fsa");
-		consensus_out = fopen(outputfilename, "w");
+		consensus_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
 		if(print_matrix) {
 			matrix_out = gzInitFileBuff(CHUNK);
@@ -12325,19 +13369,11 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		fprintf(stderr, " No output file specified!\n");
 		exit(2);
 	}
-	if(!res_out || !consensus_out || !alignment_out) {
-		ERROR();
-	}
-	
 	
 	/* load indexing */
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".length.b");
-	DB_file = fopen(templatefilename, "rb");
-	if(!DB_file) {
-		fprintf(stderr, "Wrong format of DB, or DB does not exist.\n");
-		exit(errno);
-	}
+	DB_file = sfopen(templatefilename, "rb");
 	fread(&DB_size, sizeof(int), 1, DB_file);
 	contamination = DB_size;
 	/* load lengths */
@@ -12395,11 +13431,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	
 	/* get name */
 	strcat(templatefilename, ".name");
-	DB_file = fopen(templatefilename, "rb");
-	if(!DB_file) {
-		fprintf(stderr, "File coruption: %s\n", templatefilename);
-		ERROR();
-	}
+	DB_file = sfopen(templatefilename, "rb");
 	/* get size of file */
 	fseek(DB_file, 0, SEEK_END);
 	seeker = ftell(DB_file);
@@ -12439,54 +13471,117 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
 	
+	/* preallocate assembly matrices */
+	matrix = smalloc(sizeof(struct assemInfo));
+	aligned_assem = smalloc(sizeof(struct assem));
+	matrix->size = (*template_lengths) << 1;
+	matrix->assmb = smalloc(matrix->size * sizeof(struct assembly));
+	aligned_assem->size = matrix->size;
+	aligned_assem->t = smalloc(aligned_assem->size);
+	aligned_assem->s = smalloc(aligned_assem->size);
+	aligned_assem->q = smalloc(aligned_assem->size);
+	
 	/* allocate matrcies for NW */
-	NW_s = 1024 * 1024;
-	NW_q = 1024;
-	E = malloc(NW_s);
-	if(!E) {
-		ERROR();
+	i = 1;
+	threads = 0;
+	while(i < thread_num) {
+		/* allocate matrices */
+		NWmatrices = smalloc(sizeof(struct NWmat));
+		NWmatrices->NW_s = 1024 * 1024;
+		NWmatrices->NW_q = 1024;
+		NWmatrices->E = smalloc(NWmatrices->NW_s);
+		NWmatrices->D[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+		NWmatrices->P[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+		NWmatrices->D[1] = NWmatrices->D[0] + NWmatrices->NW_q;
+		NWmatrices->P[1] = NWmatrices->P[0] + NWmatrices->NW_q;
+		
+		aligned = smalloc(sizeof(struct aln));
+		gap_align = smalloc(sizeof(struct aln));
+		aligned->t = smalloc((delta + 1) << 1);
+		aligned->s = smalloc((delta + 1) << 1);
+		aligned->q = smalloc((delta + 1) << 1);
+		gap_align->t = smalloc((delta + 1) << 1);
+		gap_align->s = smalloc((delta + 1) << 1);
+		gap_align->q = smalloc((delta + 1) << 1);
+		
+		/* move it to the thread */
+		thread = smalloc(sizeof(struct assemble_thread));
+		thread->num = i;
+		
+		thread->template = -2;
+		thread->file_count = 1;
+		thread->files = &template_fragments;
+		thread->frag_out = frag_out;
+		thread->aligned_assem = aligned_assem;
+		thread->aligned = aligned;
+		thread->gap_align = gap_align;
+		thread->NWmatrices = NWmatrices;
+		thread->matrix = matrix;
+		thread->qseq = setQseqs(qseq->size);
+		thread->header = setQseqs(header->size);
+		thread->points = seedPoint_init(delta);
+		thread->points->len = 0;
+		
+		thread->next = threads;
+		threads = thread;
+		
+		/* start thread */
+		if((errno = pthread_create(&thread->id, NULL, assembly_KMA_Ptr, thread))) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			fprintf(stderr, "Will continue with %d threads.\n", i);
+			threads = thread->next;
+			free(thread);
+			i = thread_num;
+		} else {
+			++i;
+		}
 	}
-	D[0] = malloc((NW_q << 1) * sizeof(int));
-	P[0] = malloc((NW_q << 1) * sizeof(int));
-	if(!D[0] || !P[0]) {
-		ERROR();
-	}
-	D[1] = D[0] + NW_q;
-	P[1] = P[0] + NW_q;
+	
+	/* start main thread */
+	NWmatrices = smalloc(sizeof(struct NWmat));
+	NWmatrices->NW_s = 1024 * 1024;
+	NWmatrices->NW_q = 1024;
+	NWmatrices->E = smalloc(NWmatrices->NW_s);
+	NWmatrices->D[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+	NWmatrices->P[0] = smalloc((NWmatrices->NW_q << 1) * sizeof(int));
+	NWmatrices->D[1] = NWmatrices->D[0] + NWmatrices->NW_q;
+	NWmatrices->P[1] = NWmatrices->P[0] + NWmatrices->NW_q;
+	
+	aligned = smalloc(sizeof(struct aln));
+	gap_align = smalloc(sizeof(struct aln));
+	aligned->t = smalloc((delta + 1) << 1);
+	aligned->s = smalloc((delta + 1) << 1);
+	aligned->q = smalloc((delta + 1) << 1);
+	gap_align->t = smalloc((delta + 1) << 1);
+	gap_align->s = smalloc((delta + 1) << 1);
+	gap_align->q = smalloc((delta + 1) << 1);
+	
+	/* move it to the thread */
+	thread = smalloc(sizeof(struct assemble_thread));
+	thread->num = 0;
+	thread->template = 0;
+	thread->file_count = 1;
+	thread->files = &template_fragments;
+	thread->frag_out = frag_out;
+	thread->aligned_assem = aligned_assem;
+	thread->aligned = aligned;
+	thread->gap_align = gap_align;
+	thread->NWmatrices = NWmatrices;
+	thread->matrix = matrix;
+	thread->qseq = qseq;
+	thread->header = header;
+	thread->points = points;
+	thread->points->len = 0;
+	thread->next = 0;
 	
 	/* Do local assemblies of fragments mapping to the same template */
-	aligned = malloc(sizeof(struct aln));
-	gap_align = malloc(sizeof(struct aln));
-	if(!aligned || !gap_align) {
-		ERROR();
-	}
-	aligned_assem = malloc(sizeof(struct assem));
-	matrix = malloc(sizeof(struct assemInfo));
-	aligned->t = malloc((delta + 1) << 1);
-	aligned->s = malloc((delta + 1) << 1);
-	aligned->q = malloc((delta + 1) << 1);
-	gap_align->t = malloc((delta + 1) << 1);
-	gap_align->s = malloc((delta + 1) << 1);
-	gap_align->q = malloc((delta + 1) << 1);
-	if(!matrix || !aligned_assem || !aligned->t || !aligned->s || !aligned->q || !gap_align->t || !gap_align->s || !gap_align->q) {
-		ERROR();
-	}
-	matrix->size = (*template_lengths) << 1;
-	aligned_assem->size = matrix->size;
-	aligned_assem->t = malloc(aligned_assem->size);
-	aligned_assem->s = malloc(aligned_assem->size);
-	aligned_assem->q = malloc(aligned_assem->size);
-	matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
-	if(!matrix->assmb || !aligned_assem->t || !aligned_assem->s || !aligned_assem->q) {
-		ERROR();
-	}
-	
 	depth = 0;
 	q_id = 0;
 	cover = 0;
 	q_cover = 0;
 	/* Do assembly */
-	assemblyPtr(aligned_assem, 0, &template_fragments, 1, frag_out, outputfilename, aligned, gap_align, qseq, header, matrix, points);
+	//assemblyPtr(aligned_assem, 0, &template_fragments, 1, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
+	assembly_KMA_Ptr(thread);
 	
 	/* make p_value */
 	read_score = *Score;
@@ -12522,6 +13617,16 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		}
 		/* destroy this DB index */
 		destroyPtr(0);
+	}
+	
+	/* join threads */
+	thread->template = -1;
+	assembly_KMA_Ptr(thread);
+	for(thread = threads; thread != 0; thread = thread->next) {
+		/* join thread */
+		if((errno = pthread_join(thread->id, NULL))) {
+			ERROR();
+		}
 	}
 	
 	/* Close files */
@@ -12624,7 +13729,7 @@ void helpMessage(int exeStatus) {
 	} else {
 		helpOut = stderr;
 	}
-	fprintf(helpOut, "# KMA-%d.%d.%d mapps raw reads to a template database, for optimal performance it is designed to use 3 threads.\n", version[0], version[1], version[2]);
+	fprintf(helpOut, "# KMA-%d.%d.%d mapps raw reads to a template database.\n", version[0], version[1], version[2]);
 	fprintf(helpOut, "# Options are:\t\tDesc:\t\t\t\tDefault:\tRequirements:\n");
 	fprintf(helpOut, "#\n");
 	fprintf(helpOut, "#\t-o\t\tOutput file\t\t\tNone\t\tREQUIRED\n");
@@ -12688,6 +13793,7 @@ int main(int argc, char *argv[]) {
 	/* SET DEFAULTS */
 	status = 0;
 	assemblyPtr = &assemble_KMA;
+	assembly_KMA_Ptr = &assemble_KMA_threaded;
 	cmp = &cmp_or;
 	minPhred = 30;
 	fiveClip = 0;
@@ -12959,8 +14065,13 @@ int main(int argc, char *argv[]) {
 			if(args < argc) {
 				kmersize = strtoul(argv[args], &exeBasic, 10);
 				if(*exeBasic != 0) {
-					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
+					fprintf(stderr, "# Invalid kmersize parsed\n");
 					exit(4);
+				} else if(kmersize == 0) {
+					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
+					kmersize = 16;
+				} else if(kmersize > 32) {
+					kmersize = 32;
 				}
 			}
 		} else if(strcmp(argv[args], "-mp") == 0) {
@@ -12983,6 +14094,7 @@ int main(int argc, char *argv[]) {
 			}
 		} else if(strcmp(argv[args], "-dense") == 0) {
 			assemblyPtr = &assemble_KMA_dense;
+			assembly_KMA_Ptr = &assemble_KMA_dense_threaded;
 		} else if(strcmp(argv[args], "-matrix") == 0) {
 			print_matrix = 1;
 		} else if(strcmp(argv[args], "-a") == 0) {
@@ -13244,11 +14356,7 @@ int main(int argc, char *argv[]) {
 			} else {
 				strcat(templatefilename, ".comp.b");
 			}
-			templatefile = fopen(templatefilename, "rb" );
-			if(!templatefile) {
-				fprintf(stderr, "Wrong format of DB, or DB does not exist. 2\n");
-				ERROR();
-			}
+			templatefile = sfopen(templatefilename, "rb" );
 			getPrefix(templates, templatefile);
 			fclose(templatefile);
 			templatefilename[exe_len] = 0;
@@ -13292,11 +14400,7 @@ int main(int argc, char *argv[]) {
 					ERROR();
 				}
 				strcat(templatefilename, ".length.b");
-				templatefile = fopen(templatefilename, "rb");
-				if(!templatefile) {
-					fprintf(stderr, "File coruption: %s\n", templatefilename);
-					ERROR();
-				}
+				templatefile = sfopen(templatefilename, "rb");
 				/* DB_size s_lengths u_length lengths */
 				template_lengths[0] = 0;
 				template_lengths[2] = 1;
