@@ -266,7 +266,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 4};
+int version[3] = {0, 15, 5};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -2519,6 +2519,7 @@ int hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) {
 	fread(&dest->n, sizeof(long unsigned), 1, file);
 	fread(&dest->v_index, sizeof(long unsigned), 1, file);
 	fread(&dest->null_index, sizeof(long unsigned), 1, file);
+	DB_size = contamination;
 	kmersize = dest->kmersize;
 	mask = 0;
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
@@ -2680,6 +2681,7 @@ void hashMapKMA_load_shm(struct hashMapKMA *dest, FILE *file, const char *filena
 	fread(&dest->n, sizeof(long unsigned), 1, file);
 	fread(&dest->v_index, sizeof(long unsigned), 1, file);
 	fread(&dest->null_index, sizeof(long unsigned), 1, file);
+	DB_size = contamination;
 	kmersize = dest->kmersize;
 	mask = 0;
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
@@ -5610,6 +5612,234 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 			for(l = *bestTemplates_r; l != 0; --l) {
 				extendScore[(template = bestTemplates_r[l])] = 0;
 				Score_r[template] = 0;
+			}
+			*bestTemplates_r = 0;
+		}
+	}
+	qseq_r->N[0]--;
+	
+	/* Validate best match */
+	if(bestScore > 0 || bestScore_r > 0) {
+		end = qseq->seqlen + 1;
+		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
+			if(bestScore > bestScore_r) {
+				lock(excludeOut);
+				deConPrintPtr(bestTemplates, qseq, bestScore, header);
+				unlock(excludeOut);
+			} else if(bestScore < bestScore_r) {
+				lock(excludeOut);
+				deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header);
+				unlock(excludeOut);
+			} else {
+				/* merge */
+				for(i = 1; i <= *bestTemplates_r; ++i) {
+					bestTemplates[0]++;
+					bestTemplates[*bestTemplates] = -bestTemplates_r[i];
+				}
+				lock(excludeOut);
+				deConPrintPtr(bestTemplates, qseq, -bestScore, header);
+				unlock(excludeOut);
+			}
+		}
+	}
+}
+
+void save_kmers_count(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
+	
+	int i, j, l, end, HIT, bestHits, hitCounter, bestScore, bestScore_r, reps;
+	int n, template;
+	unsigned *values, *last;
+	
+	if(qseq->seqlen < kmersize) {
+		return;
+	}
+	
+	bestScore = 0;
+	bestScore_r = 0;
+	
+	/* reverse complement qseq */
+	rc_comp(qseq, qseq_r);
+	
+	/* Search forward strand */
+	/* Make quick check of the qseq */
+	HIT = exhaustive;
+	j = 0;
+	qseq->N[0]++;
+	qseq->N[qseq->N[0]] = qseq->seqlen;
+	for(i = 1; i <= qseq->N[0] && !HIT; ++i) {
+		end = qseq->N[i] - kmersize + 1;
+		for(;j < end && !HIT; j += kmersize) {
+			if(hashMap_get(templates, getKmer(qseq->seq, j))) {
+				HIT = 1;
+			}
+		}
+		j = qseq->N[i] + 1;
+	}
+	
+	/* If deltamer qseq hits, then continue */
+	if(HIT) {
+		/* Scan the deltamer exhaustively, and collect scores in Score*/
+		hitCounter = 0;
+		*bestTemplates = 0;
+		last = 0;
+		reps = 0;
+		j = 0;
+		end = qseq->seqlen;
+		for(i = 1; i <= qseq->N[0]; ++i) {
+			end = qseq->N[i] - kmersize + 1;
+			for(;j < end; ++j) {
+				if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
+					if(values == last) {
+						++reps;
+					} else {
+						if(last) {
+							n = getTemplatePtr(last, 0);
+							for(l = 1; l <= n; l++) {
+								template = getTemplatePtr(last, l);
+								if(Score[template] > 0) {
+									Score[template] += reps;
+								} else {
+									Score[template] = reps;
+									bestTemplates[0]++;
+									bestTemplates[*bestTemplates] = template;
+								}
+							}
+							hitCounter += reps;
+						}
+						reps = 1;
+						last = values;
+					}
+				}
+			}
+			j = qseq->N[i] + 1;
+		}
+		if(last) {
+			n = getTemplatePtr(last, 0);
+			for(l = 1; l <= n; l++) {
+				template = getTemplatePtr(last, l);
+				if(Score[template] > 0) {
+					Score[template] += reps;
+				} else {
+					Score[template] = reps;
+					bestTemplates[0]++;
+					bestTemplates[*bestTemplates] = template;
+				}
+			}
+			hitCounter += reps;
+		}
+		reps = 0;
+		
+		/* get best match(es) */
+		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+			bestHits = 0;
+			for(l = 1; l <= *bestTemplates; ++l) {
+				if(Score[(template = bestTemplates[l])] > bestScore) {
+					bestScore = Score[template];
+					bestHits = 1;
+					bestTemplates[bestHits] = template;
+				} else if(Score[template] == bestScore) {
+					++bestHits;
+					bestTemplates[bestHits] = template;
+				}
+				Score[template] = 0;
+			}
+			*bestTemplates = bestHits;
+		} else {
+			for(l = *bestTemplates; l != 0; --l) {
+				Score[bestTemplates[l]] = 0;
+			}
+			*bestTemplates = 0;
+		}
+	}
+	qseq->N[0]--;
+	
+	/* search rc strand */
+	/* Make quick check of the qseq */
+	HIT = exhaustive;
+	j = 0;
+	qseq_r->N[0]++;
+	qseq_r->N[qseq_r->N[0]] = qseq_r->seqlen;
+	for(i = 1; i <= qseq_r->N[0] && !HIT; ++i) {
+		end = qseq_r->N[i] - kmersize + 1;
+		for(;j < end && !HIT; j += kmersize) {
+			if(hashMap_get(templates, getKmer(qseq_r->seq, j))) {
+				HIT = 1;
+			}
+		}
+		j = qseq_r->N[i] + 1;
+	}
+	
+	/* If deltamer qseq hits, then continue */
+	if(HIT) {
+		/* Scan the deltamer exhaustively, and collect scores in Score*/
+		hitCounter = 0;
+		*bestTemplates_r = 0;
+		last = 0;
+		reps = 0;
+		j = 0;
+		end = qseq_r->seqlen;
+		for(i = 1; i <= qseq_r->N[0]; ++i) {
+			end = qseq_r->N[i] - kmersize + 1;
+			for(;j < end; ++j) {
+				if((values = hashMap_get(templates, getKmer(qseq_r->seq, j)))) {
+					if(values == last) {
+						++reps;
+					} else {
+						if(last) {
+							n = getTemplatePtr(last, 0);
+							for(l = 1; l <= n; l++) {
+								template = getTemplatePtr(last, l);
+								if(Score_r[template] > 0) {
+									Score_r[template] += reps;
+								} else {
+									Score_r[template] = reps;
+									bestTemplates_r[0]++;
+									bestTemplates_r[*bestTemplates_r] = template;
+								}	
+							}
+							hitCounter += reps;
+						}
+						last = values;
+						reps = 1;
+					}
+				}
+			}
+			j = qseq_r->N[i] + 1;
+		}
+		if(last) {
+			n = getTemplatePtr(last, 0);
+			for(l = 1; l <= n; l++) {
+				template = getTemplatePtr(last, l);
+				if(Score_r[template] > 0) {
+					Score_r[template] += reps;
+				} else {
+					Score_r[template] = reps;
+					bestTemplates_r[0]++;
+					bestTemplates_r[*bestTemplates_r] = template;
+				}	
+			}
+			hitCounter += reps;
+		}
+		reps = 0;
+		
+		/* get best match(es) */
+		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+			bestHits = 0;
+			for(l = 1; l <= *bestTemplates_r; ++l) {
+				if(Score_r[(template = bestTemplates_r[l])] > bestScore_r) {
+					bestScore_r = Score_r[template];
+					bestHits = 1;
+					bestTemplates_r[bestHits] = template;
+				} else if(Score_r[template] == bestScore_r) {
+					++bestHits;
+					bestTemplates_r[bestHits] = template;
+				}
+				Score_r[template] = 0;
+			}
+			*bestTemplates_r = bestHits;
+		} else {
+			for(l = *bestTemplates_r; l != 0; --l) {
+				Score_r[bestTemplates_r[l]] = 0;
 			}
 			*bestTemplates_r = 0;
 		}
@@ -12222,6 +12452,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev) {
 		outputfilename[file_len] = 0;
 		strcat(outputfilename, ".fsa");
 		consensus_out = sfopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
 		frag_out_raw = tmpfile();
 		if(!frag_out_raw) {
 			ERROR();
@@ -14105,6 +14336,7 @@ int main(int argc, char *argv[]) {
 			sparse_run = 1;
 		} else if(strcmp(argv[args], "-1t1") == 0) {
 			kmerScan = &save_kmers;
+			//kmerScan = &save_kmers_count;
 			one2one = 1;
 		} else if(strcmp(argv[args], "-ss") == 0) {
 			++args;
