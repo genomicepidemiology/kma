@@ -266,7 +266,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 5};
+int version[3] = {0, 15, 6};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -276,7 +276,7 @@ int **RegionTemplates, *Score, *Score_r, **TmpNs, exhaustive, minLen, ref_fsa;
 int **tScore, **tScore_r, **BestTemplates, **BestTemplates_r, one2one, diskDB;
 int delta, deCon, contamination, print_matrix, print_all, DB_size, kmersize;
 unsigned ***tVF_scores, ***tVR_scores, *valuesFile;
-unsigned shifter, shifterS, r_shifter, shm, thread_num;
+unsigned shifter, shifterS, r_shifter, shm, thread_num, countK;
 unsigned *alignment_scores, *uniq_alignment_scores;
 long unsigned mask;
 double evalue, ID_t, scoreT, HMM_param[8];
@@ -305,12 +305,12 @@ int (*cmp)(int, int);
 int (*significantBase)(int, int);
 char (*baseCall)(unsigned char, int, int, int, struct assem*, struct assembly*);
 int (*buffFileBuff)(struct FileBuff *);
-long unsigned (*getExistPtr)(const struct hashMapKMA *, const long unsigned);
-long unsigned (*getKeyPtr)(const struct hashMapKMA *, const long unsigned);
-long unsigned (*getValueIndexPtr)(const struct hashMapKMA *, const long unsigned);
+long unsigned (*getExistPtr)(const unsigned *, const long unsigned);
+long unsigned (*getKeyPtr)(const unsigned *, const long unsigned);
+long unsigned (*getValueIndexPtr)(const unsigned *, const long unsigned);
 unsigned * (*getValuePtr)(const struct hashMapKMA *, const long unsigned);
-int (*getTemplatePtr)(const unsigned *, const int);
 int (*get_kmers_for_pair_ptr)(int *, int *, int *, int *, struct compDNA *, int *);
+int (*intpos_bin_contaminationPtr)(const unsigned *, const int);
 
 /*
  FUNCTIONS
@@ -600,11 +600,11 @@ int intpos_bin(const unsigned *str1, const int str2) {
 	return -1;
 }
 
-int intpos_bin_contamination(unsigned *str1, const int str2) {
+int intpos_bin_contamination(const unsigned *str1, const int str2) {
 	
 	int pos, upLim, downLim, template;
 	
-	upLim = getTemplatePtr(str1, 0);
+	upLim = *str1;
 	if(upLim == 0) {
 		return -1;
 	}
@@ -612,7 +612,7 @@ int intpos_bin_contamination(unsigned *str1, const int str2) {
 	downLim = 1;
 	pos = (upLim + downLim) / 2;
 	while(0 < (upLim - downLim)) {
-		template = getTemplatePtr(str1, pos);
+		template = str1[pos];
 		if(template == str2) {
 			return pos;
 		} else if(template < str2) {
@@ -622,7 +622,37 @@ int intpos_bin_contamination(unsigned *str1, const int str2) {
 		}
 		pos = (upLim + downLim) / 2;
 	}
-	if(getTemplatePtr(str1, pos) == str2) {
+	if(str1[pos] == str2) {
+		return pos;
+	}
+	
+	return -1;
+}
+
+int intpos_bin_contamination_s(const unsigned *Str1, const int str2) {
+	
+	int pos, upLim, downLim, template;
+	short unsigned *str1 = (short unsigned *) Str1;
+	
+	upLim = *str1;
+	if(upLim == 0) {
+		return -1;
+	}
+	
+	downLim = 1;
+	pos = (upLim + downLim) / 2;
+	while(0 < (upLim - downLim)) {
+		template = str1[pos];
+		if(template == str2) {
+			return pos;
+		} else if(template < str2) {
+			downLim = pos + 1;
+		} else {
+			upLim = pos - 1;
+		}
+		pos = (upLim + downLim) / 2;
+	}
+	if(str1[pos] == str2) {
 		return pos;
 	}
 	
@@ -2211,28 +2241,28 @@ int getCompKmers(struct compKmers *compressor, FILE *file) {
 }
 
 /* HASHMAP FUNCTIONS */
-long unsigned getExist(const struct hashMapKMA *dest, const long unsigned pos) {
-	return dest->exist[pos];
+long unsigned getExist(const unsigned *exist, const long unsigned pos) {
+	return exist[pos];
 }
 
-long unsigned getExistL(const struct hashMapKMA *dest, const long unsigned pos) {
-	return dest->exist_l[pos];
+long unsigned getExistL(const unsigned *exist, const long unsigned pos) {
+	return ((long unsigned *) exist)[pos];
 }
 
-long unsigned getKey(const struct hashMapKMA *dest, const long unsigned pos) {
-	return dest->key_index[pos];
+long unsigned getKey(const unsigned *key_index, const long unsigned pos) {
+	return key_index[pos];
 }
 
-long unsigned getKeyL(const struct hashMapKMA *dest, const long unsigned pos) {
-	return dest->key_index_l[pos];
+long unsigned getKeyL(const unsigned *key_index, const long unsigned pos) {
+	return ((long unsigned *) key_index)[pos];
 }
 
-long unsigned getValueIndex(const struct hashMapKMA *dest, const long unsigned pos) {
-	return dest->value_index[pos];
+long unsigned getValueIndex(const unsigned *value_index, const long unsigned pos) {
+	return value_index[pos];
 }
 
-long unsigned getValueIndexL(const struct hashMapKMA *dest, const long unsigned pos) {
-	return dest->value_index[pos];
+long unsigned getValueIndexL(const unsigned *value_index, const long unsigned pos) {
+	return ((long unsigned *) value_index)[pos];
 }
 
 unsigned * getValue(const struct hashMapKMA *dest, const long unsigned pos) {
@@ -2243,30 +2273,22 @@ unsigned * getValueS(const struct hashMapKMA *dest, const long unsigned pos) {
 	return (unsigned *)(dest->values_s + pos);
 }
 
-int getTemplate(const unsigned *values, const int pos) {
-	return values[pos];
-}
-
-int getTemplateS(const unsigned *values, const int pos) {
-	return ((short unsigned *)(values))[pos];
-}
-
 unsigned * hashMap_getGlobal(const struct hashMapKMA *templates, const long unsigned key) {
 	
 	long unsigned pos, kpos, kmer;
 	
 	kpos = key & templates->size;
-	pos = getExistPtr(templates, kpos);
+	pos = getExistPtr(templates->exist, kpos);
 	
 	if(pos != templates->null_index) {
-		kmer = getKeyPtr(templates, pos);
+		kmer = getKeyPtr(templates->key_index, pos);
 		while(key != kmer) {
 			if(kpos != (kmer & templates->size)) {
 				return 0;
 			}
-			kmer = getKeyPtr(templates, ++pos);
+			kmer = getKeyPtr(templates->key_index, ++pos);
 		}
-		return getValuePtr(templates, getValueIndexPtr(templates, pos));
+		return getValuePtr(templates, getValueIndexPtr(templates->value_index, pos));
 	}
 	
 	return 0;
@@ -2498,7 +2520,7 @@ unsigned * megaMap_getGlobal(const struct hashMapKMA *templates, const long unsi
 	
 	long unsigned pos;
 	
-	if((pos = getExistPtr(templates, key)) != 1) {
+	if((pos = getExistPtr(templates->exist, key)) != 1) {
 		return getValuePtr(templates, pos);
 	}
 	return 0;
@@ -2570,11 +2592,11 @@ int hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) {
 	if(DB_size < HU_LIMIT) {
 		size *= sizeof(short unsigned);
 		getValuePtr =&getValueS;
-		getTemplatePtr = &getTemplateS;
+		intpos_bin_contaminationPtr = &intpos_bin_contamination_s;
 	} else {
 		size *= sizeof(unsigned);
 		getValuePtr =&getValue;
-		getTemplatePtr = &getTemplate;
+		intpos_bin_contaminationPtr = &intpos_bin_contamination;
 	}
 	key = ftok(filename, 'v');
 	shmid = shmget(key, size, 0666);
@@ -2599,7 +2621,6 @@ int hashMapKMA_load(struct hashMapKMA *dest, FILE *file, const char *filename) {
 	/* check for megaMap */
 	if((dest->size - 1) == mask) {
 		hashMap_get = &megaMap_getGlobal;
-		getValueIndexPtr = getExistPtr;
 		return 0;
 	} else {
 		hashMap_get = &hashMap_getGlobal;
@@ -2722,11 +2743,11 @@ void hashMapKMA_load_shm(struct hashMapKMA *dest, FILE *file, const char *filena
 	if(DB_size < HU_LIMIT) {
 		size *= sizeof(short unsigned);
 		getValuePtr =&getValueS;
-		getTemplatePtr = &getTemplateS;
+		intpos_bin_contaminationPtr = &intpos_bin_contamination_s;
 	} else {
 		size *= sizeof(unsigned);
 		getValuePtr =&getValue;
-		getTemplatePtr = &getTemplate;
+		intpos_bin_contaminationPtr = &intpos_bin_contamination;
 	}
 	key = ftok(filename, 'v');
 	shmid = shmget(key, size, 0666);
@@ -2743,7 +2764,6 @@ void hashMapKMA_load_shm(struct hashMapKMA *dest, FILE *file, const char *filena
 	/* check for megaMap */
 	if((dest->size - 1) == mask) {
 		hashMap_get = &megaMap_getGlobal;
-		getValueIndexPtr = getExistPtr;
 		return;
 	} else {
 		hashMap_get = &hashMap_getGlobal;
@@ -3479,9 +3499,16 @@ void print_anker_pairs(int *out_Tem, struct compDNA *qseq, struct compDNA *qseq_
 void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, struct compDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, struct qseqs *header) {
 	
 	int k, l, bestHitsCov, template;
-	unsigned *values, n;
+	unsigned *values, n, SU;
+	short unsigned *values_s;
 	double thisCov, bestCov;
 	struct compDNA tmpQseq;
+	
+	if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
+	}
 	
 	/* here */
 	// make sure cuts isn't random seeds
@@ -3503,44 +3530,86 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, unsigned **VF
 	
 	for(k = start_cut; k <= end_cut; ++k) {
 		if(VF_scores[k]) {
-			values = VF_scores[k];
-			n = getTemplatePtr(values, 0);
-			for(l = 1; l <= n; ++l) {
-				template = getTemplatePtr(values, l);
-				if(Score[template] != bestScore && template != contamination) {
-					thisCov = 1.0 * Score[template] / template_lengths[template];
-					if(thisCov > bestCov) {
-						bestCov = thisCov;
-						bestHitsCov = *regionTemplates + 1;
-						regionTemplates[bestHitsCov] = template;
-					} else if(thisCov == bestCov) {
-						++bestHitsCov;
-						regionTemplates[bestHitsCov] = template;
+			if(SU) {
+				values_s = (short unsigned *) VF_scores[k];
+				n = *values_s;
+				for(l = 1; l <= n; ++l) {
+					template = values_s[l];
+					if(Score[template] != bestScore && template != contamination) {
+						thisCov = 1.0 * Score[template] / template_lengths[template];
+						if(thisCov > bestCov) {
+							bestCov = thisCov;
+							bestHitsCov = *regionTemplates + 1;
+							regionTemplates[bestHitsCov] = template;
+						} else if(thisCov == bestCov) {
+							++bestHitsCov;
+							regionTemplates[bestHitsCov] = template;
+						}
 					}
+					Score[template]--;
 				}
-				Score[template]--;
+			} else {
+				values = VF_scores[k];
+				n = *values;
+				for(l = 1; l <= n; ++l) {
+					template = values[l];
+					if(Score[template] != bestScore && template != contamination) {
+						thisCov = 1.0 * Score[template] / template_lengths[template];
+						if(thisCov > bestCov) {
+							bestCov = thisCov;
+							bestHitsCov = *regionTemplates + 1;
+							regionTemplates[bestHitsCov] = template;
+						} else if(thisCov == bestCov) {
+							++bestHitsCov;
+							regionTemplates[bestHitsCov] = template;
+						}
+					}
+					Score[template]--;
+				}
 			}
 			VF_scores[k] = 0;
 		}
 		if(VR_scores[k]) {
-			values = VR_scores[k];
-			n = getTemplatePtr(values, 0);
-			for(l = 1; l <= n; ++l) {
-				template = getTemplatePtr(values, l);
-				if(Score_r[template] != bestScore && template != contamination) {
-					thisCov = 1.0 * Score_r[template] / template_lengths[template];
-					if(thisCov > bestCov) {
-						HIT = -1;
-						bestCov = thisCov;
-						bestHitsCov = *regionTemplates + 1;
-						regionTemplates[bestHitsCov] = -template;
-					} else if(thisCov == bestCov) {
-						HIT = -1;
-						++bestHitsCov;
-						regionTemplates[bestHitsCov] = -template;
+			if(SU) {
+				values_s = (short unsigned *) VR_scores[k];
+				n = *values_s;
+				for(l = 1; l <= n; ++l) {
+					template = values_s[l];
+					if(Score_r[template] != bestScore && template != contamination) {
+						thisCov = 1.0 * Score_r[template] / template_lengths[template];
+						if(thisCov > bestCov) {
+							HIT = -1;
+							bestCov = thisCov;
+							bestHitsCov = *regionTemplates + 1;
+							regionTemplates[bestHitsCov] = -template;
+						} else if(thisCov == bestCov) {
+							HIT = -1;
+							++bestHitsCov;
+							regionTemplates[bestHitsCov] = -template;
+						}
 					}
+					Score_r[template]--;
 				}
-				Score_r[template]--;
+			} else {
+				values = VR_scores[k];
+				n = *values;
+				for(l = 1; l <= n; ++l) {
+					template = values[l];
+					if(Score_r[template] != bestScore && template != contamination) {
+						thisCov = 1.0 * Score_r[template] / template_lengths[template];
+						if(thisCov > bestCov) {
+							HIT = -1;
+							bestCov = thisCov;
+							bestHitsCov = *regionTemplates + 1;
+							regionTemplates[bestHitsCov] = -template;
+						} else if(thisCov == bestCov) {
+							HIT = -1;
+							++bestHitsCov;
+							regionTemplates[bestHitsCov] = -template;
+						}
+					}
+					Score_r[template]--;
+				}
 			}
 			VR_scores[k] = 0;
 		}
@@ -3550,36 +3619,68 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, unsigned **VF
 	/* clear nearest templates on both sides of match */
 	for(k = ((start_cut - 92) < 0) ? 0 : (start_cut - 92); k < start_cut; ++k) {
 		if(VF_scores[k]) {
-			values = VF_scores[k];
-			l = getTemplatePtr(values, 0) + 1;
-			while(--l) {
-				Score[getTemplatePtr(values, l)]--;
+			if(SU) {
+				values_s = (short unsigned *) VF_scores[k];
+				l = (*values_s) + 1;
+				while(--l) {
+					Score[values_s[l]]--;
+				}
+			} else {
+				values = VF_scores[k];
+				l = (*values) + 1;
+				while(--l) {
+					Score[values[l]]--;
+				}
 			}
 			VF_scores[k] = 0;
 		}
 		if(VR_scores[k]) {
-			values = VR_scores[k];
-			l = getTemplatePtr(values, 0) + 1;
-			while(--l) {
-				Score_r[getTemplatePtr(values, l)]--;
+			if(SU) {
+				values_s = (short unsigned *) VR_scores[k];
+				l = (*values_s) + 1;
+				while(--l) {
+					Score_r[values_s[l]]--;
+				}
+			} else {
+				values = VR_scores[k];
+				l = (*values) + 1;
+				while(--l) {
+					Score_r[values[l]]--;
+				}
 			}
 			VR_scores[k] = 0;
 		}
 	}
 	for(k = ((end_cut + 92) > qseq->seqlen) ? qseq->seqlen : (end_cut + 92); k > end_cut; --k) {
 		if(VF_scores[k]) {
-			values = VF_scores[k];
-			l = getTemplatePtr(values, 0) + 1;
-			while(--l) {
-				Score[getTemplatePtr(values, l)]--;
+			if(SU) {
+				values_s = (short unsigned *) VF_scores[k];
+				l = (*values_s) + 1;
+				while(--l) {
+					Score[values_s[l]]--;
+				}
+			} else {
+				values = VF_scores[k];
+				l = (*values) + 1;
+				while(--l) {
+					Score[values[l]]--;
+				}
 			}
 			VF_scores[k] = 0;
 		}
 		if(VR_scores[k]) {
-			values = VR_scores[k];
-			l = getTemplatePtr(values, 0) + 1;
-			while(--l) {
-				Score_r[getTemplatePtr(values, l)]--;
+			if(SU) {
+				values_s = (short unsigned *) VR_scores[k];
+				l = (*values_s) + 1;
+				while(--l) {
+					Score_r[values_s[l]]--;
+				}
+			} else {
+				values = VR_scores[k];
+				l = (*values) + 1;
+				while(--l) {
+					Score_r[values[l]]--;
+				}
 			}
 			VR_scores[k] = 0;
 		}
@@ -3625,27 +3726,50 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, unsigned **VF
 
 void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, struct compDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, struct qseqs *header) {
 	
-	int k, l;
+	int k, l, SU;
 	unsigned *values;
+	short unsigned *values_s;
 	struct compDNA tmpQseq;
+	
+	if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
+	}
 	
 	/* clean up scores */
 	start_cut = ((start_cut - 92) < 0) ? 0 : (start_cut - 92);
 	end_cut = ((end_cut + 92) > qseq->seqlen) ? qseq->seqlen : (end_cut + 92);
 	for(k = start_cut; k < end_cut; ++k) {
 		if(VF_scores[k]) {
-			values = VF_scores[k];
-			l = getTemplatePtr(values, 0) + 1;
-			while(--l) {
-				Score[getTemplatePtr(values, l)]--;
+			if(SU) {
+				values_s = (short unsigned *) VF_scores[k];
+				l = (*values_s) + 1;
+				while(--l) {
+					Score[values_s[l]]--;
+				}
+			} else {
+				values = VF_scores[k];
+				l = (*values) + 1;
+				while(--l) {
+					Score[values[l]]--;
+				}
 			}
 			VF_scores[k] = 0;
 		}
 		if(VR_scores[k]) {
-			values = VR_scores[k];
-			l = getTemplatePtr(values, 0) + 1;
-			while(--l) {
-				Score_r[getTemplatePtr(values, l)]--;
+			if(SU) {
+				values_s = (short unsigned *) VR_scores[k];
+				l = (*values_s) + 1;
+				while(--l) {
+					Score_r[values_s[l]]--;
+				}
+			} else {
+				values = VR_scores[k];
+				l = (*values) + 1;
+				while(--l) {
+					Score_r[values[l]]--;
+				}
 			}
 			VR_scores[k] = 0;
 		}
@@ -3845,6 +3969,7 @@ void printFsa_pairMt1(struct qseqs *header, struct qseqs *qseq, struct qseqs *he
 	printFsaMt1(header_r, qseq_r, compressor);
 	
 }
+
 void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *header_r, struct qseqs *qseq_r, struct compDNA *compressor) {
 	
 	int buffer[4];
@@ -3933,393 +4058,21 @@ int loadFsa(struct compDNA *qseq, struct qseqs *header, FILE *inputfile) {
 	return buffer[3];
 }
 
-void get_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, int *BestScore, int *BestScore_r, int *extendScore) {
-	
-	/* save_kmers find ankering k-mers the in query sequence,
-	   and is the time determining step */
-	int i, j, l, end, HIT, gaps, score, Ms, MMs, Us, W1s, template;
-	int bestHits, hitCounter, bestScore, bestScore_r;
-	unsigned *values, *last, n;
-	
-	if(qseq->seqlen < kmersize) {
-		return;
-	}
-	
-	bestScore = 0;
-	bestScore_r = 0;
-	
-	/* reverse complement qseq */
-	rc_comp(qseq, qseq_r);
-	
-	/* Search forward strand */
-	/* Make quick check of the qseq */
-	HIT = exhaustive;
-	j = 0;
-	qseq->N[0]++;
-	qseq->N[qseq->N[0]] = qseq->seqlen;
-	for(i = 1; i <= qseq->N[0] && !HIT; ++i) {
-		end = qseq->N[i] - kmersize + 1;
-		for(;j < end && !HIT; j += kmersize) {
-			if(hashMap_get(templates, getKmer(qseq->seq, j))) {
-				HIT = 1;
-			}
-		}
-		j = qseq->N[i] + 1;
-	}
-	
-	/* If deltamer qseq hits, then continue */
-	if(HIT) {
-		/* Scan the deltamer exhaustively, and collect scores in Score*/
-		hitCounter = 0;
-		*bestTemplates = 0;
-		last = 0;
-		gaps = 0;
-		HIT = 0;
-		Ms = 0;
-		MMs = 0;
-		Us = 0;
-		W1s = 0;
-		j = 0;
-		end = qseq->seqlen;
-		for(i = 1; i <= qseq->N[0]; ++i) {
-			end = qseq->N[i] - kmersize + 1;
-			for(;j < end; ++j) {
-				if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
-					if(values == last) {
-						if(kmersize < gaps) {
-							Ms += kmersize;
-							gaps -= kmersize;
-							if(gaps) {
-								/* go for best scenario */
-								if(gaps == 1) {
-									MMs += 2;
-								} else {
-									gaps -= 2;
-									if((MM << 1) + gaps * M < 0) {
-										Ms += gaps;
-										MMs += 2;
-									}
-								}
-							} else {
-								++MMs;
-							}
-						} else if (gaps) {
-							--gaps;
-							++W1s;
-							Us += gaps;
-						} else {
-							++Ms;
-						}
-						HIT = j;
-						gaps = 0;
-					} else {
-						if(last) {
-							if(HIT) {
-								HIT += kmersize;
-							} else {
-								HIT = j + kmersize;
-							}
-							score = Ms * M + MMs * MM + Us * U + W1s * W1;
-							l = getTemplatePtr(last, 0) + 1;
-							while(--l) {
-								template = getTemplatePtr(last, l);
-								Score[template] += score;
-								extendScore[template] = HIT;
-							}
-							/*
-							for(l = *last; l != 0; --l) {
-								Score[(template = last[l])] += score;
-								extendScore[template] = HIT;
-							}
-							*/
-							
-							score = kmersize * M;
-							MMs = MM << 1;
-							n = getTemplatePtr(values, 0);
-							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								if(j < extendScore[template]) {
-									if(extendScore[template] == HIT) {
-										Score[template] += M;
-									} else {
-										gaps = extendScore[template] - j - 1;
-										Score[template] += (W1 + gaps * U);
-									}
-								} else if(Score[template] != 0) {
-									Score[template] += score;
-									if((gaps = extendScore[template] - j)) {
-										if(gaps == 1) {
-											Score[template] += MMs;
-										} else {
-											gaps -= 2;
-											if((Ms = MMs + gaps * M) < 0) {
-												Score[template] += Ms;
-											}
-										}
-									} else {
-										Score[template] += MM;
-									}
-								} else {
-									Score[template] = score;
-									bestTemplates[0]++;
-									bestTemplates[*bestTemplates] = template;
-								}
-							}
-						} else {
-							n = getTemplatePtr(values, 0);
-							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								Score[values[l]] = kmersize * M;
-								bestTemplates[l] = template;
-							}
-							*bestTemplates = n;
-						}
-						HIT = 0;
-						gaps = 0;
-						Ms = 0;
-						MMs = 0;
-						Us = 0;
-						W1s = 0;
-						last = values;
-					}
-					++hitCounter;
-				} else {
-					++gaps;
-				}
-			}
-			j = qseq->N[i] + 1;
-		}
-		if(last) {
-			score = Ms * M + MMs * MM + Us * U + W1s * W1;
-			l = getTemplatePtr(last, 0) + 1;
-			while(--l) {
-				Score[getTemplatePtr(last, l)] += score;
-			}
-			/*
-			for(l = *last; l != 0; --l) {
-				Score[last[l]] += score;
-			}
-			*/
-			for(l = *bestTemplates; l != 0; --l) {
-				extendScore[(template = bestTemplates[l])] = 0;
-				if(Score[template] < 0) {
-					Score[template] = 0;
-				}
-			}
-		}
-		
-		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
-			bestHits = 0;
-			for(l = 1; l <= *bestTemplates; ++l) {
-				if(Score[(template = bestTemplates[l])] > bestScore) {
-					bestScore = Score[template];
-					bestHits = 1;
-					bestTemplates[bestHits] = template;
-				} else if(Score[template] == bestScore) {
-					++bestHits;
-					bestTemplates[bestHits] = template;
-				}
-				Score[template] = 0;
-				extendScore[template] = 0;
-			}
-			*bestTemplates = bestHits;
-		} else {
-			for(l = *bestTemplates; l != 0; --l) {
-				extendScore[(template = bestTemplates[l])] = 0;
-				Score[template] = 0;
-			}
-			*bestTemplates = 0;
-		}
-	}
-	qseq->N[0]--;
-	
-	/* search rc strand */
-	/* Make quick check of the qseq */
-	HIT = exhaustive;
-	j = 0;
-	qseq_r->N[0]++;
-	qseq_r->N[qseq_r->N[0]] = qseq_r->seqlen;
-	for(i = 1; i <= qseq_r->N[0] && !HIT; ++i) {
-		end = qseq_r->N[i] - kmersize + 1;
-		for(;j < end && !HIT; j += kmersize) {
-			if(hashMap_get(templates, getKmer(qseq_r->seq, j))) {
-				HIT = 1;
-			}
-		}
-		j = qseq_r->N[i] + 1;
-	}
-	
-	/* If deltamer qseq hits, then continue */
-	if(HIT) {
-		/* Scan the deltamer exhaustively, and collect scores in Score*/
-		hitCounter = 0;
-		*bestTemplates_r = 0;
-		last = 0;
-		gaps = 0;
-		HIT = 0;
-		Ms = 0;
-		MMs = 0;
-		Us = 0;
-		W1s = 0;
-		j = 0;
-		end = qseq_r->seqlen;
-		for(i = 1; i <= qseq_r->N[0]; ++i) {
-			end = qseq_r->N[i] - kmersize + 1;
-			for(;j < end; ++j) {
-				if((values = hashMap_get(templates, getKmer(qseq_r->seq, j)))) {
-					if(values == last) {
-						if(kmersize < gaps) {
-							Ms += kmersize;
-							gaps -= kmersize;
-							if(gaps) {
-								/* go for best scenario */
-								if(gaps == 1) {
-									MMs += 2;
-								} else {
-									gaps -= 2;
-									if((MM << 1) + gaps * M < 0) {
-										Ms += gaps;
-										MMs += 2;
-									}
-								}
-							} else {
-								++MMs;
-							}
-						} else if (gaps) {
-							--gaps;
-							++W1s;
-							Us += gaps;
-						} else {
-							++Ms;
-						}
-						HIT = j;
-						gaps = 0;
-					} else {
-						if(last) {
-							if(HIT) {
-								HIT += kmersize;
-							} else {
-								HIT = j + kmersize;
-							}
-							score = Ms * M + MMs * MM + Us * U + W1s * W1;
-							l = getTemplatePtr(last, 0) + 1;
-							while(--l) {
-								template = getTemplatePtr(last, l);
-								Score_r[template] += score;
-								extendScore[template] = HIT;
-							}
-							/*
-							for(l = *last; l != 0; --l) {
-								Score_r[(template = last[l])] += score;
-								extendScore[template] = HIT;
-							}
-							*/
-							score = kmersize * M;
-							MMs = MM << 1;
-							n = getTemplatePtr(values, 0);
-							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								if(j < extendScore[template]) {
-									if(extendScore[template] == HIT) {
-										Score_r[template] += M;
-									} else {
-										gaps = extendScore[template] - j - 1;
-										Score_r[template] += (W1 + gaps * U);
-									}
-								} else if(Score_r[template] != 0) {
-									Score_r[template] += score;
-									if((gaps = extendScore[template] - j)) {
-										if(gaps == 1) {
-											Score_r[template] += MMs;
-										} else {
-											gaps -= 2;
-											if((Ms = MMs + gaps * M) < 0) {
-												Score_r[template] += Ms;
-											}
-										}
-									} else {
-										Score_r[template] += MM;
-									}
-								} else {
-									Score_r[template] = score;
-									bestTemplates_r[0]++;
-									bestTemplates_r[*bestTemplates_r] = template;
-								}
-							}
-						} else {
-							n = getTemplatePtr(values, 0);
-							for(l = 1; l <= *values; ++l) {
-								template = getTemplatePtr(values, l);
-								Score_r[template] = kmersize * M;
-								bestTemplates_r[l] = template;
-							}
-							*bestTemplates_r = *values;
-						}
-						HIT = 0;
-						gaps = 0;
-						Ms = 0;
-						MMs = 0;
-						Us = 0;
-						W1s = 0;
-						last = values;
-					}
-					++hitCounter;
-				} else {
-					++gaps;
-				}
-			}
-			j = qseq_r->N[i] + 1;
-		}
-		if(last) {
-			score = Ms * M + MMs * MM + Us * U + W1s * W1;
-			l = getTemplatePtr(last, 0) + 1;
-			while(--l) {
-				Score_r[getTemplatePtr(last, l)] += score;
-			}
-		}
-		
-		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
-			bestHits = 0;
-			for(l = 1; l <= *bestTemplates_r; ++l) {
-				if(Score_r[(template = bestTemplates_r[l])] > bestScore_r) {
-					bestScore_r = Score_r[template];
-					bestHits = 1;
-					bestTemplates_r[bestHits] = template;
-				} else if(Score_r[template] == bestScore_r) {
-					++bestHits;
-					bestTemplates_r[bestHits] = template;
-				}
-				Score_r[template] = 0;
-				extendScore[template] = 0;
-			}
-			*bestTemplates_r = bestHits;
-		} else {
-			for(l = *bestTemplates_r; l != 0; --l) {
-				extendScore[(template = bestTemplates_r[l])] = 0;
-				Score_r[template] = 0;
-			}
-			*bestTemplates_r = 0;
-		}
-	}
-	qseq_r->N[0]--;
-	
-	*BestScore = bestScore;
-	*BestScore_r = bestScore_r;
-	
-}
-
 int get_kmers_for_pair(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, int *extendScore) {
 	
 	/* save_kmers find ankering k-mers the in query sequence,
 	   and is the time determining step */
-	int i, j, l, rc, end, HIT, gaps, score, Ms, MMs, Us, W1s, template;
+	int i, j, l, rc, end, HIT, gaps, score, Ms, MMs, Us, W1s, template, SU;
 	int hitCounter, bestSeqCount, *bests, *Scores;
 	unsigned *values, *last, n;
+	short unsigned *values_s;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
 	}
 	
 	*extendScore = 0;
@@ -4400,51 +4153,99 @@ int get_kmers_for_pair(int *bestTemplates, int *bestTemplates_r, int *Score, int
 									HIT = j + kmersize;
 								}
 								score = Ms * M + MMs * MM + Us * U + W1s * W1;
-								l = getTemplatePtr(last, 0) + 1;
-								while(--l) {
-									template = getTemplatePtr(last, l);
-									Scores[template] += score;
-									extendScore[template] = HIT;
-								}
-								
-								score = kmersize * M;
-								MMs = MM << 1;
-								n = getTemplatePtr(values, 0);
-								for(l = 1; l <= n; ++l) {
-									template = getTemplatePtr(values, l);
-									if(j < extendScore[template]) {
-										if(extendScore[template] == HIT) {
-											Scores[template] += M;
-										} else {
-											gaps = extendScore[template] - j - 1;
-											Scores[template] += (W1 + gaps * U);
-										}
-									} else if(Scores[template] != 0) {
-										Scores[template] += score;
-										if((gaps = extendScore[template] - j)) {
-											if(gaps == 1) {
-												Scores[template] += MMs;
+								if(SU) {
+									values_s = (short unsigned *) last;
+									l = (*values_s) + 1;
+									while(--l) {
+										Scores[(template = values_s[l])] += score;
+										extendScore[template] = HIT;
+									}
+									
+									score = kmersize * M;
+									MMs = MM << 1;
+									values_s = (short unsigned *) values;
+									n = *values_s;
+									for(l = 1; l <= n; ++l) {
+										if(j < extendScore[(template = values_s[l])]) {
+											if(extendScore[template] == HIT) {
+												Scores[template] += M;
 											} else {
-												gaps -= 2;
-												if((Ms = MMs + gaps * M) < 0) {
-													Scores[template] += Ms;
+												gaps = extendScore[template] - j - 1;
+												Scores[template] += (W1 + gaps * U);
+											}
+										} else if(Scores[template] != 0) {
+											Scores[template] += score;
+											if((gaps = extendScore[template] - j)) {
+												if(gaps == 1) {
+													Scores[template] += MMs;
+												} else {
+													gaps -= 2;
+													if((Ms = MMs + gaps * M) < 0) {
+														Scores[template] += Ms;
+													}
 												}
+											} else {
+												Scores[template] += MM;
 											}
 										} else {
-											Scores[template] += MM;
+											Scores[template] = score;
+											bests[0]++;
+											bests[*bests] = template;
 										}
-									} else {
-										Scores[template] = score;
-										bests[0]++;
-										bests[*bests] = template;
+									}
+								} else {
+									l = (*last) + 1;
+									while(--l) {
+										Scores[(template = last[l])] += score;
+										extendScore[template] = HIT;
+									}
+									
+									score = kmersize * M;
+									MMs = MM << 1;
+									n = *values;
+									for(l = 1; l <= n; ++l) {
+										if(j < extendScore[(template = values[l])]) {
+											if(extendScore[template] == HIT) {
+												Scores[template] += M;
+											} else {
+												gaps = extendScore[template] - j - 1;
+												Scores[template] += (W1 + gaps * U);
+											}
+										} else if(Scores[template] != 0) {
+											Scores[template] += score;
+											if((gaps = extendScore[template] - j)) {
+												if(gaps == 1) {
+													Scores[template] += MMs;
+												} else {
+													gaps -= 2;
+													if((Ms = MMs + gaps * M) < 0) {
+														Scores[template] += Ms;
+													}
+												}
+											} else {
+												Scores[template] += MM;
+											}
+										} else {
+											Scores[template] = score;
+											bests[0]++;
+											bests[*bests] = template;
+										}
 									}
 								}
-								
-							} else {
-								n = getTemplatePtr(values, 0);
+							} else if(SU) {
+								values_s = (short unsigned *) values;
+								n = *values_s;
+								Ms = kmersize * M;
 								for(l = 1; l <= n; ++l) {
-									template = getTemplatePtr(values, l);
-									Scores[template] = kmersize * M;
+									Scores[(template = values_s[l])] = Ms;
+									bests[l] = template;
+								}
+								*bests = n;
+							} else {
+								n = *values;
+								Ms = kmersize * M;
+								for(l = 1; l <= n; ++l) {
+									Scores[(template = values[l])] = Ms;
 									bests[l] = template;
 								}
 								*bests = n;
@@ -4465,13 +4266,21 @@ int get_kmers_for_pair(int *bestTemplates, int *bestTemplates_r, int *Score, int
 				}
 				j = qseq->N[i] + 1;
 			}
+			
 			if(last) {
 				score = Ms * M + MMs * MM + Us * U + W1s * W1;
-				l = getTemplatePtr(last, 0) + 1;
-				while(--l) {
-					Scores[getTemplatePtr(last, l)] += score;
+				if(SU) {
+					values_s = (short unsigned *) last;
+					l = (*values_s) + 1;
+					while(--l) {
+						Scores[values_s[l]] += score;
+					}
+				} else {
+					l = (*last) + 1;
+					while(--l) {
+						Scores[last[l]] += score;
+					}
 				}
-				
 				for(l = *bests; l != 0; --l) {
 					extendScore[(template = bests[l])] = 0;
 					if(Scores[template] < 0) {
@@ -4479,6 +4288,139 @@ int get_kmers_for_pair(int *bestTemplates, int *bestTemplates_r, int *Score, int
 					}
 				}
 			}
+			
+			if(bestSeqCount < hitCounter) {
+				bestSeqCount = hitCounter;
+			}
+		}
+		qseq->N[0]--;
+	}
+	
+	return bestSeqCount;
+}
+
+int get_kmers_for_pair_count(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, int *extendScore) {
+	
+	/* save_kmers find ankering k-mers the in query sequence,
+	   and is the time determining step */
+	int i, j, l, rc, end, HIT, template, hitCounter, bestSeqCount, reps, SU;
+	int *bests, *Scores;
+	unsigned *values, *last, n;
+	short unsigned *values_s;
+	
+	if(qseq->seqlen < kmersize) {
+		return 0;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
+	}
+	
+	*extendScore = 0;
+	*bestTemplates = 0;
+	*bestTemplates_r = 0;
+	bests = bestTemplates;
+	Scores = Score;
+	bestSeqCount = 0;
+	for(rc = 0; rc < 2; ++rc) {
+		if(rc) {
+			bests = bestTemplates_r;
+			Scores = Score_r;
+			comp_rc(qseq);
+		}
+		/* Make quick check of the qseq */
+		HIT = exhaustive;
+		hitCounter = 0;
+		j = 0;
+		qseq->N[0]++;
+		qseq->N[qseq->N[0]] = qseq->seqlen;
+		for(i = 1; i <= qseq->N[0] && !HIT; ++i) {
+			end = qseq->N[i] - kmersize + 1;
+			for(;j < end && !HIT; j += kmersize) {
+				if(hashMap_get(templates, getKmer(qseq->seq, j))) {
+					HIT = 1;
+				}
+			}
+			j = qseq->N[i] + 1;
+		}
+		
+		/* If deltamer qseq hits, then continue */
+		if(HIT) {
+			/* Scan the deltamer exhaustively, and collect scores in Score*/
+			last = 0;
+			reps = 0;
+			j = 0;
+			for(i = 1; i <= qseq->N[0]; ++i) {
+				end = qseq->N[i] - kmersize + 1;
+				for(;j < end; ++j) {
+					if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
+						if(values == last) {
+							++reps;
+						} else {
+							if(last) {
+								if(SU) {
+									values_s = (short unsigned *) last;
+									n = *values_s;
+									for(l = 1; l <= n; ++l) {
+										if(Scores[(template = values_s[l])]) {
+											Scores[template] += reps;
+										} else {
+											Scores[template] = reps;
+											bests[0]++;
+											bests[*bests] = template;
+										}
+									}
+								} else {
+									n = *last;
+									for(l = 1; l <= n; ++l) {
+										if(Scores[(template = last[l])]) {
+											Scores[template] += reps;
+										} else {
+											Scores[template] = reps;
+											bests[0]++;
+											bests[*bests] = template;
+										}
+									}
+								}
+								hitCounter += reps;
+							}
+							reps = 1;
+							last = values;
+						}
+					}
+				}
+				j = qseq->N[i] + 1;
+			}
+			
+			if(last) {
+				if(SU) {
+					values_s = (short unsigned *) last;
+					n = *values_s;
+					for(l = 1; l <= n; ++l) {
+						if(Scores[(template = values_s[l])]) {
+							Scores[template] += reps;
+						} else {
+							Scores[template] = reps;
+							bests[0]++;
+							bests[*bests] = template;
+						}
+					}
+				} else {
+					n = *last;
+					for(l = 1; l <= n; ++l) {
+						if(Scores[(template = last[l])]) {
+							Scores[template] += reps;
+						} else {
+							Scores[template] = reps;
+							bests[0]++;
+							bests[*bests] = template;
+						}
+					}
+				}
+				hitCounter += reps;
+			}
+			
+			reps = 0;
 			if(bestSeqCount < hitCounter) {
 				bestSeqCount = hitCounter;
 			}
@@ -4491,13 +4433,18 @@ int get_kmers_for_pair(int *bestTemplates, int *bestTemplates_r, int *Score, int
 
 int get_kmers_for_pair_Sparse(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, int *extendScore) {
 	
-	int i, j, k, l, n, end, rc, prefix_len, template, hitCounter, n_kmers;
-	int HIT, gaps, Ms, MMs, Us, W1s, score, *bests, *Scores;
+	int i, j, k, l, n, end, rc, prefix_len, template, hitCounter, HIT, SU;
+	int n_kmers, gaps, Ms, MMs, Us, W1s, score, reps, *bests, *Scores;
 	unsigned *values, *last;
+	short unsigned *values_s;
 	long unsigned prefix;
 	
 	if(qseq->seqlen < kmersize) {
 		return 0;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
 	}
 	
 	if(*extendScore) {
@@ -4529,14 +4476,25 @@ int get_kmers_for_pair_Sparse(int *bestTemplates, int *bestTemplates_r, int *Sco
 				while(j < end) {
 					if(getSmer(qseq->seq, j) == prefix) {
 						if((values = hashMap_get(templates, getKmer(qseq->seq, j + prefix_len)))) {
-							n = getTemplatePtr(values, 0);
-							for(k = 1; k <= n; ++k) {
-								template = getTemplatePtr(values, k);
-								if(Scores[template] == 0) {
-									(*bests)++;
-									bests[*bests] = template;
+							if(SU) {
+								values_s = (short unsigned *) values;
+								n = *values_s;
+								for(k = 1; k <= n; ++k) {
+									if(Scores[(template = values_s[k])] == 0) {
+										(*bests)++;
+										bests[*bests] = template;
+									}
+									Scores[template]++;
 								}
-								Scores[template]++;
+							} else {
+								n = *values;
+								for(k = 1; k <= n; ++k) {
+									if(Scores[(template = values[k])] == 0) {
+										(*bests)++;
+										bests[*bests] = template;
+									}
+									Scores[template]++;
+								}
 							}
 							++hitCounter;
 						}
@@ -4551,6 +4509,95 @@ int get_kmers_for_pair_Sparse(int *bestTemplates, int *bestTemplates_r, int *Sco
 		if(hitCounter) {
 			hitCounter *= (((qseq->seqlen - kmersize + 1) << 1) / n_kmers);
 		}
+	} else if(countK) {
+		HIT = exhaustive;
+		j = 0;
+		qseq->N[0]++;
+		qseq->N[qseq->N[0]] = qseq->seqlen;
+		for(i = 1; i <= qseq->N[0] && !HIT; ++i) {
+			end = qseq->N[i] - kmersize + 1;
+			for(;j < end && !HIT; j += kmersize) {
+				if(hashMap_get(templates, getKmer(qseq->seq, j))) {
+					HIT = 1;
+				}
+			}
+			j = qseq->N[i] + 1;
+		}
+		
+		if(HIT) {
+			last = 0;
+			reps = 0;
+			j = 0;
+			for(i = 1; i <= qseq->N[0]; ++i) {
+				end = qseq->N[i] - kmersize + 1;
+				for(;j < end; ++j) {
+					if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
+						if(values == last) {
+							++reps;
+						} else {
+							if(last) {
+								if(SU) {
+									values_s = (short unsigned *) values;
+									n = *values_s;
+									for(l = 1; l <= n; ++l) {
+										if(Scores[(template = values_s[l])]) {
+											Scores[template] += reps;
+										} else {
+											Scores[template] = reps;
+											bests[0]++;
+											bests[*bests] = template;
+										}
+									}
+								} else {
+									n = *values;
+									for(l = 1; l <= n; ++l) {
+										if(Scores[(template = last[l])]) {
+											Scores[template] += reps;
+										} else {
+											Scores[template] = reps;
+											bests[0]++;
+											bests[*bests] = template;
+										}
+									}
+								}
+								hitCounter += reps;
+							}
+							reps = 1;
+							last = values;
+						}
+					}
+				}
+				j = qseq->N[i] + 1;
+			}
+			if(last) {
+				if(SU) {
+					values_s = (short unsigned *) last;
+					n = *values_s;
+					for(l = 1; l <= n; ++l) {
+						if(Scores[(template = values_s[l])]) {
+							Scores[template] += reps;
+						} else {
+							Scores[template] = reps;
+							bests[0]++;
+							bests[*bests] = template;
+						}
+					}
+				} else {
+					n = *last;
+					for(l = 1; l <= n; ++l) {
+						if(Scores[(template = last[l])]) {
+							Scores[template] += reps;
+						} else {
+							Scores[template] = reps;
+							bests[0]++;
+							bests[*bests] = template;
+						}
+					}
+				}
+				hitCounter += reps;
+			}
+		}
+		qseq->N[0]--;
 	} else {
 		HIT = exhaustive;
 		j = 0;
@@ -4614,50 +4661,100 @@ int get_kmers_for_pair_Sparse(int *bestTemplates, int *bestTemplates_r, int *Sco
 									HIT = j + kmersize;
 								}
 								score = Ms * M + MMs * MM + Us * U + W1s * W1;
-								l = getTemplatePtr(last, 0) + 1;
-								while(--l) {
-									template = getTemplatePtr(last, l);
-									Scores[template] += score;
-									extendScore[template] = HIT;
-								}
-								
-								score = kmersize * M;
-								MMs = MM << 1;
-								n = getTemplatePtr(values, 0);
-								for(l = 1; l <= n; ++l) {
-									template = getTemplatePtr(values, l);
-									if(j < extendScore[template]) {
-										if(extendScore[template] == HIT) {
-											Scores[template] += M;
-										} else {
-											gaps = extendScore[template] - j - 1;
-											Scores[template] += (W1 + gaps * U);
-										}
-									} else if(Scores[template] != 0) {
-										Scores[template] += score;
-										if((gaps = extendScore[template] - j)) {
-											if(gaps == 1) {
-												Scores[template] += MMs;
-											} else {
-												gaps -= 2;
-												if((Ms = MMs + gaps * M) < 0) {
-													Scores[template] += Ms;
-												}
-											}
-										} else {
-											Scores[template] += MM;
-										}
-									} else {
-										Scores[template] = score;
-										bests[0]++;
-										bests[*bests] = template;
+								if(SU) {
+									values_s = (short unsigned *) last;
+									l = (*values_s) + 1;
+									while(--l) {
+										Scores[(template = values_s[l])] += score;
+										extendScore[template] = HIT;
+									}
+								} else {
+									l = (*last) + 1;
+									while(--l) {
+										Scores[(template = last[l])] += score;
+										extendScore[template] = HIT;
 									}
 								}
-							} else {
-								n = getTemplatePtr(values, 0);
+								score = kmersize * M;
+								MMs = MM << 1;
+								if(SU) {
+									values_s = (short unsigned *) values;
+									n = *values_s;
+									for(l = 1; l <= n; ++l) {
+										template = values_s[l];
+										if(j < extendScore[template]) {
+											if(extendScore[template] == HIT) {
+												Scores[template] += M;
+											} else {
+												gaps = extendScore[template] - j - 1;
+												Scores[template] += (W1 + gaps * U);
+											}
+										} else if(Scores[template] != 0) {
+											Scores[template] += score;
+											if((gaps = extendScore[template] - j)) {
+												if(gaps == 1) {
+													Scores[template] += MMs;
+												} else {
+													gaps -= 2;
+													if((Ms = MMs + gaps * M) < 0) {
+														Scores[template] += Ms;
+													}
+												}
+											} else {
+												Scores[template] += MM;
+											}
+										} else {
+											Scores[template] = score;
+											bests[0]++;
+											bests[*bests] = template;
+										}
+									}
+								} else {
+									n = *values;
+									for(l = 1; l <= n; ++l) {
+										template = values[l];
+										if(j < extendScore[template]) {
+											if(extendScore[template] == HIT) {
+												Scores[template] += M;
+											} else {
+												gaps = extendScore[template] - j - 1;
+												Scores[template] += (W1 + gaps * U);
+											}
+										} else if(Scores[template] != 0) {
+											Scores[template] += score;
+											if((gaps = extendScore[template] - j)) {
+												if(gaps == 1) {
+													Scores[template] += MMs;
+												} else {
+													gaps -= 2;
+													if((Ms = MMs + gaps * M) < 0) {
+														Scores[template] += Ms;
+													}
+												}
+											} else {
+												Scores[template] += MM;
+											}
+										} else {
+											Scores[template] = score;
+											bests[0]++;
+											bests[*bests] = template;
+										}
+									}
+								}
+							} else if(SU) {
+								values_s = (short unsigned *) values;
+								n = *values_s;
+								Ms = kmersize * M;
 								for(l = 1; l <= n; ++l) {
-									template = getTemplatePtr(values, l);
-									Scores[template] = kmersize * M;
+									Scores[(template = values_s[l])] = Ms;
+									bests[l] = template;
+								}
+								*bests = n;
+							} else {
+								n = *values;
+								Ms = kmersize * M;
+								for(l = 1; l <= n; ++l) {
+									Scores[(template = values[l])] = Ms;
 									bests[l] = template;
 								}
 								*bests = n;
@@ -4679,9 +4776,17 @@ int get_kmers_for_pair_Sparse(int *bestTemplates, int *bestTemplates_r, int *Sco
 			}
 			if(last) {
 				score = Ms * M + MMs * MM + Us * U + W1s * W1;
-				l = getTemplatePtr(last, 0) + 1;
-				while(--l) {
-					Scores[getTemplatePtr(last, l)] += score;
+				if(SU) {
+					values_s = (short unsigned *) last;
+					l = (*values_s) + 1;
+					while(--l) {
+						Scores[values_s[l]] += score;
+					}
+				} else {
+					l = (*last) + 1;
+					while(--l) {
+						Scores[last[l]] += score;
+					}
 				}
 				for(l = *bests; l != 0; --l) {
 					extendScore[(template = bests[l])] = 0;
@@ -5008,19 +5113,23 @@ int getR_Best(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r
 		}
 	}
 	
-	
 	return bestScore_r;
 }
 
 void save_kmers_Sparse(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
 	
-	int i, j, k, l, n, end, rc, prefix_len, template, hitCounter, n_kmers;
-	int HIT, gaps, Ms, MMs, Us, W1s, score, bestScore, bestHits;
+	int i, j, k, l, n, end, rc, prefix_len, template, hitCounter, HIT, SU;
+	int n_kmers, gaps, Ms, MMs, Us, W1s, score, bestScore, bestHits, reps;
 	unsigned *values, *last;
+	short unsigned *values_s;
 	long unsigned prefix;
 	
 	if(qseq->seqlen < kmersize) {
 		return;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
 	}
 	
 	*bestTemplates = 0;
@@ -5043,14 +5152,25 @@ void save_kmers_Sparse(int *bestTemplates, int *bestTemplates_r, int *Score, int
 				while(j < end) {
 					if(getSmer(qseq->seq, j) == prefix) {
 						if((values = hashMap_get(templates, getKmer(qseq->seq, j + prefix_len)))) {
-							n = getTemplatePtr(values, 0);
-							for(k = 1; k <= n; ++k) {
-								template = getTemplatePtr(values, k);
-								if(Score[template] == 0) {
-									(*bestTemplates)++;
-									bestTemplates[*bestTemplates] = template;
+							if(SU) {
+								values_s = (short unsigned *) values;
+								n = *values_s;
+								for(k = 1; k <= n; ++k) {
+									if(Score[(template = values_s[k])] == 0) {
+										(*bestTemplates)++;
+										bestTemplates[*bestTemplates] = template;
+									}
+									Score[template]++;
 								}
-								Score[template]++;
+							} else {
+								n = *values;
+								for(k = 1; k <= n; ++k) {
+									if(Score[(template = values[k])] == 0) {
+										(*bestTemplates)++;
+										bestTemplates[*bestTemplates] = template;
+									}
+									Score[template]++;
+								}
 							}
 							++hitCounter;
 						}
@@ -5103,126 +5223,258 @@ void save_kmers_Sparse(int *bestTemplates, int *bestTemplates_r, int *Score, int
 		}
 		
 		if(HIT) {
-			last = 0;
-			gaps = 0;
-			HIT = 0;
-			Ms = 0;
-			MMs = 0;
-			Us = 0;
-			W1s = 0;
-			j = 0;
-			for(i = 1; i <= qseq->N[0]; ++i) {
-				end = qseq->N[i] - kmersize + 1;
-				for(;j < end; ++j) {
-					if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
-						if(values == last) {
-							if(kmersize < gaps) {
-								Ms += kmersize;
-								gaps -= kmersize;
-								if(gaps) {
-									/* go for best scenario */
-									if(gaps == 1) {
-										MMs += 2;
-									} else {
-										gaps -= 2;
-										if((MM << 1) + gaps * M < 0) {
-											Ms += gaps;
-											MMs += 2;
-										}
-									}
-								} else {
-									++MMs;
-								}
-							} else if (gaps) {
-								--gaps;
-								++W1s;
-								Us += gaps;
+			
+			if(countK) {
+				last = 0;
+				reps = 0;
+				j = 0;
+				for(i = 1; i <= qseq->N[0]; ++i) {
+					end = qseq->N[i] - kmersize + 1;
+					for(;j < end; ++j) {
+						if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
+							if(values == last) {
+								++reps;
 							} else {
-								++Ms;
-							}
-							HIT = j;
-							gaps = 0;
-						} else {
-							if(last) {
-								if(HIT) {
-									HIT += kmersize;
-								} else {
-									HIT = j + kmersize;
-								}
-								score = Ms * M + MMs * MM + Us * U + W1s * W1;
-								l = getTemplatePtr(last, 0) + 1;
-								while(--l) {
-									template = getTemplatePtr(last, l);
-									Score[template] += score;
-									extendScore[template] = HIT;
-								}
-								
-								score = kmersize * M;
-								MMs = MM << 1;
-								n = getTemplatePtr(values, 0);
-								for(l = 1; l <= n; ++l) {
-									template = getTemplatePtr(values, l);
-									if(j < extendScore[template]) {
-										if(extendScore[template] == HIT) {
-											Score[template] += M;
-										} else {
-											gaps = extendScore[template] - j - 1;
-											Score[template] += (W1 + gaps * U);
-										}
-									} else if(Score[template] != 0) {
-										Score[template] += score;
-										if((gaps = extendScore[template] - j)) {
-											if(gaps == 1) {
-												Score[template] += MMs;
+								if(last) {
+									if(SU) {
+										values_s = (short unsigned *) values;
+										n = *values_s;
+										for(l = 1; l <= n; ++l) {
+											if(Score[(template = values_s[l])]) {
+												Score[template] += reps;
 											} else {
-												gaps -= 2;
-												if((Ms = MMs + gaps * M) < 0) {
-													Score[template] += Ms;
-												}
+												Score[template] = reps;
+												bestTemplates[0]++;
+												bestTemplates[*bestTemplates] = template;
 											}
-										} else {
-											Score[template] += MM;
 										}
 									} else {
-										Score[template] = score;
-										bestTemplates[0]++;
-										bestTemplates[*bestTemplates] = template;
+										n = *values;
+										for(l = 1; l <= n; ++l) {
+											if(Score[(template = last[l])]) {
+												Score[template] += reps;
+											} else {
+												Score[template] = reps;
+												bestTemplates[0]++;
+												bestTemplates[*bestTemplates] = template;
+											}
+										}
 									}
+									hitCounter += reps;
 								}
-							} else {
-								n = getTemplatePtr(values, 0);
-								for(l = 1; l <= n; ++l) {
-									template = getTemplatePtr(values, l);
-									Score[template] = kmersize * M;
-									bestTemplates[l] = template;
-								}
-								*bestTemplates = n;
+								reps = 1;
+								last = values;
 							}
-							HIT = 0;
-							gaps = 0;
-							Ms = 0;
-							MMs = 0;
-							Us = 0;
-							W1s = 0;
-							last = values;
 						}
-						++hitCounter;
-					} else {
-						++gaps;
 					}
+					j = qseq->N[i] + 1;
 				}
-				j = qseq->N[i] + 1;
-			}
-			if(last) {
-				score = Ms * M + MMs * MM + Us * U + W1s * W1;
-				l = getTemplatePtr(last, 0) + 1;
-				while(--l) {
-					Score[getTemplatePtr(last, l)] += score;
+				if(last) {
+					if(SU) {
+						values_s = (short unsigned *) last;
+						n = *values_s;
+						for(l = 1; l <= n; ++l) {
+							if(Score[(template = values_s[l])]) {
+								Score[template] += reps;
+							} else {
+								Score[template] = reps;
+								bestTemplates[0]++;
+								bestTemplates[*bestTemplates] = template;
+							}
+						}
+					} else {
+						n = *last;
+						for(l = 1; l <= n; ++l) {
+							if(Score[(template = last[l])]) {
+								Score[template] += reps;
+							} else {
+								Score[template] = reps;
+								bestTemplates[0]++;
+								bestTemplates[*bestTemplates] = template;
+							}
+						}
+					}
+					hitCounter += reps;
 				}
-				for(l = *bestTemplates; l != 0; --l) {
-					extendScore[(template = bestTemplates[l])] = 0;
-					if(Score[template] < 0) {
-						Score[template] = 0;
+			} else {
+				last = 0;
+				gaps = 0;
+				HIT = 0;
+				Ms = 0;
+				MMs = 0;
+				Us = 0;
+				W1s = 0;
+				j = 0;
+				for(i = 1; i <= qseq->N[0]; ++i) {
+					end = qseq->N[i] - kmersize + 1;
+					for(;j < end; ++j) {
+						if((values = hashMap_get(templates, getKmer(qseq->seq, j)))) {
+							if(values == last) {
+								if(kmersize < gaps) {
+									Ms += kmersize;
+									gaps -= kmersize;
+									if(gaps) {
+										/* go for best scenario */
+										if(gaps == 1) {
+											MMs += 2;
+										} else {
+											gaps -= 2;
+											if((MM << 1) + gaps * M < 0) {
+												Ms += gaps;
+												MMs += 2;
+											}
+										}
+									} else {
+										++MMs;
+									}
+								} else if (gaps) {
+									--gaps;
+									++W1s;
+									Us += gaps;
+								} else {
+									++Ms;
+								}
+								HIT = j;
+								gaps = 0;
+							} else {
+								if(last) {
+									if(HIT) {
+										HIT += kmersize;
+									} else {
+										HIT = j + kmersize;
+									}
+									score = Ms * M + MMs * MM + Us * U + W1s * W1;
+									if(SU) {
+										values_s = (short unsigned *) last;
+										l = (*values_s) + 1;
+										while(--l) {
+											Score[(template = values_s[l])] += score;
+											extendScore[template] = HIT;
+										}
+									} else {
+										l = (*last) + 1;
+										while(--l) {
+											Score[(template = last[l])] += score;
+											extendScore[template] = HIT;
+										}
+									}
+									
+									score = kmersize * M;
+									MMs = MM << 1;
+									if(SU) {
+										values_s = (short unsigned *) values;
+										n = *values_s;
+										for(l = 1; l <= n; ++l) {
+											if(j < extendScore[(template = values_s[l])]) {
+												if(extendScore[template] == HIT) {
+													Score[template] += M;
+												} else {
+													gaps = extendScore[template] - j - 1;
+													Score[template] += (W1 + gaps * U);
+												}
+											} else if(Score[template] != 0) {
+												Score[template] += score;
+												if((gaps = extendScore[template] - j)) {
+													if(gaps == 1) {
+														Score[template] += MMs;
+													} else {
+														gaps -= 2;
+														if((Ms = MMs + gaps * M) < 0) {
+															Score[template] += Ms;
+														}
+													}
+												} else {
+													Score[template] += MM;
+												}
+											} else {
+												Score[template] = score;
+												bestTemplates[0]++;
+												bestTemplates[*bestTemplates] = template;
+											}
+										}
+									} else {
+										n = *values;
+										for(l = 1; l <= n; ++l) {
+											if(j < extendScore[(template = values[l])]) {
+												if(extendScore[template] == HIT) {
+													Score[template] += M;
+												} else {
+													gaps = extendScore[template] - j - 1;
+													Score[template] += (W1 + gaps * U);
+												}
+											} else if(Score[template] != 0) {
+												Score[template] += score;
+												if((gaps = extendScore[template] - j)) {
+													if(gaps == 1) {
+														Score[template] += MMs;
+													} else {
+														gaps -= 2;
+														if((Ms = MMs + gaps * M) < 0) {
+															Score[template] += Ms;
+														}
+													}
+												} else {
+													Score[template] += MM;
+												}
+											} else {
+												Score[template] = score;
+												bestTemplates[0]++;
+												bestTemplates[*bestTemplates] = template;
+											}
+										}
+									}
+								} else if(SU) {
+									values_s = (short unsigned *) values;
+									n = *values_s;
+									Ms = kmersize * M;
+									for(l = 1; l <= n; ++l) {
+										Score[(template = values_s[l])] = Ms;
+										bestTemplates[l] = template;
+									}
+									*bestTemplates = n;
+								} else {
+									n = *values;
+									Ms = kmersize * M;
+									for(l = 1; l <= n; ++l) {
+										Score[(template = values[l])] = Ms;
+										bestTemplates[l] = template;
+									}
+									*bestTemplates = n;
+								}
+								HIT = 0;
+								gaps = 0;
+								Ms = 0;
+								MMs = 0;
+								Us = 0;
+								W1s = 0;
+								last = values;
+							}
+							++hitCounter;
+						} else {
+							++gaps;
+						}
+					}
+					j = qseq->N[i] + 1;
+				}
+				if(last) {
+					score = Ms * M + MMs * MM + Us * U + W1s * W1;
+					if(SU) {
+						values_s = (short unsigned *) last;
+						l = (*values_s) + 1;
+						while(--l) {
+							Score[values_s[l]] += score;
+						}
+					} else {
+						l = (*last) + 1;
+						while(--l) {
+							Score[last[l]] += score;
+						}
+					}
+					for(l = *bestTemplates; l != 0; --l) {
+						extendScore[(template = bestTemplates[l])] = 0;
+						if(Score[template] < 0) {
+							Score[template] = 0;
+						}
 					}
 				}
 			}
@@ -5268,10 +5520,15 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 	
 	int i, j, l, end, HIT, gaps, score, Ms, MMs, Us, W1s, template;
 	int bestHits, hitCounter, bestScore, bestScore_r;
-	unsigned *values, *last, n;
+	unsigned *values, *last, n, SU;
+	short unsigned *values_s;
 	
 	if(qseq->seqlen < kmersize) {
 		return;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
 	}
 	
 	bestScore = 0;
@@ -5349,50 +5606,100 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 								HIT = j + kmersize;
 							}
 							score = Ms * M + MMs * MM + Us * U + W1s * W1;
-							l = getTemplatePtr(last, 0) + 1;
-							while(--l) {
-								template = getTemplatePtr(last, l);
-								Score[template] += score;
-								extendScore[template] = HIT;
-							}
 							
-							score = kmersize * M;
-							MMs = MM << 1;
-							n = getTemplatePtr(values, 0);
-							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								if(j < extendScore[template]) {
-									if(extendScore[template] == HIT) {
-										Score[template] += M;
-									} else {
-										gaps = extendScore[template] - j - 1;
-										Score[template] += (W1 + gaps * U);
-									}
-								} else if(Score[template] != 0) {
-									Score[template] += score;
-									if((gaps = extendScore[template] - j)) {
-										if(gaps == 1) {
-											Score[template] += MMs;
+							if(SU) {
+								values_s = (short unsigned *) last;
+								l = (*values_s) + 1;
+								while(--l) {
+									Score[(template = values_s[l])] += score;
+									extendScore[template] = HIT;
+								}
+								
+								score = kmersize * M;
+								MMs = MM << 1;
+								values_s = (short unsigned *) values;
+								n = *values_s;
+								for(l = 1; l <= n; ++l) {
+									if(j < extendScore[(template = values_s[l])]) {
+										if(extendScore[template] == HIT) {
+											Score[template] += M;
 										} else {
-											gaps -= 2;
-											if((Ms = MMs + gaps * M) < 0) {
-												Score[template] += Ms;
+											gaps = extendScore[template] - j - 1;
+											Score[template] += (W1 + gaps * U);
+										}
+									} else if(Score[template] != 0) {
+										Score[template] += score;
+										if((gaps = extendScore[template] - j)) {
+											if(gaps == 1) {
+												Score[template] += MMs;
+											} else {
+												gaps -= 2;
+												if((Ms = MMs + gaps * M) < 0) {
+													Score[template] += Ms;
+												}
 											}
+										} else {
+											Score[template] += MM;
 										}
 									} else {
-										Score[template] += MM;
+										Score[template] = score;
+										bestTemplates[0]++;
+										bestTemplates[*bestTemplates] = template;
 									}
-								} else {
-									Score[template] = score;
-									bestTemplates[0]++;
-									bestTemplates[*bestTemplates] = template;
+								}
+							} else {
+								l = (*last) + 1;
+								while(--l) {
+									Score[(template = last[l])] += score;
+									extendScore[template] = HIT;
+								}
+								
+								score = kmersize * M;
+								MMs = MM << 1;
+								n = *values;
+								for(l = 1; l <= n; ++l) {
+									if(j < extendScore[(template = values[l])]) {
+										if(extendScore[template] == HIT) {
+											Score[template] += M;
+										} else {
+											gaps = extendScore[template] - j - 1;
+											Score[template] += (W1 + gaps * U);
+										}
+									} else if(Score[template] != 0) {
+										Score[template] += score;
+										if((gaps = extendScore[template] - j)) {
+											if(gaps == 1) {
+												Score[template] += MMs;
+											} else {
+												gaps -= 2;
+												if((Ms = MMs + gaps * M) < 0) {
+													Score[template] += Ms;
+												}
+											}
+										} else {
+											Score[template] += MM;
+										}
+									} else {
+										Score[template] = score;
+										bestTemplates[0]++;
+										bestTemplates[*bestTemplates] = template;
+									}
 								}
 							}
-						} else {
-							n = getTemplatePtr(values, 0);
+						} else if(SU) {
+							values_s = (short unsigned *) values;
+							n = *values_s;
+							Ms = kmersize * M;
 							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								Score[template] = kmersize * M;
+								Score[(template = values_s[l])] = Ms;
+								bestTemplates[l] = template;
+							}
+							*bestTemplates = n;
+						} else {
+							n = *values;
+							Ms = kmersize * M;
+							for(l = 1; l <= n; ++l) {
+								Score[(template = values[l])] = Ms;
 								bestTemplates[l] = template;
 							}
 							*bestTemplates = n;
@@ -5414,9 +5721,17 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 		}
 		if(last) {
 			score = Ms * M + MMs * MM + Us * U + W1s * W1;
-			l = getTemplatePtr(last, 0) + 1;
-			while(--l) {
-				Score[getTemplatePtr(last, l)] += score;
+			if(SU) {
+				values_s = (short unsigned *) last;
+				l = (*values_s) + 1;
+				while(--l) {
+					Score[values_s[l]] += score;
+				}
+			} else {
+				l = (*last) + 1;
+				while(--l) {
+					Score[last[l]] += score;
+				}
 			}
 			for(l = *bestTemplates; l != 0; --l) {
 				extendScore[(template = bestTemplates[l])] = 0;
@@ -5521,50 +5836,99 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 								HIT = j + kmersize;
 							}
 							score = Ms * M + MMs * MM + Us * U + W1s * W1;
-							l = getTemplatePtr(last, 0) + 1;
-							while(--l) {
-								template = getTemplatePtr(last, l);
-								Score_r[template] += score;
-								extendScore[template] = HIT;
-							}
-							
-							score = kmersize * M;
-							MMs = MM << 1;
-							n = getTemplatePtr(values, 0);
-							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								if(j < extendScore[template]) {
-									if(extendScore[template] == HIT) {
-										Score_r[template] += M;
-									} else {
-										gaps = extendScore[template] - j - 1;
-										Score_r[template] += (W1 + gaps * U);
-									}
-								} else if(Score_r[template] != 0) {
-									Score_r[template] += score;
-									if((gaps = extendScore[template] - j)) {
-										if(gaps == 1) {
-											Score_r[template] += MMs;
+							if(SU) {
+								values_s = (short unsigned *) last;
+								l = (*values_s) + 1;
+								while(--l) {
+									Score_r[(template = values_s[l])] += score;
+									extendScore[template] = HIT;
+								}
+								
+								score = kmersize * M;
+								MMs = MM << 1;
+								values_s = (short unsigned *) values;
+								n = *values_s;
+								for(l = 1; l <= n; ++l) {
+									if(j < extendScore[(template = values_s[l])]) {
+										if(extendScore[template] == HIT) {
+											Score_r[template] += M;
 										} else {
-											gaps -= 2;
-											if((Ms = MMs + gaps * M) < 0) {
-												Score_r[template] += Ms;
+											gaps = extendScore[template] - j - 1;
+											Score_r[template] += (W1 + gaps * U);
+										}
+									} else if(Score_r[template] != 0) {
+										Score_r[template] += score;
+										if((gaps = extendScore[template] - j)) {
+											if(gaps == 1) {
+												Score_r[template] += MMs;
+											} else {
+												gaps -= 2;
+												if((Ms = MMs + gaps * M) < 0) {
+													Score_r[template] += Ms;
+												}
 											}
+										} else {
+											Score_r[template] += MM;
 										}
 									} else {
-										Score_r[template] += MM;
+										Score_r[template] = score;
+										bestTemplates_r[0]++;
+										bestTemplates_r[*bestTemplates_r] = template;
 									}
-								} else {
-									Score_r[template] = score;
-									bestTemplates_r[0]++;
-									bestTemplates_r[*bestTemplates_r] = template;
+								}
+							} else {
+								l = (*last) + 1;
+								while(--l) {
+									Score_r[(template = last[l])] += score;
+									extendScore[template] = HIT;
+								}
+								
+								score = kmersize * M;
+								MMs = MM << 1;
+								n = *values;
+								for(l = 1; l <= n; ++l) {
+									if(j < extendScore[(template = values[l])]) {
+										if(extendScore[template] == HIT) {
+											Score_r[template] += M;
+										} else {
+											gaps = extendScore[template] - j - 1;
+											Score_r[template] += (W1 + gaps * U);
+										}
+									} else if(Score_r[template] != 0) {
+										Score_r[template] += score;
+										if((gaps = extendScore[template] - j)) {
+											if(gaps == 1) {
+												Score_r[template] += MMs;
+											} else {
+												gaps -= 2;
+												if((Ms = MMs + gaps * M) < 0) {
+													Score_r[template] += Ms;
+												}
+											}
+										} else {
+											Score_r[template] += MM;
+										}
+									} else {
+										Score_r[template] = score;
+										bestTemplates_r[0]++;
+										bestTemplates_r[*bestTemplates_r] = template;
+									}
 								}
 							}
-						} else {
-							n = getTemplatePtr(values, 0);
+						} else if(SU) {
+							values_s = (short unsigned *) values;
+							n = *values_s;
+							Ms = kmersize * M;
 							for(l = 1; l <= n; ++l) {
-								template = getTemplatePtr(values, l);
-								Score_r[template] = kmersize * M;
+								Score_r[(template = values_s[l])] = Ms;
+								bestTemplates_r[l] = template;
+							}
+							*bestTemplates_r = n;
+						} else {
+							n = *values;
+							Ms = kmersize * M;
+							for(l = 1; l <= n; ++l) {
+								Score_r[(template = values[l])] = Ms;
 								bestTemplates_r[l] = template;
 							}
 							*bestTemplates_r = n;
@@ -5586,9 +5950,17 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 		}
 		if(last) {
 			score = Ms * M + MMs * MM + Us * U + W1s * W1;
-			l = getTemplatePtr(last, 0) + 1;
-			while(--l) {
-				Score_r[getTemplatePtr(last, l)] += score;
+			if(SU) {
+				values_s = (short unsigned *) last;
+				l = (*values_s) + 1;
+				while(--l) {
+					Score_r[values_s[l]] += score;
+				}
+			} else {
+				l = (*last) + 1;
+				while(--l) {
+					Score_r[last[l]] += score;
+				}
 			}
 		}
 		
@@ -5647,11 +6019,16 @@ void save_kmers(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score
 void save_kmers_count(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, struct compDNA *qseq, struct compDNA *qseq_r, struct qseqs* header, int *extendScore) {
 	
 	int i, j, l, end, HIT, bestHits, hitCounter, bestScore, bestScore_r, reps;
-	int n, template;
+	int n, template, SU;
 	unsigned *values, *last;
+	short unsigned *values_s;
 	
 	if(qseq->seqlen < kmersize) {
 		return;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
 	}
 	
 	bestScore = 0;
@@ -5693,15 +6070,28 @@ void save_kmers_count(int *bestTemplates, int *bestTemplates_r, int *Score, int 
 						++reps;
 					} else {
 						if(last) {
-							n = getTemplatePtr(last, 0);
-							for(l = 1; l <= n; l++) {
-								template = getTemplatePtr(last, l);
-								if(Score[template] > 0) {
-									Score[template] += reps;
-								} else {
-									Score[template] = reps;
-									bestTemplates[0]++;
-									bestTemplates[*bestTemplates] = template;
+							if(SU) {
+								values_s = (short unsigned *) last;
+								n = *values_s;
+								for(l = 1; l <= n; ++l) {
+									if(Score[(template = values_s[l])]) {
+										Score[template] += reps;
+									} else {
+										Score[template] = reps;
+										bestTemplates[0]++;
+										bestTemplates[*bestTemplates] = template;
+									}
+								}
+							} else {
+								n = *last;
+								for(l = 1; l <= n; ++l) {
+									if(Score[(template = last[l])]) {
+										Score[template] += reps;
+									} else {
+										Score[template] = reps;
+										bestTemplates[0]++;
+										bestTemplates[*bestTemplates] = template;
+									}
 								}
 							}
 							hitCounter += reps;
@@ -5714,15 +6104,28 @@ void save_kmers_count(int *bestTemplates, int *bestTemplates_r, int *Score, int 
 			j = qseq->N[i] + 1;
 		}
 		if(last) {
-			n = getTemplatePtr(last, 0);
-			for(l = 1; l <= n; l++) {
-				template = getTemplatePtr(last, l);
-				if(Score[template] > 0) {
-					Score[template] += reps;
-				} else {
-					Score[template] = reps;
-					bestTemplates[0]++;
-					bestTemplates[*bestTemplates] = template;
+			if(SU) {
+				values_s = (short unsigned *) last;
+				n = *values_s;
+				for(l = 1; l <= n; ++l) {
+					if(Score[(template = values_s[l])]) {
+						Score[template] += reps;
+					} else {
+						Score[template] = reps;
+						bestTemplates[0]++;
+						bestTemplates[*bestTemplates] = template;
+					}
+				}
+			} else {
+				n = *last;
+				for(l = 1; l <= n; ++l) {
+					if(Score[(template = last[l])]) {
+						Score[template] += reps;
+					} else {
+						Score[template] = reps;
+						bestTemplates[0]++;
+						bestTemplates[*bestTemplates] = template;
+					}
 				}
 			}
 			hitCounter += reps;
@@ -5786,16 +6189,29 @@ void save_kmers_count(int *bestTemplates, int *bestTemplates_r, int *Score, int 
 						++reps;
 					} else {
 						if(last) {
-							n = getTemplatePtr(last, 0);
-							for(l = 1; l <= n; l++) {
-								template = getTemplatePtr(last, l);
-								if(Score_r[template] > 0) {
-									Score_r[template] += reps;
-								} else {
-									Score_r[template] = reps;
-									bestTemplates_r[0]++;
-									bestTemplates_r[*bestTemplates_r] = template;
-								}	
+							if(SU) {
+								values_s = (short unsigned *) last;
+								n = *values_s;
+								for(l = 1; l <= n; ++l) {
+									if(Score_r[(template = values_s[l])]) {
+										Score_r[template] += reps;
+									} else {
+										Score_r[template] = reps;
+										bestTemplates_r[0]++;
+										bestTemplates_r[*bestTemplates_r] = template;
+									}	
+								}
+							} else {
+								n = *last;
+								for(l = 1; l <= n; ++l) {
+									if(Score_r[(template = last[l])]) {
+										Score_r[template] += reps;
+									} else {
+										Score_r[template] = reps;
+										bestTemplates_r[0]++;
+										bestTemplates_r[*bestTemplates_r] = template;
+									}	
+								}
 							}
 							hitCounter += reps;
 						}
@@ -5807,16 +6223,29 @@ void save_kmers_count(int *bestTemplates, int *bestTemplates_r, int *Score, int 
 			j = qseq_r->N[i] + 1;
 		}
 		if(last) {
-			n = getTemplatePtr(last, 0);
-			for(l = 1; l <= n; l++) {
-				template = getTemplatePtr(last, l);
-				if(Score_r[template] > 0) {
-					Score_r[template] += reps;
-				} else {
-					Score_r[template] = reps;
-					bestTemplates_r[0]++;
-					bestTemplates_r[*bestTemplates_r] = template;
-				}	
+			if(SU) {
+				values_s = (short unsigned *) last;
+				n = *values_s;
+				for(l = 1; l <= n; ++l) {
+					if(Score_r[(template = values_s[l])]) {
+						Score_r[template] += reps;
+					} else {
+						Score_r[template] = reps;
+						bestTemplates_r[0]++;
+						bestTemplates_r[*bestTemplates_r] = template;
+					}	
+				}
+			} else {
+				n = *last;
+				for(l = 1; l <= n; ++l) {
+					if(Score_r[(template = last[l])]) {
+						Score_r[template] += reps;
+					} else {
+						Score_r[template] = reps;
+						bestTemplates_r[0]++;
+						bestTemplates_r[*bestTemplates_r] = template;
+					}	
+				}
 			}
 			hitCounter += reps;
 		}
@@ -5889,6 +6318,18 @@ void save_kmers_unionPair(int *bestTemplates, int *bestTemplates_r, int *Score, 
 		}
 	} else {
 		bestScore = 0;
+		if(hitCounter) {
+			i = *bestTemplates + 1;
+			while(--i) {
+				Score[bestTemplates[i]] = 0;
+			}
+			*bestTemplates = 0;
+			i = *bestTemplates_r + 1;
+			while(--i) {
+				Score_r[bestTemplates_r[i]] = 0;
+			}
+			*bestTemplates_r = 0;
+		}
 	}
 	*extendScore = 1;
 	
@@ -5905,6 +6346,16 @@ void save_kmers_unionPair(int *bestTemplates, int *bestTemplates_r, int *Score, 
 		}
 	} else {
 		bestScore_r = 0;
+		i = *bestTemplates + 1;
+		while(--i) {
+			Score[bestTemplates[i]] = 0;
+		}
+		*bestTemplates = 0;
+		i = *bestTemplates_r + 1;
+		while(--i) {
+			Score_r[bestTemplates_r[i]] = 0;
+		}
+		*bestTemplates_r = 0;
 	}
 	
 	if(0 < bestScore && 0 < bestScore_r) {
@@ -6149,6 +6600,17 @@ void save_kmers_forcePair(int *bestTemplates, int *bestTemplates_r, int *Score, 
 				unlock(excludeOut);
 			}
 		}
+	} else if(hitCounter || hitCounter_r) {
+		i = *bestTemplates + 1;
+		while(--i) {
+			Score[bestTemplates[i]] = 0;
+		}
+		*bestTemplates = 0;
+		i = *bestTemplates_r + 1;
+		while(--i) {
+			Score_r[bestTemplates_r[i]] = 0;
+		}
+		*bestTemplates_r = 0;
 	}
 }
 
@@ -6230,15 +6692,20 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 	
 	/* save_kmers find ankering k-mers the in query sequence,
 	   and is the time determining step */
-	int i, j, k, l, N, n, i_r, j_r, seqlen, seqend, end, HIT, Ncheck, template;
-	int hitCounter, bestScore, bestHits, start, stop, start_cut, end_cut;
-	int *regionTemplates;
+	int i, j, k, l, N, n, i_r, j_r, seqlen, seqend, end, HIT, Ncheck, SU;
+	int hitCounter, template, bestScore, bestHits, start, stop;
+	int start_cut, end_cut, *regionTemplates;
 	unsigned *values, *last, *rlast, **VF_scores, **VR_scores, num;
+	short unsigned *values_s;
 	int *tmpNs, reps, rreps;
 	double Ms, Ns, Ms_prev, Ns_prev;
 	
 	if(qseq->seqlen < kmersize) {
 		return;
+	} else if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
 	}
 	
 	regionTemplates = RegionTemplates[*Score];
@@ -6485,10 +6952,19 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 			if(hitCounter > 0 && (hitCounter * kmersize > (stop - start - hitCounter + kmersize)) 
 				&& ((stop - start) > minLen || start == 0 || stop == seqlen)) {
 				if(deCon) {
-					for(k = start; k < j; ++k) {
-						if(((values =VF_scores[k]) && getTemplatePtr(values, getTemplatePtr(values, 0)) == contamination) 
-							|| ((values =VR_scores[k]) && getTemplatePtr(values, getTemplatePtr(values, 0)) == contamination)) {
-							--hitCounter;
+					if(SU) {
+						for(k = start; k < j; ++k) {
+							if(((values_s = (short unsigned *) VF_scores[k]) && values_s[*values_s] == contamination) 
+								|| ((values_s = (short unsigned *) VR_scores[k]) && values_s[*values_s] == contamination)) {
+								--hitCounter;
+							}
+						}
+					} else {
+						for(k = start; k < j; ++k) {
+							if(((values = VF_scores[k]) && values[*values] == contamination)
+								|| ((values = VR_scores[k]) && values[*values] == contamination)) {
+								--hitCounter;
+							}
 						}
 					}
 				}
@@ -6510,15 +6986,28 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 								++reps;
 							} else {
 								if(last) {
-									num = getTemplatePtr(last, 0);
-									for(l = 1; l <= num; ++l) {
-										template = getTemplatePtr(last, l);
-										if(Score[template] > 0) {
-											Score[template] += reps;
-										} else {
-											Score[template] = reps;
-											bestTemplates[0]++;
-											bestTemplates[*bestTemplates] = template;
+									if(SU) {
+										values_s = (short unsigned *) last;
+										num = *values_s;
+										for(l = 1; l <= num; ++l) {
+											if(Score[(template = values_s[l])]) {
+												Score[template] += reps;
+											} else {
+												Score[template] = reps;
+												bestTemplates[0]++;
+												bestTemplates[*bestTemplates] = template;
+											}
+										}
+									} else {
+										num = *last;
+										for(l = 1; l <= num; ++l) {
+											if(Score[(template = last[l])]) {
+												Score[template] += reps;
+											} else {
+												Score[template] = reps;
+												bestTemplates[0]++;
+												bestTemplates[*bestTemplates] = template;
+											}
 										}
 									}
 								}
@@ -6533,15 +7022,28 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 								++rreps;
 							} else {
 								if(rlast) {
-									num = getTemplatePtr(rlast, 0);
-									for(l = 1; l <= num; ++l) {
-										template = getTemplatePtr(rlast, l);
-										if(Score_r[template] > 0) {
-											Score_r[template] += rreps;
-										} else {
-											Score_r[template] = rreps;
-											bestTemplates_r[0]++;
-											bestTemplates_r[*bestTemplates_r] = template;
+									if(SU) {
+										values_s = (short unsigned *) rlast;
+										num = *values_s;
+										for(l = 1; l <= num; ++l) {
+											if(Score_r[(template = values_s[l])] > 0) {
+												Score_r[template] += rreps;
+											} else {
+												Score_r[template] = rreps;
+												bestTemplates_r[0]++;
+												bestTemplates_r[*bestTemplates_r] = template;
+											}
+										}
+									} else {
+										num = *rlast;
+										for(l = 1; l <= num; ++l) {
+											if(Score_r[(template = rlast[l])] > 0) {
+												Score_r[template] += rreps;
+											} else {
+												Score_r[template] = rreps;
+												bestTemplates_r[0]++;
+												bestTemplates_r[*bestTemplates_r] = template;
+											}
 										}
 									}
 								}
@@ -6552,28 +7054,54 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 						
 					}
 					if(last) {
-						num = getTemplatePtr(last, 0);
-						for(l = 1; l <= num; ++l) {
-							template = getTemplatePtr(last, l);
-							if(Score[template] > 0) {
-								Score[template] += reps;
-							} else {
-								Score[template] = reps;
-								bestTemplates[0]++;
-								bestTemplates[*bestTemplates] = template;
+						if(SU) {
+							values_s = (short unsigned *) last;
+							num = *values_s;
+							for(l = 1; l <= num; ++l) {
+								if(Score[(template = values_s[l])] > 0) {
+									Score[template] += reps;
+								} else {
+									Score[template] = reps;
+									bestTemplates[0]++;
+									bestTemplates[*bestTemplates] = template;
+								}
+							}
+						} else {
+							num = *last;
+							for(l = 1; l <= num; ++l) {
+								if(Score[(template = last[l])] > 0) {
+									Score[template] += reps;
+								} else {
+									Score[template] = reps;
+									bestTemplates[0]++;
+									bestTemplates[*bestTemplates] = template;
+								}
 							}
 						}
 					}
 					if(rlast) {
-						num = getTemplatePtr(rlast, 0);
-						for(l = 1; l <= num; ++l) {
-							template = getTemplatePtr(rlast, l);
-							if(Score_r[template] > 0) {
-								Score_r[template] += rreps;
-							} else {
-								Score_r[template] = rreps;
-								bestTemplates_r[0]++;
-								bestTemplates_r[*bestTemplates_r] = template;
+						if(SU) {
+							values_s = (short unsigned *) rlast;
+							num = *values_s;
+							for(l = 1; l <= num; ++l) {
+								if(Score_r[(template = values_s[l])] > 0) {
+									Score_r[template] += rreps;
+								} else {
+									Score_r[template] = rreps;
+									bestTemplates_r[0]++;
+									bestTemplates_r[*bestTemplates_r] = template;
+								}
+							}
+						} else {
+							num = *rlast;
+							for(l = 1; l <= num; ++l) {
+								if(Score_r[(template = rlast[l])] > 0) {
+									Score_r[template] += rreps;
+								} else {
+									Score_r[template] = rreps;
+									bestTemplates_r[0]++;
+									bestTemplates_r[*bestTemplates_r] = template;
+								}
 							}
 						}
 					}
@@ -6629,10 +7157,10 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 							for(k = 1; k <= bestHits; ++k) {
 								template = (regionTemplates[k] > 0) ? regionTemplates[k] : -regionTemplates[k];
 								for(l = start; l < start_cut; ++l) {
-									if(VR_scores[l] && intpos_bin_contamination(VR_scores[l], template) != -1) {
+									if(VR_scores[l] && intpos_bin_contaminationPtr(VR_scores[l], template) != -1) {
 										start_cut = l;
 									}
-									if(VF_scores[l] && intpos_bin_contamination(VF_scores[l], template) != -1) {
+									if(VF_scores[l] && intpos_bin_contaminationPtr(VF_scores[l], template) != -1) {
 										start_cut = l;
 									}
 								}
@@ -6641,10 +7169,10 @@ void save_kmers_HMM(int *bestTemplates, int *bestTemplates_r, int *Score, int *S
 							for(k = 1; k <= bestHits; ++k) {
 								template = (regionTemplates[k] > 0) ? regionTemplates[k] : -regionTemplates[k];
 								for(l = j; l > end_cut; --l) {
-									if(VR_scores[l] && intpos_bin_contamination(VR_scores[l], template) != -1) {
+									if(VR_scores[l] && intpos_bin_contaminationPtr(VR_scores[l], template) != -1) {
 										end_cut = l;
 									}
-									if(VF_scores[l] && intpos_bin_contamination(VF_scores[l], template) != -1) {
+									if(VF_scores[l] && intpos_bin_contaminationPtr(VF_scores[l], template) != -1) {
 										end_cut = l;
 									}
 								}
@@ -6716,10 +7244,17 @@ void save_kmers_sparse(struct hashMap_kmers *foundKmers, struct compKmers *compr
 
 struct hashTable * collect_Kmers(int *Scores, int *Scores_tot, struct hashMap_kmers *foundKmers, struct Hit *hits) {
 	
+	int template, SU;
 	unsigned i, j, *value;
-	int template;
+	short unsigned *values_s;
 	struct hashTable_kmers *node, *node_next;
 	struct hashTable *kmerNode, *kmerList;
+	
+	if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
+	}
 	
 	hits->n = 0;
 	hits->tot = 0;
@@ -6739,19 +7274,28 @@ struct hashTable * collect_Kmers(int *Scores, int *Scores_tot, struct hashMap_km
 				if(!kmerNode) {
 					ERROR();
 				}
-				kmerNode->value = malloc((getTemplatePtr(value, 0) + 1) * sizeof(unsigned));
-				if(!kmerNode->value) {
-					ERROR();
+				if(SU) {
+					values_s = (short unsigned *) value;
+					kmerNode->value = smalloc(((*values_s) + 1) * sizeof(unsigned));
+					kmerNode->value[0] = *values_s;
+					j = kmerNode->value[0] + 1;
+					while(--j) {
+						template = values_s[j];
+						kmerNode->value[j] = template;
+						Scores[template]++;
+						Scores_tot[template] += node->value;
+					}
+				} else {
+					kmerNode->value = smalloc(((*value) + 1) * sizeof(unsigned));
+					kmerNode->value[0] = *value;
+					j = kmerNode->value[0] + 1;
+					while(--j) {
+						template = value[j];
+						kmerNode->value[j] = template;
+						Scores[template]++;
+						Scores_tot[template] += node->value;
+					}
 				}
-				kmerNode->value[0] = getTemplatePtr(value, 0);
-				j = kmerNode->value[0] + 1;
-				while(--j) {
-					template = getTemplatePtr(value, j);
-					kmerNode->value[j] = template;
-					Scores[template]++;
-					Scores_tot[template] += node->value;
-				}
-				
 				kmerNode->key = node->value;
 				
 				kmerNode->next = kmerList;
@@ -6767,12 +7311,19 @@ struct hashTable * collect_Kmers(int *Scores, int *Scores_tot, struct hashMap_km
 
 struct hashTable ** collect_Kmers_deCon(int *Scores, int *Scores_tot, struct hashMap_kmers *foundKmers, struct Hit *hits) {
 	
-	unsigned i, j, *value, n;
-	int template;
+	int template, SU;
+	unsigned i, j, n, *value;
+	short unsigned *value_s;
 	struct hashTable_kmers *node, *node_next;
 	struct hashTable *kmerNode, *kmerList;
 	struct hashTable *decon_node, *deconList;
 	struct hashTable **Returner;
+	
+	if(DB_size < HU_LIMIT) {
+		SU = 1;
+	} else {
+		SU = 0;
+	}
 	
 	hits->n = 0;
 	hits->tot = 0;
@@ -6783,22 +7334,26 @@ struct hashTable ** collect_Kmers_deCon(int *Scores, int *Scores_tot, struct has
 	deconList = 0;
 	decon_node = 0;
 	
-	Returner = malloc(sizeof(struct hashTable *) << 1);
-	if(!Returner) {
-		ERROR();
-	}
+	Returner = smalloc(sizeof(struct hashTable *) << 1);
 	
 	for(i = 0; i < foundKmers->size; ++i) {
 		for(node = foundKmers->table[i]; node != 0; node = node_next) {
 			node_next = node->next;
-			value = hashMap_get(templates, node->key);
-			if(value) {
+			if((value = hashMap_get(templates, node->key))) {
 				/* check for contamination */
 				++hits->n;
 				hits->tot += node->value;
 				
-				n = getTemplatePtr(value, 0);
-				if(getTemplatePtr(value, n) == contamination) {
+				if(SU) {
+					value_s = (short unsigned *) value;
+					n = *value_s;
+					j = value_s[*value_s];
+				} else {
+					n = *value;
+					j = value[*value];
+				}
+				
+				if(j == contamination) {
 					decon_node = malloc(sizeof(struct hashTable));
 					if(!decon_node) {
 						ERROR();
@@ -6809,8 +7364,14 @@ struct hashTable ** collect_Kmers_deCon(int *Scores, int *Scores_tot, struct has
 					}
 					decon_node->value[0] = n;
 					j = n + 1;
-					while(--j) {
-						decon_node->value[j] = getTemplatePtr(value, j);
+					if(SU) {
+						while(--j) {
+							decon_node->value[j] = value_s[j];
+						}
+					} else {
+						while(--j) {
+							decon_node->value[j] = value[j];
+						}
 					}
 					decon_node->key = node->value;
 					
@@ -6827,11 +7388,20 @@ struct hashTable ** collect_Kmers_deCon(int *Scores, int *Scores_tot, struct has
 					}
 					kmerNode->value[0] = n;
 					j = n + 1;
-					while(--j) {
-						template = getTemplatePtr(value, j);
-						kmerNode->value[j] = template;
-						Scores[template]++;
-						Scores_tot[template] += node->value;
+					if(SU) {
+						while(--j) {
+							template = value_s[j];
+							kmerNode->value[j] = template;
+							Scores[template]++;
+							Scores_tot[template] += node->value;
+						}
+					} else {
+						while(--j) {
+							template = value[j];
+							kmerNode->value[j] = template;
+							Scores[template]++;
+							Scores_tot[template] += node->value;
+						}
 					}
 					
 					kmerNode->key = node->value;
@@ -7603,8 +8173,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev) {
 		if(deConPrintPtr != &deConPrint) {
 			deConPrintPtr = printPtr;
 		}
-		kmerScan = &save_kmers_Sparse;
 		one2one = 1;
+		kmerScan = &save_kmers_Sparse;
 		get_kmers_for_pair_ptr = &get_kmers_for_pair_Sparse;
 	}
 	
@@ -13989,6 +14559,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\t%d (lvl)\n", shm);
 	fprintf(helpOut, "#\t-swap\t\tSwap DB to disk\t\t\t%d (lvl)\n", diskDB);
 	fprintf(helpOut, "#\t-1t1\t\tSkip HMM\t\t\tFalse\n");
+	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
 	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
 	fprintf(helpOut, "#\t-bc\t\tBase calls should be\n#\t\t\tsignificantly overrepresented.\tTrue\n");
 	fprintf(helpOut, "#\t-bc90\t\tBase calls should be both\n#\t\t\tsignificantly overrepresented,\n#\t\t\tand have 90%% agreement.\t\tFalse\n");
@@ -14023,6 +14594,7 @@ int main(int argc, char *argv[]) {
 	
 	/* SET DEFAULTS */
 	status = 0;
+	countK = 0;
 	assemblyPtr = &assemble_KMA;
 	assembly_KMA_Ptr = &assemble_KMA_threaded;
 	cmp = &cmp_or;
@@ -14336,8 +14908,9 @@ int main(int argc, char *argv[]) {
 			sparse_run = 1;
 		} else if(strcmp(argv[args], "-1t1") == 0) {
 			kmerScan = &save_kmers;
-			//kmerScan = &save_kmers_count;
 			one2one = 1;
+		} else if(strcmp(argv[args], "-ck") == 0) {
+			countK = 1;
 		} else if(strcmp(argv[args], "-ss") == 0) {
 			++args;
 			if(args < argc) {
@@ -14465,6 +15038,11 @@ int main(int argc, char *argv[]) {
 			helpMessage(1);
 		}
 		++args;
+	}
+	
+	if(one2one && countK) {
+		kmerScan = &save_kmers_count;
+		get_kmers_for_pair_ptr = &get_kmers_for_pair_count;
 	}
 	
 	if(outputfilename == 0 || templatefilename == 0) {
