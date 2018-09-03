@@ -52,7 +52,7 @@ struct hashMapKMA {
 	long unsigned *value_index_l;	// Relative, big DBs
 };
 
-int version[3] = {0, 15, 0};
+int version[3] = {1, 0, 0};
 
 /*
  FUNCTIONS

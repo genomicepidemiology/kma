@@ -144,7 +144,7 @@ struct FileBuff {
 /*
 	GLOBAL VARIABLES
 */
-int version[3] = {0, 15, 1};
+int version[3] = {1, 0, 0};
 struct hashMap *templates;
 struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
@@ -1292,7 +1292,7 @@ struct hashMap * hashMapKMA_openChains(struct hashMapKMA *src) {
 	if(mask != src->size) {
 		free(src->exist);
 	}
-	dest = hashMap_initialize(INITIAL_SIZE);
+	dest = hashMap_initialize(src->size + 1);
 	
 	if(dest->size == mask) {
 		addUniqueValues = &megaMap_addUniqueValues;
@@ -2858,143 +2858,6 @@ void compressKMA_deconMegaDB(struct hashMapKMA *finalDB, unsigned **Values) {
 	}
 }
 
-void compressKMA_deconMegaDB_old(struct hashMapKMA *finalDB, unsigned **Values) {
-	
-	long unsigned i, j, v_index, new_index;
-	unsigned *values, check;
-	short unsigned *values_s;
-	struct valuesHash *shmValues;
-	struct valuesTable *node, *next, *table;
-	
-	fprintf(stderr, "# Compressing indexes.\n");
-	v_index = 0;
-	new_index = 0;
-	shmValues = initialize_hashValues(finalDB->n);
-	i = finalDB->size;
-	check = 0;
-	check = ~check;
-	finalDB->v_index = 0;
-	if(finalDB->v_index < check) {
-		while(i--) {
-			if(finalDB->exist[i] != finalDB->n) {
-				values = Values[finalDB->exist[i]];
-				
-				/* the actual index */
-				new_index = valuesHash_add(shmValues, values, v_index);
-				
-				if(new_index == v_index) {
-					v_index += valuesSize(values);
-					if(check < v_index) {
-						fprintf(stderr, "# Compression overflow.\n");
-						finalDB->v_index = 1;
-						hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
-						break;
-					}
-				} else {
-					/* values were duplicated, clean up */
-					free(values);
-					Values[finalDB->exist[i]] = 0;
-				}
-				
-				/* update to new index */
-				finalDB->exist[i] = new_index;
-			} else {
-				finalDB->exist[i] = 1;
-			}
-		}
-	} else {
-		finalDB->v_index = 1;
-	}
-	if(finalDB->v_index) {
-		fprintf(stderr, "# Bypassing overflow.\n");
-		finalDB->exist_l = realloc(finalDB->exist, finalDB->size * sizeof(long unsigned));
-		if(!finalDB->exist_l) {
-			ERROR();
-		}
-		finalDB->exist = (unsigned *)(finalDB->exist_l);
-		j = finalDB->size;
-		while(j--) {
-			finalDB->exist_l[j] = finalDB->exist[j];
-		}
-		finalDB->exist = 0;
-		finalDB->exist_l[i] = new_index;
-		
-		while(i--) {
-			if(finalDB->exist_l[i] != finalDB->n) {
-				values = Values[finalDB->exist_l[i]];
-				
-				/* the actual index */
-				new_index = valuesHash_add(shmValues, values, v_index);
-				
-				if(new_index == v_index) {
-					v_index += valuesSize(values);
-				} else {
-					/* values were duplicated, clean up */
-					free(values);
-					Values[finalDB->exist_l[i]] = 0;
-				}
-				/* update to new index */
-				finalDB->exist_l[i] = new_index;
-				
-			} else {
-				finalDB->exist_l[i] = 1;
-			}
-		}
-		fprintf(stderr, "# Overflow bypassed.\n");
-	}
-	free(Values);
-	/* convert valuesHash to a linked list */
-	table = 0;
-	i = shmValues->size;
-	while(i--) {
-		for(node = shmValues->table[i]; node != 0; node = next) {
-			next = node->next;
-			node->next = table;
-			table = node;
-		}
-	}
-	free(shmValues->table);
-	
-	/* make compressed values */
-	fprintf(stderr, "# Finalizing indexes.\n");
-	finalDB->v_index = v_index;
-	finalDB->null_index = 1;
-	
-	if(DB_size < HU_LIMIT) {
-		finalDB->values = 0;
-		finalDB->values_s = calloc(v_index, sizeof(short unsigned));
-		if(!finalDB->values_s) {
-			ERROR();
-		}
-		/* move values */
-		for(node = table; node != 0; node = next) {
-			next = node->next;
-			values_s = (short unsigned *)(node->values);
-			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
-				finalDB->values_s[i] = values_s[j];
-			}
-			free(values_s);
-			free(node);
-		}
-	} else {
-		finalDB->values = calloc(v_index, sizeof(unsigned));
-		finalDB->values_s = 0;
-		if(!finalDB->values) {
-			ERROR();
-		}
-		/* move values */
-		for(node = table; node != 0; node = next) {
-			next = node->next;
-			values = node->values;
-			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
-				finalDB->values[i] = values[j];
-			}
-			free(values);
-			free(node);
-		}
-	}
-}
-
 void updateAnnots(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
 	
 	/* Dump annots */
@@ -3522,7 +3385,7 @@ int main(int argc, char *argv[]) {
 	int size, mapped_cont, file_len, appender;
 	unsigned megaDB, **Values;
 	char **inputfiles, *outputfilename, *templatefilename, **deconfiles;
-	char *to2Bit, *line;
+	char *to2Bit, *line, *exeBasic;
 	unsigned char *update;
 	struct hashMapKMA *finalDB;
 	FILE *inputfile, *out;
@@ -3703,8 +3566,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-k") == 0) {
 			++args;
 			if(args < argc) {
-				kmersize = atoi(argv[args]);
-				if(kmersize == 0) {
+				kmersize = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid kmersize parsed\n");
+					exit(4);
+				} else if(kmersize == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmersize = 16;
 				} else if(kmersize > 32) {
@@ -3715,8 +3581,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-k_t") == 0) {
 			++args;
 			if(args < argc) {
-				kmersize = atoi(argv[args]);
-				if(kmersize == 0) {
+				kmersize = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid kmersize parsed\n");
+					exit(4);
+				} else if(kmersize == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmersize = 16;
 				} else if(kmersize > 32) {
@@ -3726,8 +3595,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-k_i") == 0) {
 			++args;
 			if(args < argc) {
-				kmerindex = atoi(argv[args]);
-				if(kmerindex == 0) {
+				kmerindex = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid kmersize parsed\n");
+					exit(4);
+				} else if(kmerindex == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmerindex = 16;
 				} else if(kmerindex > 32) {
@@ -3738,7 +3610,12 @@ int main(int argc, char *argv[]) {
 			++args;
 			if(args < argc) {
 				
-				INITIAL_SIZE = pow(2, ceil(log(atoi(argv[args]))/log(2))) + 0.5;
+				size = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid start size parsed\n");
+					exit(4);
+				}
+				INITIAL_SIZE = pow(2, ceil(log(size)/log(2))) + 0.5;
 				INITIAL_SIZE *= 1048576;
 				if(INITIAL_SIZE == 0) {
 					fprintf(stderr, "# Invalid Chain Size parsed, using default\n");
@@ -3750,8 +3627,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-ML") == 0) {
 			++args;
 			if(args < argc) {
-				MinLen = atoi(argv[args]);
-				if(MinLen <= 0) {
+				MinLen = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid minimum length parsed\n");
+					exit(4);
+				} else if(MinLen <= 0) {
 					fprintf(stderr, "# Invalid minimum length parsed, using default\n");
 					MinLen = 0;
 				}
@@ -3759,8 +3639,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-hq") == 0) {
 			++args;
 			if(args < argc) {
-				homQ = atof(argv[args]);
-				if(homQ < 0) {
+				homQ = strtod(argv[args], &exeBasic);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-hq\".\n");
+					exit(4);
+				} else if(homQ < 0) {
 					fprintf(stderr, "Invalid -hq\n");
 					homQ = 1.0;
 				}
@@ -3768,8 +3651,11 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-ht") == 0) {
 			++args;
 			if(args < argc) {
-				homT = atof(argv[args]);
-				if(homT < 0) {
+				homT = strtod(argv[args], &exeBasic);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-ht\".\n");
+					exit(4);
+				} else if(homT < 0) {
 					fprintf(stderr, "Invalid -hq\n");
 					homT = 1.0;
 				}
@@ -3916,7 +3802,7 @@ int main(int argc, char *argv[]) {
 		} else {
 			fprintf(stderr, "# Invalid option:\t%s\n", argv[args]);
 			fprintf(stderr, "# Printing help message:\n");
-			helpMessage(-1);
+			helpMessage(1);
 		}
 		++args;
 	}

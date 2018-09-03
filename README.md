@@ -17,7 +17,10 @@ not exist. It works for long low quality reads as well, such as those from Nanop
 Non-unique matches are resolved using the "ConClave" sorting scheme, and a consensus sequence are outputtet
 in addition to other common attributes, based on our users demands.
 
-If you use KMA for your published research, then please cite the KMA paper.
+If you use KMA for your published research, then please cite:
+Philip T.L.C. Clausen, Frank M. Aarestrup & Ole Lund, 
+"Rapid and precise alignment of raw reads against redundant databases with KMA", 
+BMC Bioinformatics, 2018;19:307.
 
 
 # Usage #
@@ -137,7 +140,7 @@ Usage and options are available with the "-h" option on all three programs.
 If in doubt, please mail any concerns or problems to: *plan@dtu.dk*.
 
 # Citation #
-1. Philip T.L.C. Clausen, Frank M. Aarestrup & Ole Lund, "Rapid and precise alignment of raw reads against redundant databases with KMA", under review.
+1. Philip T.L.C. Clausen, Frank M. Aarestrup & Ole Lund, "Rapid and precise alignment of raw reads against redundant databases with KMA", BMC Bioinformatics, 2018;19:307.
 
 # License #
 Copyright (c) 2017, Philip Clausen, Technical University of Denmark
