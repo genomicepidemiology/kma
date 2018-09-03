@@ -8939,7 +8939,7 @@ struct alnScore NW(const long unsigned *template, const unsigned char *queryOrg,
 			memset(aligned->q, 5, t_len);
 			m = t_len;
 			nuc_pos = t_e - 1;
-			while(--m) {
+			while(m--) {
 				aligned->t[m] = getNuc(template, nuc_pos);
 				if(--nuc_pos < 0) {
 					nuc_pos = aligned->pos - 1;
@@ -9206,7 +9206,7 @@ struct alnScore NW_band(const long unsigned *template, const unsigned char *quer
 			memset(aligned->q, 5, t_len);
 			m = t_len;
 			nuc_pos = t_e - 1;
-			while(--m) {
+			while(m--) {
 				aligned->t[m] = getNuc(template, nuc_pos);
 				if(--nuc_pos < 0) {
 					nuc_pos = aligned->pos - 1;
