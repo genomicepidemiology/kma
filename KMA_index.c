@@ -144,7 +144,7 @@ struct FileBuff {
 /*
 	GLOBAL VARIABLES
 */
-int version[3] = {1, 0, 0};
+int version[3] = {1, 0, 1};
 struct hashMap *templates;
 struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
@@ -3429,7 +3429,7 @@ int main(int argc, char *argv[]) {
 	}
 	/* set to2Bit */
 	for(i = 0; i < 384; ++i) {
-		to2Bit[i] = 5;
+		to2Bit[i] = 8;
 	}
 	to2Bit += 128;
 	to2Bit['\n'] = 16;
