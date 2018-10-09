@@ -270,7 +270,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 0, 1};
+int version[3] = {1, 1, 0};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -10812,7 +10812,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 					
 					/* get all mems */
 					bias = i;
-					while(stop) {
+					while(0 < stop) {
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
@@ -10855,7 +10855,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 						
 						stop = hashMap_index_getNextDubPos(template_index, key, min, max, stop);
 					}
-					i = bias;
+					i = bias + 1;
 					
 					/* update position */
 					if(i < end - kmersize) {
@@ -11143,7 +11143,7 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 				
 				/* get all mems */
 				bias = j;
-				while(stop) {
+				while(0 < stop) {
 					/* get mem info */
 					l = j;
 					/* backseed for overlapping seeds */
@@ -11186,7 +11186,7 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 					
 					stop = hashMap_index_getNextDubPos(template_index, key, 0, t_len, stop);
 				}
-				j = bias;
+				j = bias + 1;
 			}
 		}
 		j = qseq_comp->N[i] + 1;
@@ -13346,7 +13346,7 @@ void getExtendedFeatures(char *template_name, struct assemInfo *matrix, long uns
 	var = aligned_assem->depthVar;
 	var /= t_len;
 	var -= (nucHighVar * nucHighVar);
-	nucHighVar += (2 * sqrt(var));
+	nucHighVar += (3 * sqrt(var));
 	
 	nucHighVarSum = 0;
 	maxDepth = 0;
@@ -13378,7 +13378,7 @@ void getExtendedFeatures(char *template_name, struct assemInfo *matrix, long uns
 		}
 	}
 	
-	fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\t%lu\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum + insertSum + deletionSum, snpSum, insertSum, deletionSum);
+	fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum, insertSum, deletionSum);
 	
 }
 
@@ -13497,13 +13497,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			outputfilename[file_len] = 0;
 		} else {
 			frag_out_all = 0;
-		}
-		if(extendedFeatures) {
-			strcat(outputfilename, ".mapstat");
-			extendedFeatures_out = sfopen(outputfilename, "wb");
-			outputfilename[file_len] = 0;
-		} else {
-			extendedFeatures_out = 0;
 		}
 		if(vcf) {
 			vcf_out = gzInitFileBuff(CHUNK);
@@ -14252,8 +14245,14 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
 	if(extendedFeatures) {
-		fprintf(extendedFeatures_out, "#Ref_sequence\tRead_count\tFragment_count\tMap_score_sum\tRef_covered_positions\tRef_consensus_sum\tReads_total_bases\tDepth_variance\tNuc_high_depth_variance\tDepth_max\tReads_edit_dist\tSnp_sum\tInserts_sum\tDeletions_sum\n");
+		strcat(outputfilename, ".mapstat");
+		extendedFeatures_out = sfopen(outputfilename, "ab");
+		outputfilename[file_len] = 0;
+		fprintf(extendedFeatures_out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
+	} else {
+		extendedFeatures_out = 0;
 	}
+	
 	if(vcf) {
 		initialiseVcf(vcf_out, templatefilename);
 	}
@@ -14344,9 +14343,13 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			expected = t_len;
 			expected /= (template_tot_ulen - t_len);
 			expected *= (Nhits - read_score);
-			q_value = read_score - expected;
-			q_value /= (expected + read_score);
-			q_value *= read_score - expected;
+			if(0 < expected) {
+				q_value = read_score - expected;
+				q_value /= (expected + read_score);
+				q_value *= (read_score - expected);
+			} else {
+				q_value = read_score;
+			}
 			p_value  = p_chisqr(q_value);
 			
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
@@ -14544,13 +14547,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			outputfilename[file_len] = 0;
 		} else {
 			frag_out_all = 0;
-		}
-		if(extendedFeatures) {
-			strcat(outputfilename, ".mapstat");
-			extendedFeatures_out = sfopen(outputfilename, "wb");
-			outputfilename[file_len] = 0;
-		} else {
-			extendedFeatures_out = 0;
 		}
 		if(vcf) {
 			vcf_out = gzInitFileBuff(CHUNK);
@@ -15194,7 +15190,12 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
 	if(extendedFeatures) {
-		fprintf(extendedFeatures_out, "#Ref_sequence\tRead_count\tFragment_count\tMap_score_sum\tRef_covered_positions\tRef_consensus_sum\tReads_total_bases\tDepth_variance\tNuc_high_depth_variance\tDepth_max\tReads_edit_dist\tSnp_sum\tInserts_sum\tDeletions_sum\n");
+		strcat(outputfilename, ".mapstat");
+		extendedFeatures_out = sfopen(outputfilename, "ab");
+		outputfilename[file_len] = 0;
+		fprintf(extendedFeatures_out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
+	} else {
+		extendedFeatures_out = 0;
 	}
 	if(vcf) {
 		initialiseVcf(vcf_out, templatefilename);
@@ -15341,9 +15342,13 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			expected = t_len;
 			expected /= (template_tot_ulen - t_len);
 			expected *= (Nhits - read_score);
-			q_value = read_score - expected;
-			q_value /= (expected + read_score);
-			q_value *= (read_score - expected);
+			if(0 < expected) {
+				q_value = read_score - expected;
+				q_value /= (expected + read_score);
+				q_value *= (read_score - expected);
+			} else {
+				q_value = read_score;
+			}
 			p_value  = p_chisqr(q_value);
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				/* load DB */
@@ -15940,9 +15945,10 @@ int main(int argc, char *argv[]) {
 	int ConClave, extendedFeatures, vcf;
 	long unsigned totFrags;
 	char *exeBasic, *outputfilename, *templatefilename, *to2Bit, ss;
-	char **inputfiles, **inputfiles_PE, **inputfiles_INT;
+	char **inputfiles, **inputfiles_PE, **inputfiles_INT, Date[11];
 	FILE *templatefile;
 	time_t t0, t1;
+	struct tm *tm;
 	
 	if(sizeof(long unsigned) != 8) {
 		fprintf(stderr, "Need a 64-bit system.\n");
@@ -16652,35 +16658,23 @@ int main(int argc, char *argv[]) {
 				fwrite(&Mt1, sizeof(int), 1, stdout);
 			}
 			
-			/* here */
 			if(extendedFeatures) {
-				strcat(outputfilename, ".config");
+				strcat(outputfilename, ".mapstat");
 				templatefile = sfopen(outputfilename, "wb");
-				fprintf(templatefile, "## method:\tKMA\n");
-				fprintf(templatefile, "## version:\t%d.%d.%d\n", version[0], version[1], version[2]);
-				fprintf(templatefile, "## database: %s\n", noFolder(templatefilename));
-				fprintf(templatefile, "## remark:\n");
-				fprintf(templatefile, "## total fragments:\t%lu\n", totFrags);
+				fprintf(templatefile, "## method\tKMA\n");
+				fprintf(templatefile, "## version\t%d.%d.%d\n", version[0], version[1], version[2]);
+				fprintf(templatefile, "## database %s\n", noFolder(templatefilename));
+				fprintf(templatefile, "## fragmentCount\t%lu\n", totFrags);
 				time(&t1);
-				fprintf(templatefile, "## date:\t%s", ctime(&t1));
-				fprintf(templatefile, "## sample:\t");
-				if(fileCounter > 0) {
-					fprintf(templatefile, "%s", noFolder(*inputfiles));
-					for(i = 1; i < fileCounter; ++i) {
-						fprintf(templatefile, ", %s", noFolder(inputfiles[i]));
-					}
-				}
-				if(fileCounter_PE > 0) {
-					fprintf(templatefile, "%s", noFolder(*inputfiles_PE));
-					for(i = 1; i < fileCounter_PE; ++i) {
-						fprintf(templatefile, ", %s", noFolder(inputfiles_PE[i]));
-					}
-				}
-				if(fileCounter_INT > 0) {
-					fprintf(templatefile, "%s", noFolder(*inputfiles_INT));
-					for(i = 1; i < fileCounter_INT; ++i) {
-						fprintf(templatefile, ", %s", noFolder(inputfiles_INT[i]));
-					}
+				tm = localtime(&t1);
+				strftime(Date, sizeof Date, "%Y-%m-%d", tm);
+				fprintf(templatefile, "## date\t%s\n", Date);
+				//fprintf(templatefile, "## date\t%s", ctime(&t1));
+				fprintf(templatefile, "## command\t%s", *argv);
+				argc -= step1;
+				argc -= step2;
+				for(args = 1; args < argc; ++args) {
+					fprintf(templatefile, " %s", argv[args]);
 				}
 				fprintf(templatefile, "\n");
 				fclose(templatefile);
