@@ -64,9 +64,9 @@ void hashMap_shm_detach(struct hashMapKMA *dest) {
 	shmdt(dest->value_index);
 }
 
-void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
+int hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
 	
-	int shmid, kmersize;
+	int shmid, kmersize, status;
 	unsigned DB_size;
 	long unsigned mask, size;
 	key_t key;
@@ -83,6 +83,7 @@ void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filena
 	kmersize = dest->kmersize;
 	mask = 0;
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	status = 0;
 	
 	/* check shared memory, else load */
 	size = dest->size;
@@ -105,6 +106,7 @@ void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filena
 		fprintf(stderr, "Could not setup the shared hashMap e\n");
 		fseek(file, size, SEEK_CUR);
 		dest->exist = 0;
+		status = 1;
 	} else {
 		dest->exist = shmat(shmid, NULL, 0);
 		fread(dest->exist, 1, size, file);
@@ -123,13 +125,14 @@ void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filena
 		fprintf(stderr, "Could not setup the shared hashMap v\n");
 		fseek(file, size, SEEK_CUR);
 		dest->values = 0;
+		status = 1;
 	} else {
 		/* found */
 		dest->values = shmat(shmid, NULL, 0);
 		fread(dest->values, 1, size, file);
 	}
 	if((dest->size - 1) == mask) {
-		return;
+		return status;
 	}
 	
 	/* kmers */
@@ -145,6 +148,7 @@ void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filena
 		fprintf(stderr, "Could not setup the shared hashMap k\n");
 		fseek(file, size, SEEK_CUR);
 		dest->values = 0;
+		status = 1;
 	} else {
 		/* found */
 		dest->key_index = shmat(shmid, NULL, 0);
@@ -164,11 +168,14 @@ void hashMapKMA_setupSHM(struct hashMapKMA *dest, FILE *file, const char *filena
 		fprintf(stderr, "Could not setup the shared hashMap i\n");
 		fseek(file, size, SEEK_CUR);
 		dest->value_index = 0;
+		status = 1;
 	} else {
 		/* found */
 		dest->value_index = shmat(shmid, NULL, 0);
 		fread(dest->value_index, 1, size, file);
 	}
+	
+	return status;
 }
 
 void hashMapKMA_destroySHM(struct hashMapKMA *dest, FILE *file, const char *filename) {
@@ -445,7 +452,7 @@ void helpMessage(int exeStatus) {
 
 int main(int argc, char *argv[]) {
 	
-	int args, file_len, destroy, *template_lengths, *index;
+	int args, file_len, destroy, status, *template_lengths, *index;
 	unsigned shmLvl;
 	long unsigned *seq;
 	char *templatefilename, *template_names;
@@ -456,6 +463,7 @@ int main(int argc, char *argv[]) {
 	templatefilename = 0;
 	destroy = 0;
 	shmLvl = 1;
+	status = 0;
 	
 	/* PARSE COMMAND LINE OPTIONS */
 	args = 1;
@@ -526,6 +534,7 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				hashMapKMA_destroySHM(templates, file, templatefilename);
 				fclose(file);
@@ -539,6 +548,7 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				hashMapKMA_destroySHM(templates, file, templatefilename);
 				fclose(file);
@@ -552,6 +562,7 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				length_destroySHM(file, templatefilename);
 				fclose(file);
@@ -566,6 +577,7 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				seq_destroySHM(file, templatefilename);
 				fclose(file);
@@ -577,6 +589,7 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				index_destroySHM(file, templatefilename);
 				fclose(file);
@@ -590,6 +603,7 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				name_destroySHM(file, templatefilename);
 				fclose(file);
@@ -603,8 +617,9 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
-				hashMapKMA_setupSHM(templates, file, templatefilename);
+				status |= hashMapKMA_setupSHM(templates, file, templatefilename);
 				hashMap_shm_detach(templates);
 				fclose(file);
 			}
@@ -617,8 +632,9 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
-				hashMapKMA_setupSHM(templates, file, templatefilename);
+				status |=  hashMapKMA_setupSHM(templates, file, templatefilename);
 				hashMap_shm_detach(templates);
 				fclose(file);
 			}
@@ -631,10 +647,14 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				template_lengths = length_setupSHM(file, templatefilename);
-				if(template_lengths)
+				if(template_lengths) {
 					shmdt(template_lengths);
+				} else {
+					status |= 1;
+				}
 				fclose(file);
 			}
 			templatefilename[file_len] = 0;
@@ -647,10 +667,14 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				seq = seq_setupSHM(file, templatefilename);
-				if(seq)
+				if(seq) {
 					shmdt(seq);
+				} else {
+					status |= 1;
+				}
 				fclose(file);
 			}
 			templatefilename[file_len] = 0;
@@ -660,10 +684,14 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				index = index_setupSHM(file, templatefilename);
-				if(index)
+				if(index) {
 					shmdt(index);
+				} else {
+					status |= 1;
+				}
 				fclose(file);
 			}
 			templatefilename[file_len] = 0;
@@ -675,10 +703,14 @@ int main(int argc, char *argv[]) {
 			file = fopen(templatefilename, "rb");
 			if(!file) {
 				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+				status |= errno;
 			} else {
 				template_names = name_setupSHM(file, templatefilename);
-				if(template_names)
+				if(template_names) {
 					shmdt(template_names);
+				} else {
+					status |= 1;
+				}
 				fclose(file);
 			}
 			templatefilename[file_len] = 0;
@@ -701,5 +733,5 @@ int main(int argc, char *argv[]) {
 	* ipcs -a
 	*/
 	
-	return 0;
+	return status;
 }
