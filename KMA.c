@@ -270,7 +270,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 1, 0};
+int version[3] = {1, 1, 1};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -10975,7 +10975,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 			t_s = points->tEnd[start] - 1;
 			start = points->next[start];
 			
-			/* check if next MEM is a semi match, or a circular joining */
+			/* check if next MEM is a semi match */
 			if(points->qStart[start] < q_s) {
 				points->tStart[start] += (q_s - points->qStart[start]);
 				points->qStart[start] = q_s;
@@ -11646,7 +11646,7 @@ unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestS
 	/* determine base at current position */
 	if(depthUpdate == 0) {
 		bestNuc = 'n';
-	} else if(bestNuc != '-' && tNuc != '-') {
+	} else {
 		/* Use MC Neymars test to test significance of the base call */
 		if(significantBase(bestScore, depthUpdate - bestScore) == 0) {
 			if(bestNuc == '-') {
@@ -11665,6 +11665,8 @@ unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestS
 			} else {
 				bestNuc = tolower(bestNuc);
 			}
+		} else if(bestNuc == '-') {
+			bestNuc = 'n';
 		}
 	}
 	
@@ -11678,8 +11680,7 @@ void * assemble_KMA_threaded(void *arg) {
 	struct assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos;
 	int read_score, depthUpdate, bestBaseScore, bestScore, template;
-	int nextTemplate, file_i, file_count, max_asmlen, delta;
-	int stats[4], buffer[7];
+	int nextTemplate, file_i, file_count, delta, stats[4], buffer[7];
 	unsigned coverScore;
 	long unsigned depth, depthVar;
 	const char bases[] = "ACGTN-";
@@ -11726,23 +11727,18 @@ void * assemble_KMA_threaded(void *arg) {
 		t_len = template_lengths[template];
 		asm_len = t_len;
 		nextGap = t_len;
-		max_asmlen = t_len << 1;
-		if(max_asmlen < matrix->size) {
-			max_asmlen = matrix->size;
-		}
-		
-		if(matrix->size < max_asmlen) {
+		matrix->len = asm_len;
+		assembly = matrix->assmb;
+		if(matrix->size < (t_len << 1)) {
+			matrix->size = (t_len << 1);
 			free(matrix->assmb);
-			matrix->assmb = malloc(max_asmlen * sizeof(struct assembly));
+			matrix->assmb = malloc(matrix->size * sizeof(*assembly));
 			if(!matrix->assmb) {
 				ERROR();
+			} else {
+				assembly = matrix->assmb;
 			}
-			matrix->size = max_asmlen;
-		} else {
-			max_asmlen = matrix->size;
 		}
-		assembly = matrix->assmb;
-		matrix->len = asm_len;
 		
 		/* cpy template seq */
 		for(i = 0, j = 1; i < t_len; ++i, ++j) {
@@ -11775,7 +11771,6 @@ void * assemble_KMA_threaded(void *arg) {
 			lock(&excludeMatrix);
 			t_len = template_lengths[template];
 			assembly = matrix->assmb;
-			max_asmlen = matrix->size;
 			unlock(&excludeMatrix);
 		}
 		
@@ -11871,7 +11866,6 @@ void * assemble_KMA_threaded(void *arg) {
 							i = 0;
 							pos = start;
 							assembly = matrix->assmb;
-							max_asmlen = matrix->size;
 							asm_len = matrix->len;
 							nextGap = asm_len;
 							while(i < aln_len) {
@@ -11903,15 +11897,14 @@ void * assemble_KMA_threaded(void *arg) {
 											assembly[pos].next = nextGap;
 											pos = assembly[pos].next;
 											assembly[pos].next = gaps;
-											++nextGap;
-											if(nextGap == max_asmlen) {
-												max_asmlen <<= 1;
-												assembly = realloc(assembly, max_asmlen * sizeof(struct assembly));
-												if(!assembly) {
+											if(++nextGap == matrix->size) {
+												matrix->size <<= 1;
+												matrix->assmb = realloc(assembly, matrix->size * sizeof(*assembly));
+												if(!matrix->assmb) {
 													ERROR();
+												} else {
+													assembly = matrix->assmb;
 												}
-												matrix->size = max_asmlen;
-												matrix->assmb = assembly;
 											}
 											
 											assembly[pos].counts[0] = 0;
@@ -11948,7 +11941,6 @@ void * assemble_KMA_threaded(void *arg) {
 								}
 								*/
 							}
-							matrix->size = max_asmlen;
 							matrix->assmb = assembly;
 							matrix->len = asm_len;
 							unlock(&excludeMatrix);
@@ -11997,7 +11989,6 @@ void * assemble_KMA_threaded(void *arg) {
 	
 	wait_atomic(thread_wait);
 	assembly = matrix->assmb;
-	max_asmlen = matrix->size;
 	asm_len = matrix->len;
 	/* Make consensus assembly by majority voting */
 	/* Pepare and make alignment on consensus */
@@ -12102,7 +12093,6 @@ void * assemble_KMA_threaded(void *arg) {
 	aligned_assem->aln_len = aln_len;
 	
 	matrix->assmb = assembly;
-	matrix->size = max_asmlen;
 	
 	return NULL;
 }
