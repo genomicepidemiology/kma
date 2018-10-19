@@ -270,7 +270,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 1, 1};
+int version[3] = {1, 1, 2};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -1242,7 +1242,7 @@ void initialiseVcf(struct FileBuff *fileP, char *templateFilename) {
 void updateVcf(char *template_name, long unsigned *template_seq, int t_len, struct assemInfo *matrix, int filter, struct FileBuff *fileP) {
 	
 	static const char *PASS = "PASS", *FAIL = "FAIL", *LowQual = "LowQual", *UNKNOWN = ".";
-	int i, j, pos, bestScore, depthUpdate, bestBaseScore, asm_len, nucNum;
+	int i, j, pos, bestScore, depthUpdate, bestBaseScore, nucNum;
 	int template_name_length, check, avail, DP, AD, DEL, QUAL;
 	double AF, RAF, Q, P;
 	const double lnConst = -10 / log(10);
@@ -1260,12 +1260,13 @@ void updateVcf(char *template_name, long unsigned *template_seq, int t_len, stru
 	update = (char *) fileP->next;
 	avail = fileP->bytes;
 	assembly = matrix->assmb;
-	asm_len = matrix->len;
+	pos = 0;
 	i = 0;
-	for(pos = 0; asm_len != 0; --asm_len, pos = assembly[pos].next) {
+	do {
 		/* does not handle insertions yet */
 		if(pos < t_len) {
-			nuc = bases[getNuc(template_seq, i)];
+			nuc = bases[getNuc(template_seq, pos)];
+			++i;
 		} else {
 			nuc = '-';
 		}
@@ -1346,7 +1347,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, int t_len, stru
 				*update++ = '\t'; --avail;
 				
 				if(nuc != '-') {
-					check = sprintf(update, "%d", i + 1);
+					check = sprintf(update, "%d", i);
 					update += check; avail -= check;
 				} else {
 					*update++ = '0';
@@ -1392,17 +1393,14 @@ void updateVcf(char *template_name, long unsigned *template_seq, int t_len, stru
 				avail = fileP->bytes;
 				update = (char *) fileP->next;
 			}
-			check = sprintf(update, "%s\t%d\t.\t%c\t%c\t%d\t%s\t", template_name, i + 1, nuc, '.', 0, *FILTER_ptr);
+			check = sprintf(update, "%s\t%d\t.\t%c\t%c\t%d\t%s\t", template_name, i, nuc, '.', 0, *FILTER_ptr);
 			update += check; avail -= check;
 			check = sprintf(update, "DP=%d;AD=%d;AF=%.2f;RAF=%.2f;DEL=%d;AD6=%d,%d,%d,%d,%d,%d\t", 0, 0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0);
 			update += check; avail -= check;
 			check = sprintf(update, "Q:P:FT\t%.2f:%4.1e:%s\n", 0.0, 1.0, FILTER);
 			update += check; avail -= check;
 		}
-		if(pos < t_len) {
-			++i;
-		}
-	}
+	} while((pos = assembly[pos].next) != 0);
 	
 	fileP->next = (unsigned char *) update;
 	fileP->bytes = avail;
@@ -10373,6 +10371,8 @@ int chainSeeds(struct alnPoints *points, int q_len, int t_len) {
 			score += W1;
 		} else if(score == 0) {
 			score = W1;
+		} else {
+			score = 0;
 		}
 		score += weight;
 		
@@ -10485,6 +10485,8 @@ int chainSeeds_circular(struct alnPoints *points, int q_len, int t_len) {
 			score += W1;
 		} else if(score == 0) {
 			score = W1;
+		} else {
+			score = 0;
 		}
 		score += weight;
 		
@@ -10817,7 +10819,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 						k = i;
 						/* backseed for overlapping seeds */
 						value = abs(template_index->index[stop]) - 1;
-						prev = value - 2;
+						prev = value - 1;
 						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
 							--prev;
 						}
@@ -11148,7 +11150,7 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 					l = j;
 					/* backseed for overlapping seeds */
 					value = abs(template_index->index[stop]) - 1;
-					prev = value - 2;
+					prev = value - 1;
 					for(k = l - 1; 0 <= k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
 						--prev;
 					}
@@ -11481,7 +11483,7 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 						k = i;
 						/* backseed for overlapping seeds */
 						value = abs(template_index->index[stop]) - 1;
-						prev = value - 2;
+						prev = value - 1;
 						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
 							--prev;
 						}
@@ -11676,9 +11678,8 @@ unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestS
 void * assemble_KMA_threaded(void *arg) {
 	
 	static volatile int excludeIn = 0, excludeOut = 0, excludeMatrix = 0, mainTemplate = -2, thread_wait = 0;
-	static int asm_len, nextGap;
 	struct assemble_thread *thread = arg;
-	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos;
+	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, asm_len;
 	int read_score, depthUpdate, bestBaseScore, bestScore, template;
 	int nextTemplate, file_i, file_count, delta, stats[4], buffer[7];
 	unsigned coverScore;
@@ -11725,22 +11726,18 @@ void * assemble_KMA_threaded(void *arg) {
 		/* Allocate assembly arrays */
 		lock(&excludeMatrix);
 		t_len = template_lengths[template];
-		asm_len = t_len;
-		nextGap = t_len;
-		matrix->len = asm_len;
-		assembly = matrix->assmb;
+		matrix->len = t_len;
 		if(matrix->size < (t_len << 1)) {
 			matrix->size = (t_len << 1);
 			free(matrix->assmb);
-			matrix->assmb = malloc(matrix->size * sizeof(*assembly));
+			matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
 			if(!matrix->assmb) {
 				ERROR();
-			} else {
-				assembly = matrix->assmb;
 			}
 		}
 		
 		/* cpy template seq */
+		assembly = matrix->assmb;
 		for(i = 0, j = 1; i < t_len; ++i, ++j) {
 			assembly[i].counts[0] = 0;
 			assembly[i].counts[1] = 0;
@@ -11765,13 +11762,14 @@ void * assemble_KMA_threaded(void *arg) {
 		while(template == mainTemplate) {
 			usleep(100);
 		}
-		if((template = mainTemplate) == -1) {
-			return NULL;
-		} else {
-			lock(&excludeMatrix);
+		lock(&excludeMatrix);
+		template = mainTemplate;
+		if(template != -1) {
 			t_len = template_lengths[template];
-			assembly = matrix->assmb;
-			unlock(&excludeMatrix);
+		}
+		unlock(&excludeMatrix);
+		if(template == -1) {
+			return NULL;
 		}
 		
 		/* load reads of this template */
@@ -11863,11 +11861,11 @@ void * assemble_KMA_threaded(void *arg) {
 							/* Update backbone and counts */
 							lock(&excludeMatrix);
 							aligned_assem->score += read_score;
+							
+							/* diff */
 							i = 0;
 							pos = start;
 							assembly = matrix->assmb;
-							asm_len = matrix->len;
-							nextGap = asm_len;
 							while(i < aln_len) {
 								if(aligned->t[i] == 5) { // Template gap, insertion
 									if(t_len <= pos) {
@@ -11894,19 +11892,22 @@ void * assemble_KMA_threaded(void *arg) {
 											pos = assembly[pos].next;
 										}
 										while(i < aln_len && aligned->t[i] == 5) {
-											assembly[pos].next = nextGap;
+											assembly[pos].next = matrix->len++;
+											if(matrix->len == matrix->size) {
+												matrix->size <<= 1;
+												matrix->assmb = realloc(assembly, matrix->size * sizeof(struct assembly));
+												if(!matrix->assmb) {
+													matrix->size >>= 1;
+													matrix->size += 1024;
+													matrix->assmb = realloc(assembly, matrix->size * sizeof(struct assembly));
+													if(!matrix->assmb) {
+														ERROR();
+													}
+												}
+												assembly = matrix->assmb;
+											}
 											pos = assembly[pos].next;
 											assembly[pos].next = gaps;
-											if(++nextGap == matrix->size) {
-												matrix->size <<= 1;
-												matrix->assmb = realloc(assembly, matrix->size * sizeof(*assembly));
-												if(!matrix->assmb) {
-													ERROR();
-												} else {
-													assembly = matrix->assmb;
-												}
-											}
-											
 											assembly[pos].counts[0] = 0;
 											assembly[pos].counts[1] = 0;
 											assembly[pos].counts[2] = 0;
@@ -11916,7 +11917,6 @@ void * assemble_KMA_threaded(void *arg) {
 											assembly[pos].counts[aligned->q[i]]++;
 											
 											++i;
-											++asm_len;
 										}
 										pos = assembly[pos].next;
 									}
@@ -11941,8 +11941,6 @@ void * assemble_KMA_threaded(void *arg) {
 								}
 								*/
 							}
-							matrix->assmb = assembly;
-							matrix->len = asm_len;
 							unlock(&excludeMatrix);
 							
 							/* Convert fragment */
@@ -11988,10 +11986,25 @@ void * assemble_KMA_threaded(void *arg) {
 	} while(thread->num != 0);
 	
 	wait_atomic(thread_wait);
-	assembly = matrix->assmb;
-	asm_len = matrix->len;
-	/* Make consensus assembly by majority voting */
+	
+	if(aligned_assem->score == 0) {
+		aligned_assem->cover = 0;
+		aligned_assem->depth = 0;
+		aligned_assem->depthVar = 0;
+		aligned_assem->t[0] = 0;
+		aligned_assem->s[0] = 0;
+		aligned_assem->q[0] = 0;
+		aligned_assem->len = 0;
+		aligned_assem->aln_len = 0;
+		
+		return NULL;
+	}
+	
+	/* diff */
+	/* pre on dense */
 	/* Pepare and make alignment on consensus */
+	asm_len = matrix->len;
+	assembly = matrix->assmb;
 	if(aligned_assem->size <= asm_len) {
 		aligned_assem->size = (asm_len + 1) << 1;
 		free(aligned_assem->t);
@@ -12006,6 +12019,7 @@ void * assemble_KMA_threaded(void *arg) {
 	}
 	
 	/* Call nucleotides for the consensus */
+	/* diff */
 	i = 0;
 	pos = 0;
 	depth = 0;
@@ -12065,7 +12079,6 @@ void * assemble_KMA_threaded(void *arg) {
 	}
 	
 	/* Trim alignment on consensus */
-	matrix->len = asm_len;
 	coverScore = 0;
 	bias = 0;
 	for(i = 0; i < asm_len; ++i) {
@@ -12082,17 +12095,15 @@ void * assemble_KMA_threaded(void *arg) {
 			}
 		}
 	}
-	aligned_assem->cover = coverScore;
-	aligned_assem->depth = depth;
-	aligned_assem->depthVar = depthVar;
 	asm_len -= bias;
 	aligned_assem->t[asm_len] = 0;
 	aligned_assem->s[asm_len] = 0;
 	aligned_assem->q[asm_len] = 0;
+	aligned_assem->cover = coverScore;
+	aligned_assem->depth = depth;
+	aligned_assem->depthVar = depthVar;
 	aligned_assem->len = asm_len;
 	aligned_assem->aln_len = aln_len;
-	
-	matrix->assmb = assembly;
 	
 	return NULL;
 }
@@ -12148,6 +12159,9 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		/* Allocate assembly arrays */
 		lock(&excludeOut);
 		t_len = template_lengths[template];
+		matrix->len = t_len;
+		
+		/* diff */
 		if(aligned_assem->size <= t_len) {
 			aligned_assem->size = t_len + 1;
 			free(aligned_assem->t);
@@ -12160,17 +12174,19 @@ void * assemble_KMA_dense_threaded(void *arg) {
 				ERROR();
 			}
 		}
-		if(matrix->size < t_len) {
-			matrix->size = t_len << 1;
+		if(matrix->size <= t_len) {
+			matrix->size = t_len + 1;
 			free(matrix->assmb);
 			matrix->assmb = malloc(matrix->size * sizeof(struct assembly));
 			if(!matrix->assmb) {
 				ERROR();
 			}
 		}
-		assembly = matrix->assmb;
+		
 		/* cpy template seq */
+		assembly = matrix->assmb;
 		for(i = 0, j = 1; i < t_len; ++i, ++j) {
+			/* diff */
 			aligned_assem->t[i] = getNuc(templates_index[template]->seq, i);
 			assembly[i].counts[0] = 0;
 			assembly[i].counts[1] = 0;
@@ -12195,13 +12211,15 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		while(template == mainTemplate) {
 			usleep(100);
 		}
-		if((template = mainTemplate) == -1) {
-			return NULL;
-		} else {
-			lock(&excludeOut);
+		lock(&excludeOut);
+		template = mainTemplate;
+		if(template != -1) {
 			t_len = template_lengths[template];
 			assembly = matrix->assmb;
-			unlock(&excludeOut);
+		}
+		unlock(&excludeOut);
+		if(template == -1) {
+			return NULL;
 		}
 		
 		/* load reads of this template */
@@ -12280,6 +12298,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							score = 0;
+							read_score = 0;
 						}
 						
 						if(read_score > kmersize && score >= scoreT) {
@@ -12293,6 +12312,8 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							/* Update backbone and counts */
 							lock(&excludeMatrix);
 							aligned_assem->score += read_score;
+							
+							/* diff */
 							for(i = 0, pos = start; i < aln_len; ++i) {
 								if(aligned->t[i] == aligned_assem->t[pos]) {
 									assembly[pos].counts[aligned->q[i]]++;
@@ -12347,7 +12368,21 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	
 	wait_atomic(thread_wait);
 	
+	if(aligned_assem->score == 0) {
+		aligned_assem->cover = 0;
+		aligned_assem->depth = 0;
+		aligned_assem->depthVar = 0;
+		aligned_assem->t[0] = 0;
+		aligned_assem->s[0] = 0;
+		aligned_assem->q[0] = 0;
+		aligned_assem->len = 0;
+		aligned_assem->aln_len = 0;
+		
+		return NULL;
+	}
+	
 	/* Make consensus assembly by majority voting */
+	/* diff */
 	depth = 0;
 	depthVar = 0;
 	coverScore = 0;
@@ -12412,9 +12447,6 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	aligned_assem->depthVar = depthVar;
 	aligned_assem->len = t_len;
 	aligned_assem->aln_len = aln_len;
-	
-	matrix->assmb = assembly;
-	matrix->len = t_len;
 	
 	return NULL;
 }
@@ -13319,7 +13351,7 @@ void * alnFrags_threaded(void * arg) {
 
 void getExtendedFeatures(char *template_name, struct assemInfo *matrix, long unsigned *template_seq, int t_len, struct assem *aligned_assem, unsigned fragmentCount, unsigned readCount, FILE *outfile) {
 	
-	unsigned i, pos, asm_len, depthUpdate, maxDepth, nucHighVarSum;
+	unsigned pos, depthUpdate, maxDepth, nucHighVarSum;
 	long unsigned snpSum, insertSum, deletionSum;
 	long double var, nucHighVar;
 	struct assembly *assembly;
@@ -13344,29 +13376,28 @@ void getExtendedFeatures(char *template_name, struct assemInfo *matrix, long uns
 	insertSum = 0;
 	deletionSum = 0;
 	
-	asm_len = matrix->len;
 	assembly = matrix->assmb;
-	i = 0;
-	for(pos = 0; asm_len != 0; --asm_len, pos = assembly[pos].next) {
-		
+	pos = 0;
+	do {
 		depthUpdate = assembly[pos].counts[0] + assembly[pos].counts[1] + assembly[pos].counts[2] + assembly[pos].counts[3] + assembly[pos].counts[4];
+		
 		if(pos < t_len) {
 			deletionSum += assembly[pos].counts[5];
-			snpSum += (depthUpdate - assembly[pos].counts[getNuc(template_seq, i)]);
-			++i;
+			snpSum += (depthUpdate - assembly[pos].counts[getNuc(template_seq, pos)]);
 		} else {
 			insertSum += depthUpdate;
 		}
 		
 		depthUpdate += assembly[pos].counts[5];
+		
 		if(maxDepth < depthUpdate) {
 			maxDepth = depthUpdate;
 		}
-		
 		if(nucHighVar < depthUpdate) {
 			++nucHighVarSum;
 		}
-	}
+	} while((pos = assembly[pos].next) != 0);
+	
 	
 	fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum, insertSum, deletionSum);
 	
@@ -14260,7 +14291,11 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			matrix->size = template_lengths[i];
 		}
 	}
-	matrix->size <<= 1;
+	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+		matrix->size <<= 1;
+	} else {
+		matrix->size++;
+	}
 	matrix->assmb = smalloc(matrix->size * sizeof(struct assembly));
 	aligned_assem->size = matrix->size;
 	aligned_assem->t = smalloc(aligned_assem->size);
@@ -15200,7 +15235,11 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			matrix->size = template_lengths[i];
 		}
 	}
-	matrix->size <<= 1;
+	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+		matrix->size <<= 1;
+	} else {
+		matrix->size++;
+	}
 	matrix->assmb = smalloc(matrix->size * sizeof(struct assembly));
 	aligned_assem->size = matrix->size;
 	aligned_assem->t = smalloc(aligned_assem->size);
@@ -15616,7 +15655,11 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	/* preallocate assembly matrices */
 	matrix = smalloc(sizeof(struct assemInfo));
 	aligned_assem = smalloc(sizeof(struct assem));
-	matrix->size = (*template_lengths) << 1;
+	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+		matrix->size = (*template_lengths) << 1;
+	} else {
+		matrix->size = (*template_lengths) + 1;
+	}
 	matrix->assmb = smalloc(matrix->size * sizeof(struct assembly));
 	aligned_assem->size = matrix->size;
 	aligned_assem->t = smalloc(aligned_assem->size);
