@@ -10818,8 +10818,8 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
-						value = abs(template_index->index[stop]) - 1;
-						prev = value - 1;
+						value = abs(template_index->index[stop]);
+						prev = value - 2;
 						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
 							--prev;
 						}
@@ -11149,8 +11149,8 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 					/* get mem info */
 					l = j;
 					/* backseed for overlapping seeds */
-					value = abs(template_index->index[stop]) - 1;
-					prev = value - 1;
+					value = abs(template_index->index[stop]);
+					prev = value - 2;
 					for(k = l - 1; 0 <= k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
 						--prev;
 					}
@@ -11482,8 +11482,8 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
-						value = abs(template_index->index[stop]) - 1;
-						prev = value - 1;
+						value = abs(template_index->index[stop]);
+						prev = value - 2;
 						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
 							--prev;
 						}
