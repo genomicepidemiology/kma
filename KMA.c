@@ -1617,6 +1617,7 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 	/* init */
 	avail = src->bytes;
 	buff = src->next;
+	qseq->len = 0;
 	if(avail == 0) {
 		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
@@ -1713,6 +1714,7 @@ int FileBuffgetFsaSeq(struct FileBuff *src, struct qseqs *qseq, char *trans) {
 	/* init */
 	avail = src->bytes;
 	buff = src->next;
+	qseq->len = 0;
 	if(avail == 0) {
 		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
@@ -1792,6 +1794,7 @@ int FileBuffgetFq(struct FileBuff *src, struct qseqs *header, struct qseqs *qseq
 	/* init */
 	avail = src->bytes;
 	buff = src->next;
+	qseq->len = 0;
 	if(avail == 0) {
 		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
@@ -1939,6 +1942,7 @@ int FileBuffgetFqSeq(struct FileBuff *src, struct qseqs *qseq, struct qseqs *qua
 	/* init */
 	avail = src->bytes;
 	buff = src->next;
+	qseq->len = 0;
 	if(avail == 0) {
 		if((avail = buffFileBuff(src)) == 0) {
 			return 0;
@@ -14415,10 +14419,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				}
 			}
 		}
-		if(templates_index[template]) {
-			/* destroy this DB index */
-			destroyPtr(template);
-		}
 	}
 	
 	/* join threads */
@@ -15379,6 +15379,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				q_value = read_score;
 			}
 			p_value  = p_chisqr(q_value);
+			
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				/* load DB */
 				if(index_in) {
@@ -15409,6 +15410,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				} else {
 					id = 0;
 				}
+				
 				if(ID_t <= id && 0 < id) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
