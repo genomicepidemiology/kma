@@ -270,7 +270,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 1, 2};
+int version[3] = {1, 1, 3};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -283,7 +283,7 @@ unsigned ***tVF_scores, ***tVR_scores, *valuesFile;
 unsigned shifter, shifterS, r_shifter, shm, thread_num, countK;
 long unsigned *alignment_scores, *uniq_alignment_scores, *Mt1Score;
 long unsigned mask;
-double evalue, ID_t, scoreT, HMM_param[8];
+double evalue, ID_t, scoreT, support, HMM_param[8];
 int d[5][5], W1, U, M, MM, PE;
 extern char **environ;
 volatile int *excludeIn, *excludeOut;
@@ -11578,6 +11578,10 @@ int significantAnd90Nuc(int X, int Y) {
 	return (p_chisqr(pow(X - Y, 2) / (X + Y)) <= evalue && (9 * (X + Y) <= 10 * X));
 }
 
+int significantAndSupport(int X, int Y) {
+	return (p_chisqr(pow(X - Y, 2) / (X + Y)) <= evalue && (support * (X + Y) <= X));
+}
+
 unsigned char baseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, struct assembly *calls) {
 	
 	/* determine base at current position */
@@ -11933,13 +11937,35 @@ void * assemble_KMA_threaded(void *arg) {
 									pos = assembly[pos].next;
 								}
 								/* debug info */
-								/*
-								else if(aligned->t[i] == getNuc(templates_index[template]->seq, pos)) { // (Match, mismatch) and (Query gap, deletion)
+								/*else if(aligned->t[i] == getNuc(templates_index[template]->seq, pos)) { // (Match, mismatch) and (Query gap, deletion)
 									assembly[pos].counts[aligned->q[i]]++;
 									++i;
 									pos = assembly[pos].next;
 								} else {
 									fprintf(stderr, "KMA is out of sync\n");
+									pos = start;
+									
+									for(i = 0; i < aln_len; ++i) {
+										if(aligned->t[i] != 5) {
+											fprintf(stderr, "%c\t%c\t%c\t%c\n", bases[getNuc(templates_index[template]->seq, pos)], bases[aligned->t[i]], aligned->s[i], bases[aligned->q[i]]);
+											++pos;
+										} else {
+											fprintf(stderr, "%c\t%c\t%c\t%c\n", '-', bases[aligned->t[i]], aligned->s[i], bases[aligned->q[i]]);
+										}
+									}
+									
+									for(i = 0; i < aln_len; ++i) {
+										fprintf(stderr, "%c", bases[aligned->t[i]]);
+									}
+									fprintf(stderr, "\n");
+									for(i = 0; i < aln_len; ++i) {
+										fprintf(stderr, "%c", aligned->s[i]);
+									}
+									fprintf(stderr, "\n");
+									for(i = 0; i < aln_len; ++i) {
+										fprintf(stderr, "%c", bases[aligned->q[i]]);
+									}
+									fprintf(stderr, "\n");
 									exit(1);
 									++i;
 								}
@@ -15955,7 +15981,7 @@ void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
 	fprintf(helpOut, "#\t-ca\t\tMake circular alignments\tFalse\n");
 	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
-	fprintf(helpOut, "#\t-bc\t\tBase calls should be\n#\t\t\tsignificantly overrepresented.\tTrue\n");
+	fprintf(helpOut, "#\t-bc\t\tBase calls should be\n#\t\t\tsignificantly overrepresented.\t[True]\n");
 	fprintf(helpOut, "#\t-bc90\t\tBase calls should be both\n#\t\t\tsignificantly overrepresented,\n#\t\t\tand have 90%% agreement.\t\tFalse\n");
 	fprintf(helpOut, "#\t-bcNano\t\tCall bases at suspicious\n#\t\t\tdeletions, made for nanopore.\tFalse\n");
 	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
@@ -16346,7 +16372,17 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-bc") == 0) {
-			significantBase = &significantNuc;
+			if(++args < argc) {
+				significantBase = &significantAndSupport;
+				support = strtod(argv[args], &exeBasic);
+				if(*exeBasic != 0 || 1 < support) {
+					fprintf(stderr, "Invalid argument at \"-bc\".\n");
+					exit(4);
+				}
+			} else {
+				--args;
+				significantBase = &significantNuc;
+			}
 		} else if(strcmp(argv[args], "-bc90") == 0) {
 			significantBase = &significantAnd90Nuc;
 		} else if(strcmp(argv[args], "-bcNano") == 0) {
