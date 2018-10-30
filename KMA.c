@@ -16372,7 +16372,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		} else if(strcmp(argv[args], "-bc") == 0) {
-			if(++args < argc) {
+			if(++args < argc && argv[args][0] != '-') {
 				significantBase = &significantAndSupport;
 				support = strtod(argv[args], &exeBasic);
 				if(*exeBasic != 0 || 1 < support) {
