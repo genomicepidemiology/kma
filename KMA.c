@@ -16386,7 +16386,9 @@ int main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-bc90") == 0) {
 			significantBase = &significantAnd90Nuc;
 		} else if(strcmp(argv[args], "-bcNano") == 0) {
-			significantBase = &significantAnd90Nuc;
+			if(significantBase == &significantNuc) {
+				significantBase = &significantAnd90Nuc;
+			}
 			baseCall = &nanoCaller;
 		} else if(strcmp(argv[args], "-ID") == 0) {
 			++args;
