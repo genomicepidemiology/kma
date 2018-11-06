@@ -144,7 +144,7 @@ struct FileBuff {
 /*
 	GLOBAL VARIABLES
 */
-int version[3] = {1, 0, 1};
+int version[3] = {1, 0, 2};
 struct hashMap *templates;
 struct hashMap_kmers *foundKmers;
 int kmersize, kmerindex, DB_size, prefix_len, MinLen, MinKlen, shifter;
@@ -225,6 +225,23 @@ FILE * sfopen(const char *filename, const char *mode) {
 	}
 	
 	return file;
+}
+
+void sfwrite(const void *src, size_t size, size_t nmemb, FILE *stream) {
+	
+	char *ptr;
+	
+	size *= nmemb;
+	ptr = (char *)(src);
+	do {
+		nmemb = fwrite(ptr, 1, size, stream);
+		if(nmemb == 0) {
+			ERROR();
+		}
+		size -= nmemb;
+		ptr += nmemb;
+	} while(size);
+	
 }
 
 int chomp(char *string) {
@@ -346,7 +363,7 @@ void compDNA(struct compDNA *compressor, char *seq, int seqlen) {
 int compDNAref(struct compDNA *compressor, unsigned char *qseq, int seqlen) {
 	
 	int i, j, pos, end, bias;
-	unsigned char nuc, *seq;
+	unsigned char *seq;
 	
 	/* trim leadin N's */
 	seq = qseq;
@@ -371,19 +388,17 @@ int compDNAref(struct compDNA *compressor, unsigned char *qseq, int seqlen) {
 	}
 	
 	pos = 0;
-	nuc = 0;
 	compressor->N[0] = 0;
 	for(i = 0; i < seqlen; i += 32) {
 		end = (i + 32 < seqlen) ? i + 32 : seqlen;
 		pos = i >> 5;
 		for(j = i; j < end; ++j) {
 			if(seq[j] == 4) {
-				compressor->seq[pos] = (compressor->seq[pos] << 2) | nuc;
+				compressor->seq[pos] = (compressor->seq[pos] << 2);
 				compressor->N[0]++;
 				compressor->N[compressor->N[0]] = j;
 			} else {
-				nuc = seq[j];
-				compressor->seq[pos] = (compressor->seq[pos] << 2) | nuc;
+				compressor->seq[pos] = (compressor->seq[pos] << 2) | seq[j];
 			}
 		}
 	}
@@ -857,7 +872,7 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 		}
 		if(--avail == 0) {
 			if((avail = buffFileBuff(src)) == 0) {
-				/* chomp header */
+				/* chomp seq */
 				while(*--seq == 8) {
 					++size;
 				}
@@ -872,7 +887,7 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 		}
 	}
 	
-	/* chomp header */
+	/* chomp seq */
 	while(*--seq == 8) {
 		++size;
 	}
@@ -955,7 +970,7 @@ int CP(char *templatefilename, char *outputfilename) {
 	}
 	
 	while((bytes = fread(buffer, 1, buffSize, file_in))) {
-		fwrite(buffer, 1, bytes, file_out);
+		sfwrite(buffer, 1, bytes, file_out);
 	}
 	
 	fclose(file_in);
@@ -1370,50 +1385,50 @@ unsigned ** hashMapKMA_openValues(struct hashMapKMA *src) {
 void hashMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
 	
 	/* dump sizes */
-	fwrite(&DB_size, sizeof(unsigned), 1, out);
-	fwrite(&dest->kmersize, sizeof(unsigned), 1, out);
-	fwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
-	fwrite(&dest->prefix, sizeof(long unsigned), 1, out);
-	fwrite(&dest->size, sizeof(long unsigned), 1, out);
-	fwrite(&dest->n, sizeof(long unsigned), 1, out);
-	fwrite(&dest->v_index, sizeof(long unsigned), 1, out);
-	fwrite(&dest->null_index, sizeof(long unsigned), 1, out);
+	sfwrite(&DB_size, sizeof(unsigned), 1, out);
+	sfwrite(&dest->kmersize, sizeof(unsigned), 1, out);
+	sfwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
+	sfwrite(&dest->prefix, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->size, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->n, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->v_index, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->null_index, sizeof(long unsigned), 1, out);
 	
 	/* dump arrays */
 	if(dest->n <= U_LIMIT) {
-		fwrite(dest->exist, sizeof(unsigned), dest->size, out);
+		sfwrite(dest->exist, sizeof(unsigned), dest->size, out);
 		getExistPtr = &getExist;
 		hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
 	} else {
-		fwrite(dest->exist_l, sizeof(long unsigned), dest->size, out);
+		sfwrite(dest->exist_l, sizeof(long unsigned), dest->size, out);
 		getExistPtr = &getExistL;
 		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 	}
 	
 	if(DB_size < HU_LIMIT) {
-		fwrite(dest->values_s, sizeof(short unsigned), dest->v_index, out);
+		sfwrite(dest->values_s, sizeof(short unsigned), dest->v_index, out);
 		getValuePtr = &getValueS;
 		getSizePtr = &getSizeS;
 	} else {
-		fwrite(dest->values, sizeof(unsigned), dest->v_index, out);
+		sfwrite(dest->values, sizeof(unsigned), dest->v_index, out);
 		getValuePtr = &getValue;
 		getSizePtr = &getSize;
 	}
 	
 	if(dest->kmersize <= 16) {
-		fwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
+		sfwrite(dest->key_index, sizeof(unsigned), dest->n + 1, out);
 		getKeyPtr = &getKey;
 	} else {
-		fwrite(dest->key_index_l, sizeof(long unsigned), dest->n + 1, out);
+		sfwrite(dest->key_index_l, sizeof(long unsigned), dest->n + 1, out);
 		getKeyPtr = &getKeyL;
 	}
 	
 	if(dest->v_index < U_LIMIT) {
-		fwrite(dest->value_index, sizeof(unsigned), dest->n, out);
+		sfwrite(dest->value_index, sizeof(unsigned), dest->n, out);
 		hashMapKMA_addValue_ptr = &hashMapKMA_addValue;
 		getValueIndexPtr = &getValueIndex;
 	} else {
-		fwrite(dest->value_index_l, sizeof(long unsigned), dest->n, out);
+		sfwrite(dest->value_index_l, sizeof(long unsigned), dest->n, out);
 		hashMapKMA_addValue_ptr = &hashMapKMA_addValueL;
 		getValueIndexPtr = &getValueIndexL;
 	}
@@ -1422,32 +1437,32 @@ void hashMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
 void megaMapKMA_dump(struct hashMapKMA *dest, FILE *out) {
 	
 	/* dump sizes */
-	fwrite(&DB_size, sizeof(unsigned), 1, out);
-	fwrite(&dest->kmersize, sizeof(unsigned), 1, out);
-	fwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
-	fwrite(&dest->prefix, sizeof(long unsigned), 1, out);
-	fwrite(&dest->size, sizeof(long unsigned), 1, out);
-	fwrite(&dest->n, sizeof(long unsigned), 1, out);
-	fwrite(&dest->v_index, sizeof(long unsigned), 1, out);
-	fwrite(&dest->null_index, sizeof(long unsigned), 1, out);
+	sfwrite(&DB_size, sizeof(unsigned), 1, out);
+	sfwrite(&dest->kmersize, sizeof(unsigned), 1, out);
+	sfwrite(&dest->prefix_len, sizeof(unsigned), 1, out);
+	sfwrite(&dest->prefix, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->size, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->n, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->v_index, sizeof(long unsigned), 1, out);
+	sfwrite(&dest->null_index, sizeof(long unsigned), 1, out);
 	
 	/* dump arrays */
 	if(dest->v_index <= U_LIMIT) {
-		fwrite(dest->exist, sizeof(unsigned), dest->size, out);
+		sfwrite(dest->exist, sizeof(unsigned), dest->size, out);
 		getExistPtr = &getExist;
 		hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
 	} else {
-		fwrite(dest->exist_l, sizeof(long unsigned), dest->size, out);
+		sfwrite(dest->exist_l, sizeof(long unsigned), dest->size, out);
 		getExistPtr = &getExistL;
 		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 	}
 	
 	if(DB_size < HU_LIMIT) {
-		fwrite(dest->values_s, sizeof(short unsigned), dest->v_index, out);
+		sfwrite(dest->values_s, sizeof(short unsigned), dest->v_index, out);
 		getValuePtr = &getValueS;
 		getSizePtr = &getSizeS;
 	} else {
-		fwrite(dest->values, sizeof(unsigned), dest->v_index, out);
+		sfwrite(dest->values, sizeof(unsigned), dest->v_index, out);
 		getValuePtr = &getValue;
 		getSizePtr = &getSize;
 	}
@@ -1673,11 +1688,11 @@ void hashMap_index_add(struct hashMap_index *dest, long unsigned key, int newpos
 	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
 		if(pos > 0) {
 			if(getKmerIndex(dest->seq, pos - 1) == key) {
-				dest->index[index] = 1 - dest->index[index];
+				dest->index[index] = -pos;
 				neg = -1;
 			}
 		} else {
-			if(getKmerIndex(dest->seq, 1 - pos) == key) {
+			if(getKmerIndex(dest->seq, -pos - 1) == key) {
 				neg = -1;
 			}
 		}
@@ -1687,11 +1702,11 @@ void hashMap_index_add(struct hashMap_index *dest, long unsigned key, int newpos
 		for(index = 0; (pos = dest->index[index]) != 0; ++index) {
 			if(pos > 0) {
 				if(getKmerIndex(dest->seq, pos - 1) == key) {
-					dest->index[index] = 1 - dest->index[index];
+					dest->index[index] = -pos;
 					neg = -1;
 				}
 			} else {
-				if(getKmerIndex(dest->seq, 1 - pos) == key) {
+				if(getKmerIndex(dest->seq, -pos - 1) == key) {
 					neg = -1;
 				}
 			}
@@ -1722,8 +1737,8 @@ struct hashMap_index *hashMap_index_load(FILE *seq, FILE *index, int len) {
 
 void hashMap_index_dump(struct hashMap_index *src, FILE *seq, FILE *index) {
 	
-	fwrite(src->seq, sizeof(long unsigned), (src->len >> 5) + 1, seq);
-	fwrite(src->index, sizeof(int), src->size, index);
+	sfwrite(src->seq, sizeof(long unsigned), (src->len >> 5) + 1, seq);
+	sfwrite(src->index, sizeof(int), src->size, index);
 	
 }
 
@@ -3058,7 +3073,7 @@ void makeIndexing(struct compDNA *compressor, FILE *seq_out, FILE *index_out) {
 }
 
 void dumpSeq(struct compDNA *qseq, FILE *seq_out, FILE *index_out) {
-	fwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
+	sfwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
 }
 
 struct hashMapKMA * load_DBs(char *templatefilename, char *outputfilename) {
@@ -3262,7 +3277,7 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 			if(!index_out) {
 				ERROR();
 			}
-			fwrite(&kmerindex, sizeof(int), 1, index_out);
+			sfwrite(&kmerindex, sizeof(int), 1, index_out);
 		}
 	} else {
 		index_out = 0;
@@ -3318,16 +3333,16 @@ void makeDB(char **inputfiles, int fileCount, char *outputfilename, int appender
 	}
 	
 	/* Dump annots */
-	fwrite(&DB_size, sizeof(int), 1, length_out);
+	sfwrite(&DB_size, sizeof(int), 1, length_out);
 	if(template_ulengths != 0) {
 		template_ulengths[0] = 0;
 		template_slengths[0] = 0;
-		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
-		fwrite(template_slengths, sizeof(unsigned), DB_size, length_out);
-		fwrite(template_ulengths, sizeof(unsigned), DB_size, length_out);
+		sfwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
+		sfwrite(template_slengths, sizeof(unsigned), DB_size, length_out);
+		sfwrite(template_ulengths, sizeof(unsigned), DB_size, length_out);
 	} else {
 		template_lengths[0] = kmerindex;
-		fwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
+		sfwrite(template_lengths, sizeof(unsigned), DB_size, length_out);
 	}
 	if(index_out) {
 		fclose(index_out);

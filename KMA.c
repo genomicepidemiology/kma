@@ -270,7 +270,7 @@ struct aln_thread {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 1, 3};
+int version[3] = {1, 1, 4};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -340,6 +340,13 @@ FILE * sfopen(char *filename, char *mode) {
 	}
 	
 	return file;
+}
+
+void sfwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+	
+	if(fwrite(ptr, size, nmemb, stream) != nmemb) {
+		ERROR();
+	}
 }
 
 FILE * kmaPopen(const char *cmd, const char *type) {
@@ -1104,7 +1111,7 @@ void writeGzFileBuff(struct FileBuff *dest) {
 		strm->avail_out = dest->buffSize;
 		strm->next_out = dest->inBuffer;
 		check = deflate(strm, Z_NO_FLUSH);
-		fwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
+		sfwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
 	}
 	dest->bytes = dest->buffSize;
 	dest->next = dest->buffer;
@@ -1122,7 +1129,7 @@ void closeGzFileBuff(struct FileBuff *dest) {
 		strm->avail_out = dest->buffSize;
 		strm->next_out = dest->inBuffer;
 		check = deflate(strm, Z_FINISH);
-		fwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
+		sfwrite(dest->inBuffer, 1, dest->buffSize - strm->avail_out, dest->file);
 	}
 	deflateEnd(strm);
 	fclose(dest->file);
@@ -2259,7 +2266,7 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char 
 						Kmers[n] = makeKmer(qseq, i, kmersize);
 						++n;
 						if(n == max) {
-							fwrite(Kmers, sizeof(long unsigned), n, stdout);
+							sfwrite(Kmers, sizeof(long unsigned), n, stdout);
 							n = 0;
 						}
 					}
@@ -2286,7 +2293,7 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char 
 					Kmers[n] = key;
 					++n;
 					if(n == max) {
-						fwrite(Kmers, sizeof(long unsigned), n, stdout);
+						sfwrite(Kmers, sizeof(long unsigned), n, stdout);
 						n = 0;
 					}
 				}
@@ -2429,10 +2436,10 @@ void comp_rc(struct compDNA *compressor) {
 
 void dumpComp(struct compDNA *compressor, FILE* file) {
 	
-	fwrite(&compressor->seqlen, sizeof(int), 1, file);
-	fwrite(&compressor->complen, sizeof(int), 1, file);
-	fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, file);
-	fwrite(compressor->N, sizeof(int), compressor->N[0] + 1, file);
+	sfwrite(&compressor->seqlen, sizeof(int), 1, file);
+	sfwrite(&compressor->complen, sizeof(int), 1, file);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, file);
+	sfwrite(compressor->N, sizeof(int), compressor->N[0] + 1, file);
 	
 }
 
@@ -2486,8 +2493,8 @@ int getComp(struct compDNA *compressor, FILE* file) {
 
 void dumpCompKmers(struct compKmers *compressor, FILE *file) {
 	
-	fwrite(&compressor->n, sizeof(int), 1, file);
-	fwrite(compressor->kmers, sizeof(long unsigned), compressor->n, file);
+	sfwrite(&compressor->n, sizeof(int), 1, file);
+	sfwrite(compressor->kmers, sizeof(long unsigned), compressor->n, file);
 	
 }
 
@@ -3725,12 +3732,12 @@ void print_ankers(int *out_Tem, struct compDNA *qseq, int rc_flag, struct qseqs 
 	infoSize[3] = rc_flag;
 	infoSize[4] = *out_Tem;
 	infoSize[5] = header->len;
-	fwrite(infoSize, sizeof(int), 6, stdout);
+	sfwrite(infoSize, sizeof(int), 6, stdout);
 	
-	fwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
-	fwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
-	fwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
-	fwrite(header->seq, 1, header->len, stdout);
+	sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
+	sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
+	sfwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
+	sfwrite(header->seq, 1, header->len, stdout);
 	
 }
 
@@ -3744,12 +3751,12 @@ void print_ankers_Sparse(int *out_Tem, struct compDNA *qseq, int rc_flag, struct
 	infoSize[3] = -(abs(rc_flag));
 	infoSize[4] = *out_Tem;
 	infoSize[5] = header->len;
-	fwrite(infoSize, sizeof(int), 6, stdout);
+	sfwrite(infoSize, sizeof(int), 6, stdout);
 	
-	fwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
-	fwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
-	fwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
-	fwrite(header->seq, 1, header->len, stdout);
+	sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
+	sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
+	sfwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
+	sfwrite(header->seq, 1, header->len, stdout);
 	
 }
 
@@ -3806,15 +3813,15 @@ int get_ankers(int *out_Tem, struct compDNA *qseq, struct qseqs *header, FILE *i
 void print_anker_pairs(int *out_Tem, struct compDNA *qseq, struct compDNA *qseq_r, int score, int score_r, struct qseqs *header, struct qseqs *header_r) {
 	
 	dumpComp(qseq, stdout);
-	fwrite(&(int){score}, sizeof(int), 1, stdout);
-	fwrite(out_Tem, sizeof(int), *out_Tem + 1, stdout);
-	fwrite(&(int){-header->len}, sizeof(int), 1, stdout);
-	fwrite(header->seq, 1, header->len, stdout);
+	sfwrite(&(int){score}, sizeof(int), 1, stdout);
+	sfwrite(out_Tem, sizeof(int), *out_Tem + 1, stdout);
+	sfwrite(&(int){-header->len}, sizeof(int), 1, stdout);
+	sfwrite(header->seq, 1, header->len, stdout);
 	
 	dumpComp(qseq_r, stdout);
-	fwrite(&(int){score_r}, sizeof(int), 1, stdout);
-	fwrite(&(int){-header_r->len}, sizeof(int), 1, stdout);
-	fwrite(header_r->seq, 1, header_r->len, stdout);
+	sfwrite(&(int){score_r}, sizeof(int), 1, stdout);
+	sfwrite(&(int){-header_r->len}, sizeof(int), 1, stdout);
+	sfwrite(header_r->seq, 1, header_r->len, stdout);
 }
 
 void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, struct compDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, struct qseqs *header) {
@@ -4198,10 +4205,10 @@ FILE * printFrags(struct frag **alignFrags) {
 			for(alignFrag = alignFrags[i]; alignFrag != 0; alignFrag = next) {
 				next = alignFrag->next;
 				
-				fwrite(&i, sizeof(int), 1, OUT);
-				fwrite(alignFrag->buffer, sizeof(int), 6, OUT);
-				fwrite(alignFrag->qseq, 1, alignFrag->buffer[0], OUT);
-				fwrite(alignFrag->header, 1, alignFrag->buffer[5], OUT);
+				sfwrite(&i, sizeof(int), 1, OUT);
+				sfwrite(alignFrag->buffer, sizeof(int), 6, OUT);
+				sfwrite(alignFrag->qseq, 1, alignFrag->buffer[0], OUT);
+				sfwrite(alignFrag->header, 1, alignFrag->buffer[5], OUT);
 				
 				free(alignFrag->qseq);
 				free(alignFrag->header);
@@ -4210,7 +4217,7 @@ FILE * printFrags(struct frag **alignFrags) {
 			alignFrags[i] = 0;
 		}
 	}
-	fwrite(&(int){-1}, sizeof(int), 1, OUT);
+	sfwrite(&(int){-1}, sizeof(int), 1, OUT);
 	rewind(OUT);
 	
 	return OUT;
@@ -4230,10 +4237,10 @@ void bootFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compresso
 		buffer[1] = compressor->complen;
 		buffer[2] = compressor->N[0];
 		
-		fwrite(buffer, sizeof(int), 4, stdout);
-		fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-		fwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-		fwrite((header->seq + 1), 1, header->len, stdout);
+		sfwrite(buffer, sizeof(int), 4, stdout);
+		sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
+		sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
+		sfwrite((header->seq + 1), 1, header->len, stdout);
 		resetComp(compressor);
 	}
 	
@@ -4242,10 +4249,10 @@ void bootFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compresso
 	buffer[0] = compressor->seqlen;
 	buffer[1] = compressor->complen;
 	buffer[2] = compressor->N[0];
-	fwrite(buffer, sizeof(int), 4, stdout);
-	fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	fwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	fwrite((header->seq + 1), 1, header->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, stdout);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
+	sfwrite((header->seq + 1), 1, header->len, stdout);
 	resetComp(compressor);
 }
 
@@ -4265,10 +4272,10 @@ void printFsa(struct qseqs *header, struct qseqs *qseq, struct compDNA *compress
 	buffer[2] = compressor->N[0];
 	buffer[3] = header->len;
 	
-	fwrite(buffer, sizeof(int), 4, stdout);
-	fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	fwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	fwrite((header->seq + 1), 1, header->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, stdout);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
+	sfwrite((header->seq + 1), 1, header->len, stdout);
 	
 	
 	resetComp(compressor);
@@ -4279,9 +4286,9 @@ void printFsaMt1(struct qseqs *header, struct qseqs *qseq, struct compDNA *compr
 	template_lengths[1] = qseq->len;
 	template_lengths[6] = header->len;
 	
-	fwrite(template_lengths, sizeof(int), 7, stdout);
-	fwrite(qseq->seq, 1, qseq->len, stdout);
-	fwrite(header->seq + 1, 1, header->len, stdout);
+	sfwrite(template_lengths, sizeof(int), 7, stdout);
+	sfwrite(qseq->seq, 1, qseq->len, stdout);
+	sfwrite(header->seq + 1, 1, header->len, stdout);
 }
 
 void printFsa_pairMt1(struct qseqs *header, struct qseqs *qseq, struct qseqs *header_r, struct qseqs *qseq_r, struct compDNA *compressor) {
@@ -4307,10 +4314,10 @@ void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *heade
 	buffer[2] = compressor->N[0];
 	buffer[3] = -header->len;
 	
-	fwrite(buffer, sizeof(int), 4, stdout);
-	fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	fwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	fwrite((header->seq + 1), 1, header->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, stdout);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
+	sfwrite((header->seq + 1), 1, header->len, stdout);
 	resetComp(compressor);
 	
 	/* translate to 2bit */
@@ -4325,10 +4332,10 @@ void printFsa_pair(struct qseqs *header, struct qseqs *qseq, struct qseqs *heade
 	buffer[2] = compressor->N[0];
 	buffer[3] = header_r->len;
 	
-	fwrite(buffer, sizeof(int), 4, stdout);
-	fwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	fwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	fwrite((header_r->seq + 1), 1, header_r->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, stdout);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
+	sfwrite((header_r->seq + 1), 1, header_r->len, stdout);
 	resetComp(compressor);
 }
 
@@ -8386,7 +8393,7 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 				}
 			}
 			if(Kmers->n) {
-				fwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
+				sfwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
 				Kmers->n = 0;
 			}
 		} else if(FASTQ & 2) {
@@ -8397,7 +8404,7 @@ void run_input_sparse(char **inputfiles, int fileCount, int minPhred, int fiveCl
 				}
 			}
 			if(Kmers->n) {
-				fwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
+				sfwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
 				Kmers->n = 0;
 			}
 		}
@@ -12491,12 +12498,12 @@ void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *
 	buffer[2] = score;
 	buffer[3] = header->len;
 	counter = abs(counter);
-	fwrite(buffer, sizeof(int), 4, frag_out_raw);
-	fwrite(qseq, 1, q_len, frag_out_raw);
-	fwrite(header->seq, 1, header->len, frag_out_raw);
-	fwrite(start, sizeof(int), counter, frag_out_raw);
-	fwrite(end, sizeof(int), counter, frag_out_raw);
-	fwrite(template, sizeof(int), counter, frag_out_raw);
+	sfwrite(buffer, sizeof(int), 4, frag_out_raw);
+	sfwrite(qseq, 1, q_len, frag_out_raw);
+	sfwrite(header->seq, 1, header->len, frag_out_raw);
+	sfwrite(start, sizeof(int), counter, frag_out_raw);
+	sfwrite(end, sizeof(int), counter, frag_out_raw);
+	sfwrite(template, sizeof(int), counter, frag_out_raw);
 	
 	/* update scores */
 	if(counter == 1) { //Only one best match
@@ -12523,18 +12530,18 @@ void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int
 	buffer[2] = -score;
 	buffer[3] = header->len;
 	counter = abs(counter);
-	fwrite(buffer, sizeof(int), 4, frag_out_raw);
-	fwrite(qseq, 1, q_len, frag_out_raw);
-	fwrite(header->seq, 1, header->len, frag_out_raw);
-	fwrite(start, sizeof(int), counter, frag_out_raw);
-	fwrite(end, sizeof(int), counter, frag_out_raw);
-	fwrite(template, sizeof(int), counter, frag_out_raw);
+	sfwrite(buffer, sizeof(int), 4, frag_out_raw);
+	sfwrite(qseq, 1, q_len, frag_out_raw);
+	sfwrite(header->seq, 1, header->len, frag_out_raw);
+	sfwrite(start, sizeof(int), counter, frag_out_raw);
+	sfwrite(end, sizeof(int), counter, frag_out_raw);
+	sfwrite(template, sizeof(int), counter, frag_out_raw);
 	
 	buffer[0] = qr_len;
 	buffer[1] = header_r->len;
-	fwrite(buffer, sizeof(int), 2, frag_out_raw);
-	fwrite(qseq_r, 1, qr_len, frag_out_raw);
-	fwrite(header_r->seq, 1, header_r->len, frag_out_raw);
+	sfwrite(buffer, sizeof(int), 2, frag_out_raw);
+	sfwrite(qseq_r, 1, qr_len, frag_out_raw);
+	sfwrite(header_r->seq, 1, header_r->len, frag_out_raw);
 	
 	/* update scores */
 	if(counter == 1) { //Only one best match
@@ -13689,7 +13696,8 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		}
 	}
 	status |= kmaPclose(inputfile);
-	rewind(frag_out_raw);
+	i = 0;
+	sfwrite(&i, sizeof(int), 1, frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
@@ -13756,6 +13764,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	}
 	outputfilename[file_len] = 0;
 	frag_in_raw = frag_out_raw;
+	rewind(frag_in_raw);
 	outputfilename[file_len] = 0;
 	template_fragments = calloc(DB_size, sizeof(FILE*));
 	if(!template_fragments) {
@@ -13786,7 +13795,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	
 	/* ConClave */
 	if(ConClave == 1) {
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -13935,7 +13944,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		++fileCount;
 	} else if(ConClave == 2) {
 		/* find potential template candidates */
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -14030,7 +14039,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		}
 		
 		/* identify sorting keys */
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -14070,7 +14079,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		
 		/* choose the templates */
 		memset(w_scores, 0, DB_size * sizeof(long unsigned));
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -14277,6 +14286,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	free(matched_templates);
 	free(bestTemplates);
 	destroyQseqs(qseq_r);
+	fclose(frag_out_raw);
 	if(frag_out_all) {
 		destroyGzFileBuff(frag_out_all);
 	}
@@ -14683,7 +14693,8 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		}
 	}
 	status |= kmaPclose(inputfile);
-	rewind(frag_out_raw);
+	i = 0;
+	sfwrite(&i, sizeof(int), 1, frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
@@ -14706,6 +14717,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	}
 	outputfilename[file_len] = 0;
 	frag_in_raw = frag_out_raw;
+	rewind(frag_in_raw);
 	template_fragments = calloc(DB_size, sizeof(FILE*));
 	if(!template_fragments) {
 		ERROR();
@@ -14735,7 +14747,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* ConClave */
 	if(ConClave == 1) {
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -14884,7 +14896,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		++fileCount;
 	} else if(ConClave == 2) {
 		/* find potential template candidates */
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -14979,18 +14991,17 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		}
 		
 		/* identify sorting keys */
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
 			read_score = abs(stats[2]);
 			header->len = stats[3];
 			
-			/* best templates, skip rest */
-			fseek(frag_in_raw, qseq->len + header->len + 2 * bestHits * sizeof(int), SEEK_CUR);
-			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			
 			if(bestHits != 1) {
+				/* best templates, skip rest */
+				fseek(frag_in_raw, qseq->len + header->len + 2 * bestHits * sizeof(int), SEEK_CUR);
+				fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 				bestTemplate = 0;
 				i = bestHits;
 				while(i--) {
@@ -15008,6 +15019,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				if(bestTemplate) {
 					uniq_alignment_scores[bestTemplate] += read_score;
 				}
+			} else {
+				/* skip rest */
+				fseek(frag_in_raw, qseq->len + header->len + 3 * sizeof(int), SEEK_CUR);
 			}
 			
 			if(stats[2] < 0) {
@@ -15019,7 +15033,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		
 		/* choose the templates */
 		memset(w_scores, 0, DB_size * sizeof(long unsigned));
-		while(fread(stats, sizeof(int), 4, frag_in_raw)) {
+		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
@@ -15225,6 +15239,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	free(best_start_pos);
 	free(best_end_pos);
 	free(matched_templates);
+	fclose(frag_out_raw);
 	
 	/* Get expected values */
 	Nhits = 0;
@@ -16728,7 +16743,7 @@ int main(int argc, char *argv[]) {
 			
 			if(Mt1) {
 				Mt1 = -1;
-				fwrite(&Mt1, sizeof(int), 1, stdout);
+				sfwrite(&Mt1, sizeof(int), 1, stdout);
 			}
 			
 			if(extendedFeatures) {
