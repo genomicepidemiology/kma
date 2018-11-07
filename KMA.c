@@ -3213,7 +3213,7 @@ int hashMap_index_getDubPos(struct hashMap_index *dest, long unsigned key, int v
 	
 	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
 		if(pos == value) {
-			return index + 1;
+			return index;
 		}
 	}
 	
@@ -4218,6 +4218,7 @@ FILE * printFrags(struct frag **alignFrags) {
 		}
 	}
 	sfwrite(&(int){-1}, sizeof(int), 1, OUT);
+	fflush(OUT);
 	rewind(OUT);
 	
 	return OUT;
@@ -10786,6 +10787,11 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 					points->qStart[mem_count] = j + 1;
 					points->tStart[mem_count] = prev + 2;
 					
+					if(points->tStart[mem_count] < 1) {
+						fprintf(stderr, "1\n");
+						exit(0);
+					}
+					
 					/* skip k-mer bases */
 					value += (kmersize - 1);
 					i += kmersize;
@@ -10825,7 +10831,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 					
 					/* get all mems */
 					bias = i;
-					while(0 < stop) {
+					while(0 <= stop) {
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
@@ -10838,7 +10844,10 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 						/* get start positions */
 						points->qStart[mem_count] = j + 1;
 						points->tStart[mem_count] = prev + 2;
-						
+						if(points->tStart[mem_count] < 1) {
+							fprintf(stderr, "2\n");
+							exit(0);
+						}
 						/* skip k-mer bases */
 						value += (kmersize - 1);
 						k += kmersize;
@@ -10865,7 +10874,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 						if(bias < k) {
 							bias = k;
 						}
-						
 						stop = hashMap_index_getNextDubPos(template_index, key, min, max, stop);
 					}
 					i = bias + 1;
@@ -11156,7 +11164,7 @@ struct alnScore KMA_score(const int template_name, const unsigned char *qseq, in
 				
 				/* get all mems */
 				bias = j;
-				while(0 < stop) {
+				while(0 <= stop) {
 					/* get mem info */
 					l = j;
 					/* backseed for overlapping seeds */
@@ -11489,7 +11497,7 @@ int anker_rc(const int template_name, unsigned char *qseq, int q_len, struct aln
 					
 					/* get all mems */
 					bias = i;
-					while(0 < stop) {
+					while(0 <= stop) {
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
@@ -11866,7 +11874,6 @@ void * assemble_KMA_threaded(void *arg) {
 						}
 						
 						if(read_score > kmersize && score >= scoreT) {
-							
 							stats[1] = read_score;
 							stats[2] = start;
 							stats[3] = end;
@@ -13698,6 +13705,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	status |= kmaPclose(inputfile);
 	i = 0;
 	sfwrite(&i, sizeof(int), 1, frag_out_raw);
+	fflush(frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
@@ -14416,7 +14424,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				q_value = read_score;
 			}
 			p_value  = p_chisqr(q_value);
-			
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				/* Do assembly */
 				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
@@ -14695,6 +14702,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	status |= kmaPclose(inputfile);
 	i = 0;
 	sfwrite(&i, sizeof(int), 1, frag_out_raw);
+	fflush(frag_out_raw);
 	freeComp(qseq_comp);
 	free(qseq_comp);
 	freeComp(qseq_r_comp);
