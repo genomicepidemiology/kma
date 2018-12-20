@@ -283,7 +283,7 @@ struct spltDBbuff {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 1, 5};
+int version[3] = {1, 1, 6};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -1262,7 +1262,11 @@ void initialiseVcf(struct FileBuff *fileP, char *templateFilename) {
 	update += check; avail -= check;
 	check = sprintf(update, "##FORMAT=<ID=FT,Number=1,Type=String,Description=\"Filter\">\n");
 	update += check; avail -= check;
-	check = sprintf(update, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s\n", noFolder(templateFilename));
+	if(templateFilename) {
+		check = sprintf(update, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s\n", noFolder(templateFilename));
+	} else {
+		check = sprintf(update, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tspltDB\n");
+	}
 	update += check; avail -= check;
 	
 	fileP->next = (unsigned char *) update;
@@ -3779,7 +3783,7 @@ void print_ankers_spltDB(int *out_Tem, struct compDNA *qseq, int rc_flag, struct
 		if(!buffers) {
 			ERROR();
 		}
-	} else if(out_Tem == 0) {
+	} else if(qseq == 0) {
 		/* catch remains after last call */
 		while(allIn) {
 			/* find and write next target */
@@ -3811,7 +3815,8 @@ void print_ankers_spltDB(int *out_Tem, struct compDNA *qseq, int rc_flag, struct
 			free(node);
 			buffers[tNum] = nodeN;
 		}
-		sfwrite(&(unsigned){U_LIMIT}, sizeof(int), 1, stdout);
+		sfwrite(&(unsigned){U_LIMIT}, sizeof(unsigned), 1, stdout);
+		sfwrite(&(int){out_Tem[-1]}, sizeof(int), 1, stdout);
 		return;
 	}
 	
@@ -3974,7 +3979,7 @@ int get_ankers_spltDB(int *infoSize, int *out_Tem, struct compDNA *qseq, struct 
 	
 	int num;
 	
-	if(qseq->seqlen) {
+	if(qseq) {
 		qseq->seqlen = infoSize[0];
 		qseq->complen = infoSize[1];
 		*out_Tem = infoSize[4];
@@ -4013,10 +4018,11 @@ int get_ankers_spltDB(int *infoSize, int *out_Tem, struct compDNA *qseq, struct 
 		fread(out_Tem + 1, sizeof(int), *out_Tem, inputfile);
 		fread(header->seq, 1, header->len, inputfile);
 	} else {
+		/* in the case of equally well scoring DBs */
+		fseek(inputfile, infoSize[1] * sizeof(long unsigned) + infoSize[2] * sizeof(int), SEEK_CUR);
 		*out_Tem = infoSize[4];
-		fseek(inputfile, qseq->complen * sizeof(long unsigned) + qseq->N[0] * sizeof(int), SEEK_CUR);
 		fread(out_Tem + 1, sizeof(int), *out_Tem, inputfile);
-		fseek(inputfile, header->len, SEEK_CUR);
+		fseek(inputfile, infoSize[5], SEEK_CUR);
 	}
 	
 	/* get info for next read */
@@ -8925,7 +8931,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev) {
 	
 	/* print remaining buffer */
 	if(printPtr == &print_ankers_spltDB) {
-		print_ankers_spltDB(0, 0, 0, 0);
+		print_ankers_spltDB(thread->bestTemplates, 0, 0, 0);
 	}
 	
 	/* join threads */
@@ -10946,11 +10952,6 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 					points->qStart[mem_count] = j + 1;
 					points->tStart[mem_count] = prev + 2;
 					
-					if(points->tStart[mem_count] < 1) {
-						fprintf(stderr, "1\n");
-						exit(0);
-					}
-					
 					/* skip k-mer bases */
 					value += (kmersize - 1);
 					i += kmersize;
@@ -11003,10 +11004,7 @@ struct alnScore KMA(const int template_name, const unsigned char *qseq, int q_le
 						/* get start positions */
 						points->qStart[mem_count] = j + 1;
 						points->tStart[mem_count] = prev + 2;
-						if(points->tStart[mem_count] < 1) {
-							fprintf(stderr, "2\n");
-							exit(0);
-						}
+						
 						/* skip k-mer bases */
 						value += (kmersize - 1);
 						k += kmersize;
@@ -14089,7 +14087,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				}
 				fread(stats, sizeof(int), 2, frag_in_raw);
 				qseq->len = stats[0];
-				header->len = stats[3];
+				header->len = stats[1];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -14424,7 +14422,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				}
 				fread(stats, sizeof(int), 2, frag_in_raw);
 				qseq->len = stats[0];
-				header->len = stats[3];
+				header->len = stats[1];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -15060,7 +15058,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				}
 				fread(stats, sizeof(int), 2, frag_in_raw);
 				qseq->len = stats[0];
-				header->len = stats[3];
+				header->len = stats[1];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -15397,7 +15395,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				}
 				fread(stats, sizeof(int), 2, frag_in_raw);
 				qseq->len = stats[0];
-				header->len = stats[3];
+				header->len = stats[1];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -16147,7 +16145,7 @@ void getIndexName(char **template_names, struct hashMap_index **templates_index,
 	templates_index -= newBias;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, char *exePrev, int ConClave, int extendedFeatures, int vcf) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int extendedFeatures, int vcf) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -16163,11 +16161,12 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	long unsigned Nhits, template_tot_ulen, bestNum, counter, *w_scores;
 	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
-	char *templatefilename;
+	char *templatefilename, Date[11];
 	FILE **inputfiles, *inputfile, *frag_in_raw, *index_in, *seq_in;
 	FILE *res_out, *alignment_out, *consensus_out, *frag_out_raw;
 	FILE *extendedFeatures_out, **template_fragments;
 	time_t t0, t1;
+	struct tm *tm;
 	struct FileBuff *frag_out, *frag_out_all, *matrix_out, *vcf_out;
 	struct aln *aligned, *gap_align;
 	struct assem *aligned_assem;
@@ -16221,7 +16220,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	best_end_pos = smalloc((DB_size << 1) * sizeof(int));
 	alignment_scores = calloc(DB_size, sizeof(long unsigned));
 	uniq_alignment_scores = calloc(DB_size, sizeof(long unsigned));
-	if(!best_start_pos || alignment_scores || !uniq_alignment_scores) {
+	if(!best_start_pos || !alignment_scores || !uniq_alignment_scores) {
 		ERROR();
 	}
 	
@@ -16282,8 +16281,32 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	} else {
 		vcf_out = 0;
 	}
+	if(extendedFeatures) {
+		strcat(outputfilename, ".mapstat");
+		extendedFeatures_out = sfopen(outputfilename, "wb");
+		outputfilename[file_len] = 0;
+		fprintf(extendedFeatures_out, "## method\tKMA\n");
+		fprintf(extendedFeatures_out, "## version\t%d.%d.%d\n", version[0], version[1], version[2]);
+		
+		fprintf(extendedFeatures_out, "## databases %s", noFolder(*templatefilenames));
+		for(i = 1; i < targetNum; ++i) {
+			fprintf(extendedFeatures_out, ", %s", noFolder(templatefilenames[i]));
+		}
+		fprintf(extendedFeatures_out, "\n");
+		
+		time(&t1);
+		tm = localtime(&t1);
+		strftime(Date, sizeof(Date), "%Y-%m-%d", tm);
+		fprintf(extendedFeatures_out, "## date\t%s\n", Date);
+		fprintf(extendedFeatures_out, "## command\t%s", *argv);
+		for(i = 1; i < argc; ++i) {
+			fprintf(extendedFeatures_out, " %s", argv[i]);
+		}
+		fprintf(extendedFeatures_out, "\n");
+	} else {
+		extendedFeatures_out = 0;
+	}
 	
-	/* here */
 	/* open input streams */
 	file_len = strlen(outputfilename);
 	for(i = 0; i < targetNum; ++i) {
@@ -16311,23 +16334,39 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		}
 	}
 	
+	/* here */
+	/* somthing is wrong in the next part,
+	which cannot be debugged on macOs. */
+	
 	target = 0;
 	targetScore = 0;
 	rc_flag = 0;
+	qseq->len = 0;
+	qseq_comp->seqlen = 0;
 	*bestTargets = 0;
 	while(target != U_LIMIT) {
 		/* join best templates */
 		read_score = 0;
-		qseq->len = 0;
-		qseq_comp->seqlen = 0;
 		*matched_templates = 0;
+		qseq->len = 0;
+		qseq_r->len = 0;
 		for(i = 1; i <= *bestTargets; ++i) {
 			num = bestTargets[i];
-			nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_comp, header, inputfiles[num]);
-			qseq->len = qseq_comp->seqlen;
-			if(matched_templates[*matched_templates + 1]) { // PE
+			if(i == 1) {
 				nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_comp, header, inputfiles[num]);
-				qseq_r->len = qseq_r_comp->seqlen;
+			} else {
+				nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), 0, 0, inputfiles[num]);
+			}
+			qseq->len = qseq_comp->seqlen;
+			if(matched_templates[*matched_templates + 1]) {
+				read_score = 0;
+			} else { // PE
+				if(qseq_r->len == 0) {
+					nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_r_comp, header_r, inputfiles[num]);
+					qseq_r->len = qseq_r_comp->seqlen;
+				} else {
+					nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), 0, 0, inputfiles[num]);
+				}
 				read_score = 1;
 			}
 			
@@ -16341,7 +16380,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		}
 		
 		if(kmersize <= qseq->len) {
-			
 			if(delta <= MAX(qseq->len, qseq_r->len)) {
 				delta = MAX(qseq->len, qseq_r->len);
 				delta <<= 1;
@@ -16382,6 +16420,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				}
 			}
 		}
+		
 		if(*matched_templates) {
 			++target;
 			i = targetNum;
@@ -16393,6 +16432,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					if(*uPtr != U_LIMIT) {
 						sfread(targetInfo[i], sizeof(int), 6, inputfiles[i]);
 					} else {
+						sfread(targetInfo[i], sizeof(int), 1, inputfiles[i]);
 						targetInfo[i][3] = I_LIMIT;
 					}
 				}
@@ -16407,7 +16447,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		rc_flag = 0;
 		*bestTargets = 0;
 		for(i = 0; i < targetNum; ++i) {
-			if(*++uPtr < target) {
+			if(*uPtr < target) {
 				target = *uPtr;
 				targetScore = abs(targetInfo[i][3]);
 				*bestTargets = 1;
@@ -16424,16 +16464,30 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					rc_flag = rc_flag < 0 ? rc_flag : targetInfo[i][3];
 				} else {
 					fseek(inputfiles[i], targetInfo[i][1] * sizeof(long unsigned) + (targetInfo[i][2] + targetInfo[i][4]) * sizeof(int) + targetInfo[i][5], SEEK_CUR);
+					if(matched_templates[*matched_templates + 1]) { // PE
+						nums[i] = get_ankers_spltDB(targetInfo[i], matched_templates + (*matched_templates + 1), qseq_comp, header, inputfiles[i]);
+						qseq_r->len = qseq_r_comp->seqlen;
+						read_score = 1;
+					}
 					sfread(uPtr, sizeof(unsigned), 1, inputfiles[i]);
 					if(*uPtr != U_LIMIT) {
 						sfread(targetInfo[i], sizeof(int), 6, inputfiles[i]);
 					} else {
+						sfread(targetInfo[i], sizeof(int), 1, inputfiles[i]);
 						targetInfo[i][3] = I_LIMIT;
 					}
 				}
 			}
+			++uPtr;
 		}
 	}
+	/* get fragmentCount */
+	if(extendedFeatures) {
+		fprintf(extendedFeatures_out, "## fragmentCount\t%u\n", **targetInfo);
+		fprintf(extendedFeatures_out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
+	}
+	
+	/* close files */
 	i = targetNum;
 	while(i--) {
 		fclose(inputfiles[i]);
@@ -16615,7 +16669,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				}
 				fread(stats, sizeof(int), 2, frag_in_raw);
 				qseq->len = stats[0];
-				header->len = stats[3];
+				header->len = stats[1];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -16952,7 +17006,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				}
 				fread(stats, sizeof(int), 2, frag_in_raw);
 				qseq->len = stats[0];
-				header->len = stats[3];
+				header->len = stats[1];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -17013,16 +17067,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
-	if(extendedFeatures) {
-		strcat(outputfilename, ".mapstat");
-		extendedFeatures_out = sfopen(outputfilename, "ab");
-		outputfilename[file_len] = 0;
-		fprintf(extendedFeatures_out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
-	} else {
-		extendedFeatures_out = 0;
-	}
 	if(vcf) {
 		/* here */
+		/* might be done more elegant */
 		templatefilename = 0;
 		initialiseVcf(vcf_out, templatefilename);
 	}
@@ -17500,10 +17547,11 @@ int main(int argc, char *argv[]) {
 	
 	int i, j, args, exe_len, minPhred, fiveClip, sparse_run, mem_mode, Mt1;
 	int step1, step2, fileCounter, fileCounter_PE, fileCounter_INT, status;
-	int ConClave, extendedFeatures, vcf;
+	int ConClave, extendedFeatures, vcf, targetNum, size, escape, spltDB;
 	long unsigned totFrags;
-	char *exeBasic, *outputfilename, *templatefilename, *to2Bit, ss;
-	char **inputfiles, **inputfiles_PE, **inputfiles_INT, Date[11];
+	char *exeBasic, *outputfilename, *templatefilename, **templatefilenames;
+	char **inputfiles, **inputfiles_PE, **inputfiles_INT, *to2Bit, Date[11];
+	char ss;
 	FILE *templatefile;
 	time_t t0, t1;
 	struct tm *tm;
@@ -17517,6 +17565,8 @@ int main(int argc, char *argv[]) {
 	ConClave = 1;
 	totFrags = 0;
 	vcf = 0;
+	targetNum = 0;
+	spltDB = 0;
 	extendedFeatures = 0;
 	status = 0;
 	countK = 0;
@@ -17570,6 +17620,7 @@ int main(int argc, char *argv[]) {
 	inputfiles_PE = 0;
 	inputfiles_INT = 0;
 	inputfiles = 0;
+	templatefilenames = 0;
 	Mt1 = 0;
 	significantBase = &significantNuc; //-bc
 	baseCall = &baseCaller;
@@ -17579,7 +17630,24 @@ int main(int argc, char *argv[]) {
 	/* PARSE COMMAND LINE OPTIONS */
 	args = 1;
 	while(args < argc) {
-		if(strcmp(argv[args], "-i") == 0) {
+		if(strcmp(argv[args], "-t_db") == 0) {
+			if(++args < argc) {
+				templatefilename = malloc(strlen(argv[args]) + 64);
+				if(!templatefilename) {
+					ERROR();
+				}
+				strcpy(templatefilename, argv[args]);
+				++targetNum;
+				templatefilenames = realloc(templatefilenames, targetNum * sizeof(char *));
+				templatefilenames[targetNum - 1] = templatefilename;
+			}
+			while(++args < argc && *argv[args] != '-') {
+				++targetNum;
+				templatefilenames = realloc(templatefilenames, targetNum * sizeof(char *));
+				templatefilenames[targetNum - 1] = argv[args];
+			}
+			--args;
+		} else if(strcmp(argv[args], "-i") == 0) {
 			++args;
 			status = fileCounter;
 			for(i = args; i < argc && (strncmp(argv[i], "-", 1) != 0 || strcmp(argv[i], "--") == 0); ++i) {
@@ -17789,15 +17857,6 @@ int main(int argc, char *argv[]) {
 			ankerPtr = &ankerAndClean_MEM;
 		} else if(strcmp(argv[args], "-ex_mode") == 0) {
 			exhaustive = 1;
-		} else if(strcmp(argv[args], "-t_db") == 0) {
-			++args;
-			if(args < argc) {
-				templatefilename = malloc(strlen(argv[args]) + 64);
-				if(!templatefilename) {
-					ERROR();
-				}
-				strcpy(templatefilename, argv[args]);
-			}
 		} else if(strcmp(argv[args], "-k") == 0) {
 			++args;
 			if(args < argc) {
@@ -17845,6 +17904,9 @@ int main(int argc, char *argv[]) {
 			print_matrix = 1;
 		} else if(strcmp(argv[args], "-a") == 0) {
 			print_all = 1;
+			mem_mode = 1;
+			alignLoadPtr = &alignLoad_fly_mem;
+			ankerPtr = &ankerAndClean_MEM;
 		} else if(strcmp(argv[args], "-ref_fsa") == 0) {
 			ref_fsa = 1;
 		} else if(strcmp(argv[args], "-Sparse") == 0) {
@@ -18006,6 +18068,8 @@ int main(int argc, char *argv[]) {
 			W1 = -5;
 			U = -1;
 			PE = 17;
+		} else if(strcmp(argv[args], "-spltDB") == 0) {
+			spltDB = 1;
 		} else if(strcmp(argv[args], "-v") == 0) {
 			fprintf(stdout, "KMA-%d.%d.%d\n", version[0], version[1], version[2]);
 			exit(0);
@@ -18017,6 +18081,15 @@ int main(int argc, char *argv[]) {
 			helpMessage(1);
 		}
 		++args;
+	}
+	
+	if(spltDB || targetNum != 1) {
+		printPtr = &print_ankers_spltDB;
+		if(deConPrintPtr != &deConPrint) {
+			deConPrintPtr = printPtr;
+		}
+		kmerScan = &save_kmers;
+		one2one = 1;
 	}
 	
 	if(one2one && countK) {
@@ -18031,7 +18104,6 @@ int main(int argc, char *argv[]) {
 			baseCall = &refCaller;
 		}
 	}
-	
 	
 	if(outputfilename == 0 || templatefilename == 0) {
 		fprintf(stderr, " Too few arguments handed\n");
@@ -18064,8 +18136,105 @@ int main(int argc, char *argv[]) {
 		d[i][4] = U;
 	}
 	d[4][4] = 0;
-	freopen(NULL, "wb", stdout);
-	setvbuf(stdout, NULL, _IOFBF, CHUNK);
+	
+	if(spltDB && targetNum != 1) {
+		/* allocate space for commands */
+		escape = 0;
+		size = argc + strlen(outputfilename) + 32;
+		for(args = 0; args < argc; ++args) {
+			if(*argv[args] == '-') {
+				escape = 0;
+			} else if(escape) {
+				size += 2;
+			}
+			size += strlen(argv[i]);
+			if(strncmp(argv[i], "-i", 2) == 0) {
+				escape = 1;
+			}
+		}
+		exeBasic = smalloc(size);
+		
+		fprintf(stdout, "# Map\n");
+		for(i = 0; i < targetNum; ++i) {
+			to2Bit = exeBasic;
+			*to2Bit = 0;
+			args = -1;
+			while(++args < argc) {
+				if(strcmp(argv[args], "-t_db") == 0) {
+					escape = 1;
+					while(escape && ++args < argc) {
+						if(*argv[args] == '-') {
+							escape = 0;
+						}
+					}
+					--args;
+				} else {
+					if(*argv[args] == '-') {
+						escape = 0;
+					}
+					
+					if(escape) {
+						*to2Bit = '\"';
+						++to2Bit;
+					}
+					
+					exe_len = strlen(argv[args]);
+					strcpy(to2Bit, argv[args]);
+					to2Bit += exe_len;
+					
+					if(escape) {
+						*to2Bit = '\"';
+						++to2Bit;
+					}
+					*to2Bit = ' ';
+					++to2Bit;
+					
+					if(strncmp(argv[args], "-i", 2) == 0) {
+						escape = 1;
+					}
+				}
+			}
+			fprintf(stdout, "%s-t_db %s -step2 > %s.%d\n", exeBasic, templatefilenames[i], outputfilename, i);
+		}
+		
+		fprintf(stdout, "# Reduce:\n");
+		to2Bit = exeBasic;
+		*to2Bit = 0;
+		args = -1;
+		while(++args < argc) {
+			if(strcmp(argv[args], "-spltDB") != 0) {
+				if(*argv[args] == '-') {
+					escape = 0;
+				}
+				
+				if(escape) {
+					*to2Bit = '\"';
+					++to2Bit;
+				}
+				
+				exe_len = strlen(argv[args]);
+				strcpy(to2Bit, argv[args]);
+				to2Bit += exe_len;
+				
+				if(escape) {
+					*to2Bit = '\"';
+					++to2Bit;
+				}
+				*to2Bit = ' ';
+				++to2Bit;
+				
+				if(strncmp(argv[args], "-i", 2) == 0) {
+					escape = 1;
+				}
+			}
+		}
+		fprintf(stderr, "%s\n", exeBasic);
+		
+		return 0;
+	} else {
+		freopen(NULL, "wb", stdout);
+		setvbuf(stdout, NULL, _IOFBF, CHUNK);
+	}
 	
 	if(step1) {
 		t0 = clock();
@@ -18238,7 +18407,7 @@ int main(int argc, char *argv[]) {
 				sfwrite(&Mt1, sizeof(int), 1, stdout);
 			}
 			
-			if(extendedFeatures) {
+			if(extendedFeatures && targetNum == 1) {
 				strcat(outputfilename, ".mapstat");
 				templatefile = sfopen(outputfilename, "wb");
 				fprintf(templatefile, "## method\tKMA\n");
@@ -18247,7 +18416,7 @@ int main(int argc, char *argv[]) {
 				fprintf(templatefile, "## fragmentCount\t%lu\n", totFrags);
 				time(&t1);
 				tm = localtime(&t1);
-				strftime(Date, sizeof Date, "%Y-%m-%d", tm);
+				strftime(Date, sizeof(Date), "%Y-%m-%d", tm);
 				fprintf(templatefile, "## date\t%s\n", Date);
 				//fprintf(templatefile, "## date\t%s", ctime(&t1));
 				fprintf(templatefile, "## command\t%s", *argv);
@@ -18286,7 +18455,9 @@ int main(int argc, char *argv[]) {
 		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-step2");
 		
-		if(mem_mode || sparseCheck(templatefilename)) {
+		if(spltDB == 0 && targetNum != 1) {
+			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, extendedFeatures, vcf);
+		} else if(mem_mode || sparseCheck(templatefilename)) {
 			status = runKMA_MEM(templatefilename, outputfilename, exeBasic, ConClave, extendedFeatures, vcf);
 		} else {
 			status = runKMA(templatefilename, outputfilename, exeBasic, ConClave, extendedFeatures, vcf);
