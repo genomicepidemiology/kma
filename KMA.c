@@ -283,7 +283,7 @@ struct spltDBbuff {
 /*
  	GLOBAL VARIABLES
 */
-int version[3] = {1, 1, 6};
+int version[3] = {1, 1, 7};
 struct hashMapKMA *templates;
 struct hashMap_index **templates_index;
 struct diskOffsets *templates_offsets;
@@ -1691,7 +1691,6 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 	}
 	*++seq = 0;
 	header->len = header->size - size + 1;
-	
 	/* get qseq */
 	seq = qseq->seq;
 	size = qseq->size;
@@ -1726,7 +1725,6 @@ int FileBuffgetFsa(struct FileBuff *src, struct qseqs *header, struct qseqs *qse
 			buff = src->buffer;
 		}
 	}
-	
 	/* chomp header */
 	while(*--seq == 8) {
 		++size;
@@ -3816,7 +3814,7 @@ void print_ankers_spltDB(int *out_Tem, struct compDNA *qseq, int rc_flag, struct
 			buffers[tNum] = nodeN;
 		}
 		sfwrite(&(unsigned){U_LIMIT}, sizeof(unsigned), 1, stdout);
-		sfwrite(&(int){out_Tem[-1]}, sizeof(int), 1, stdout);
+		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, stdout);
 		return;
 	}
 	
@@ -7247,7 +7245,7 @@ void * save_kmers_threaded(void *arg) {
 			kmerScan(bestTemplates, bestTemplates_r, Score, Score_r, qseq, qseq_r, header, extendScore);
 		} else if(go < 0) {
 			save_kmers_pair(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores, qseq, qseq_r, header, header_r, extendScore);
-		}	
+		}
 	}
 	
 	return NULL;
@@ -8336,7 +8334,6 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 					++start;
 				}
 				qseq->len = end - start;
-				
 				start2 = 0;
 				end = qseq2->len - 1;
 				seq = qseq2->seq;
@@ -8345,7 +8342,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				}
 				++end;
 				while(start2 < end && seq[start2] == 4) {
-					++start;
+					++start2;
 				}
 				qseq2->len = end - start2;
 				
@@ -8526,7 +8523,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				}
 				++end;
 				while(start2 < end && seq[start2] == 4) {
-					++start;
+					++start2;
 				}
 				qseq2->len = end - start2;
 				
@@ -12144,6 +12141,7 @@ void * assemble_KMA_threaded(void *arg) {
 								}
 								*/
 							}
+							
 							unlock(&excludeMatrix);
 							
 							/* Convert fragment */
@@ -16076,19 +16074,25 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 }
 
-void getIndexName(char **template_names, struct hashMap_index **templates_index, int bias, int newBias, char *templatefilename) {
+void getIndexName(char ***Template_names, struct hashMap_index ***Templates_index, int oldBias, int bias, int newBias, char *templatefilename) {
 	
 	int file_len, shmid, dbSize;
 	long unsigned i, j, file_size;
+	char **template_names;
 	FILE *DB_file;
 	key_t key;
+	struct hashMap_index **templates_index;
 	
+	template_names = *Template_names;
+	templates_index = *Templates_index;
 	dbSize = newBias - bias;
 	if(template_names && (shm & 8) == 0) {
-		template_names += bias;
-		templates_index += bias;
+		template_names += oldBias;
 		free(*template_names);
 		free(template_names);
+	}
+	if(templates_index && (shm & 16) == 0) {
+		templates_index += oldBias;
 		free(templates_index);
 	}
 	template_names = smalloc(dbSize * sizeof(char *));
@@ -16114,7 +16118,7 @@ void getIndexName(char **template_names, struct hashMap_index **templates_index,
 		shmid = shmget(key, file_size, 0666);
 		template_names[0] = shmat(shmid, NULL, 0);
 		template_names[1] = template_names[0];
-		for(i = 0, j = 2; j < DB_size; ++i) {
+		for(i = 0, j = 2; j < dbSize; ++i) {
 			if(template_names[0][i] == 0) {
 				template_names[j] = template_names[0] + i + 1;
 				++j;
@@ -16122,15 +16126,11 @@ void getIndexName(char **template_names, struct hashMap_index **templates_index,
 		}
 	} else {
 		rewind(DB_file);
-		template_names[0] = malloc(file_size);
-		if(!template_names[0]) {
-			ERROR();
-		}
-		fread(template_names[0], 1, file_size, DB_file);
+		template_names[0] = smalloc(file_size);
+		sfread(template_names[0], 1, file_size, DB_file);
 		template_names[0][file_size - 1] = 0;
-		
 		template_names[1] = template_names[0];
-		for(i = 0, j = 2; j < DB_size; ++i) {
+		for(i = 0, j = 2; j < dbSize; ++i) {
 			if(template_names[0][i] == '\n') {
 				template_names[0][i] = 0;
 				template_names[j] = template_names[0] + i + 1;
@@ -16141,16 +16141,18 @@ void getIndexName(char **template_names, struct hashMap_index **templates_index,
 	templatefilename[file_len] = 0;
 	fclose(DB_file);
 	
-	template_names -= newBias;
-	templates_index -= newBias;
+	template_names -= bias;
+	templates_index -= bias;
+	*Template_names = template_names;
+	*Templates_index = templates_index;
 }
 
 int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int extendedFeatures, int vcf) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
-	int i, j, tmp_template, tmp_tmp_template, file_len, score, tot, sparse;
-	int template, bestHits, t_len, start, end, aln_len, fragCount, maxFrag;
+	int i, j, k, tmp_template, tmp_tmp_template, t_len, file_len, score, tot;
+	int template, bestHits, start, end, aln_len, fragCount, maxFrag, sparse;
 	int rc_flag, coverScore, tmp_start, tmp_end, bestTemplate, status, rand;
 	int fileCount, stats[4], *bestTargets, (*targetInfo)[6], (*ptrInfo)[6];
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
@@ -16212,6 +16214,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		fclose(inputfile);
 	}
 	dbBiases[i] = DB_size;
+	if(kmersize < 4 || 32 < kmersize) {
+		kmersize = 16;
+	}
 	
 	/* get scoring arrays */
 	matched_templates = smalloc(((DB_size + 1) << 1) * sizeof(int));
@@ -16372,10 +16377,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			/* bias the templates */
 			bias = dbBiases[num];
-			j = *matched_templates;
+			j = *matched_templates + 1;
 			*matched_templates += matched_templates[*matched_templates + 1];
-			while((i = j++) < *matched_templates) {
-				matched_templates[i] = matched_templates[j] + bias;
+			while((k = j++) <= *matched_templates) {
+				matched_templates[k] = matched_templates[j] + bias;
 			}
 		}
 		
@@ -16395,7 +16400,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			}
 			unCompDNA(qseq_comp, qseq->seq);
 			
-			/* reverse complement seq */
 			best_read_score = targetScore;
 			for(i = 1, bestHits = 0; i <= *matched_templates; ++i, ++bestHits) {
 				best_end_pos[bestHits] = template_lengths[abs(matched_templates[i])];
@@ -16432,7 +16436,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					if(*uPtr != U_LIMIT) {
 						sfread(targetInfo[i], sizeof(int), 6, inputfiles[i]);
 					} else {
-						sfread(targetInfo[i], sizeof(int), 1, inputfiles[i]);
 						targetInfo[i][3] = I_LIMIT;
 					}
 				}
@@ -16462,6 +16465,8 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				} else if(targetScore == abs(targetInfo[i][3])) {
 					bestTargets[++*bestTargets] = i;
 					rc_flag = rc_flag < 0 ? rc_flag : targetInfo[i][3];
+				} else if(*uPtr == U_LIMIT) {
+					targetInfo[i][3] = I_LIMIT;
 				} else {
 					fseek(inputfiles[i], targetInfo[i][1] * sizeof(long unsigned) + (targetInfo[i][2] + targetInfo[i][4]) * sizeof(int) + targetInfo[i][5], SEEK_CUR);
 					if(matched_templates[*matched_templates + 1]) { // PE
@@ -16473,7 +16478,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					if(*uPtr != U_LIMIT) {
 						sfread(targetInfo[i], sizeof(int), 6, inputfiles[i]);
 					} else {
-						sfread(targetInfo[i], sizeof(int), 1, inputfiles[i]);
 						targetInfo[i][3] = I_LIMIT;
 					}
 				}
@@ -16481,6 +16485,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			++uPtr;
 		}
 	}
+	
 	/* get fragmentCount */
 	if(extendedFeatures) {
 		fprintf(extendedFeatures_out, "## fragmentCount\t%u\n", **targetInfo);
@@ -17208,7 +17213,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	/* get index, seq and names on the fly */
 	bias = *dbBiases++;
 	templatefilename = *templatefilenames++;
-	getIndexName(template_names, templates_index, bias, *dbBiases, templatefilename);
+	getIndexName(&template_names, &templates_index, 0, bias, *dbBiases, templatefilename);
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".seq.b");
 	seq_in = sfopen(templatefilename, "rb");
@@ -17239,12 +17244,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	r_shifter = (kmersize << 1) - 2;
 	
 	for(template = 1; template < DB_size; ++template) {
-		
 		if(template == bias) {
 			/* swap indexes */
-			bias = *dbBiases++;
 			templatefilename = *templatefilenames++;
-			getIndexName(template_names, templates_index, bias, *dbBiases, templatefilename);
+			getIndexName(&template_names, &templates_index, bias - dbBiases[-1], *dbBiases, dbBiases[1], templatefilename);
+			bias = *dbBiases++;
 			file_len = strlen(templatefilename);
 			strcat(templatefilename, ".seq.b");
 			seq_in = sfopen(templatefilename, "rb");
@@ -17275,7 +17279,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			r_shifter = (kmersize << 1) - 2;
 			seq_seeker = 0;
 			index_seeker = 0;
-		}else if(w_scores[template] > 0) {
+		} else if(w_scores[template] > 0) {
 			
 			if(progress) {
 				counter += w_scores[template];
@@ -18154,7 +18158,7 @@ int main(int argc, char *argv[]) {
 		}
 		exeBasic = smalloc(size);
 		
-		fprintf(stdout, "# Map\n");
+		fprintf(stderr, "# Map\n");
 		for(i = 0; i < targetNum; ++i) {
 			to2Bit = exeBasic;
 			*to2Bit = 0;
@@ -18197,7 +18201,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stdout, "%s-t_db %s -step2 > %s.%d\n", exeBasic, templatefilenames[i], outputfilename, i);
 		}
 		
-		fprintf(stdout, "# Reduce:\n");
+		fprintf(stderr, "# Reduce:\n");
 		to2Bit = exeBasic;
 		*to2Bit = 0;
 		args = -1;
@@ -18228,7 +18232,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
-		fprintf(stderr, "%s\n", exeBasic);
+		fprintf(stdout, "%s\n", exeBasic);
 		
 		return 0;
 	} else {
