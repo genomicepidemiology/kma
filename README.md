@@ -4,7 +4,7 @@
 git clone https://bitbucket.org/genomicepidemiology/kma.git
 cd kma && make
 
-./kma_index -i templates.fsa.gz -o templates
+./kma index -i templates.fsa.gz -o templates
 ./kma -i reads_se.fq.gz -o output/name -t_db templates
 ./kma -ipe reads_1.fq.gz reads_2.fq.gz -o output/name -t_db templates
 ```
@@ -24,19 +24,18 @@ BMC Bioinformatics, 2018;19:307.
 
 
 # Usage #
-For practical reasons you might want to add the three programs (kma, kma_index and kma_shm)
-to your path, this is usually done with:
+For practical reasons you might want to add kma to your path, this is usually done with:
 
 ```
-mv kma* ~/bin/
+mv kma ~/bin/
 ```
 
 ## Indexing ##
 In order to use KMA for mapping, the databases need to indexed. 
-This is done with “kma_index”, the most important options are described below:
+This is done with “kma index”, the most important options are described below:
 
 ```
--i Input fasta file(s), space separated. By default kma_index reads from stdin.
+-i Input fasta file(s), space separated. By default kma index reads from stdin.
 -o Output name, the name given to the database.
 -k kmersize used for indexing the database.
 -k_t kmersize used to identify template candidates when running KMA.
@@ -46,7 +45,7 @@ This is done with “kma_index”, the most important options are described belo
 Example of use:
 
 ```
-kma_index -i templates.fsa.gz -o database/name
+kma index -i templates.fsa.gz -o database/name
 ```
 
 ## Mapping ##
@@ -117,7 +116,7 @@ the computer is restarted or computer breaks down.
 
 Example of setting up a database in shared memory.
 ```
-kma_shm –t_db templates –shmLvl 1
+kma shm –t_db templates –shmLvl 1
 ```
 
 “-shmLvl” specifies how much of the database there should be stored in shared memory, use.
@@ -125,7 +124,7 @@ kma_shm –t_db templates –shmLvl 1
 
 Example of taking it down again, always remember to do this then it is no longer needed:
 ```
-kma_shm –t_db database/name –shmLvl 1 –destroy
+kma shm –t_db database/name –shmLvl 1 –destroy
 ```
 
 # Installation Requirements #
