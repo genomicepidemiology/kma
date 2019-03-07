@@ -1,6 +1,7 @@
 CFLAGS = -Wall -O3 -std=c99
 LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmers.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o savekmers.o seq2fasta.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o update.o updateindex.o updatescores.o valueshash.o vcf.o
 PROGS = kma kma_index kma_shm kma_update
+LFLAGS = -Wl,-Bstatic -L . -lkma -lz -Wl,-Bdynamic
 
 .c .o:
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -8,16 +9,16 @@ PROGS = kma kma_index kma_shm kma_update
 all: $(PROGS)
 
 kma: main.c libkma.a
-	$(CC) $(CFLAGS) -o $@ main.c -L . -lm -lpthread -lz -lkma
+	$(CC) $(CFLAGS) -o $@ main.c $(LFLAGS) -lm -lpthread
 
 kma_index: kma_index.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_index.c -L . -lm -lz -lkma
+	$(CC) $(CFLAGS) -o $@ kma_index.c $(LFLAGS) -lm
 
 kma_shm: kma_shm.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_shm.c -L . -lkma
+	$(CC) $(CFLAGS) -o $@ kma_shm.c $(LFLAGS)
 
 kma_update: kma_update.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_update.c -L . -lkma
+	$(CC) $(CFLAGS) -o $@ kma_update.c $(LFLAGS)
 
 libkma.a: $(LIBS)
 	$(AR) -csru $@ $(LIBS)
