@@ -138,6 +138,8 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-bc\t\tBase calls should be\n#\t\t\tsignificantly overrepresented.\t[True]\n");
 	fprintf(helpOut, "#\t-bc90\t\tBase calls should be both\n#\t\t\tsignificantly overrepresented,\n#\t\t\tand have 90%% agreement.\t\tFalse\n");
 	fprintf(helpOut, "#\t-bcNano\t\tCall bases at suspicious\n#\t\t\tdeletions, made for nanopore.\tFalse\n");
+	fprintf(helpOut, "#\t-bcd\t\tMinimum depth at base\t\t1\n");
+	fprintf(helpOut, "#\t-bcg\t\tMaintain insignificant gaps\n");
 	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
 	fprintf(helpOut, "#\t-mq\t\tMinimum mapping quality\t\t0\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t0.50\n");
@@ -158,8 +160,8 @@ int kma_main(int argc, char *argv[]) {
 	
 	int i, j, args, exe_len, minPhred, fiveClip, sparse_run, mem_mode, Mt1;
 	int step1, step2, fileCounter, fileCounter_PE, fileCounter_INT, status;
-	int ConClave, extendedFeatures, vcf, targetNum, size, escape, spltDB;
-	int ref_fsa, print_matrix, print_all, one2one, thread_num, kmersize, mq;
+	int ConClave, extendedFeatures, vcf, targetNum, size, escape, spltDB, mq;
+	int ref_fsa, print_matrix, print_all, one2one, thread_num, kmersize, bcd;
 	int **d, W1, U, M, MM, PE;
 	unsigned shm, exhaustive;
 	long unsigned totFrags;
@@ -205,6 +207,7 @@ int kma_main(int argc, char *argv[]) {
 	exhaustive = 0;
 	shm = 0;
 	mq = 0;
+	bcd = 1;
 	scoreT = 0.5;
 	step1 = 0;
 	step2 = 0;
@@ -255,9 +258,14 @@ int kma_main(int argc, char *argv[]) {
 				templatefilenames[targetNum - 1] = templatefilename;
 			}
 			while(++args < argc && *argv[args] != '-') {
+				templatefilename = malloc(strlen(argv[args]) + 64);
+				if(!templatefilename) {
+					ERROR();
+				}
+				strcpy(templatefilename, argv[args]);
 				++targetNum;
 				templatefilenames = realloc(templatefilenames, targetNum * sizeof(char *));
-				templatefilenames[targetNum - 1] = argv[args];
+				templatefilenames[targetNum - 1] = templatefilename;
 			}
 			--args;
 		} else if(strcmp(argv[args], "-i") == 0) {
@@ -539,11 +547,22 @@ int kma_main(int argc, char *argv[]) {
 			}
 		} else if(strcmp(argv[args], "-bc90") == 0) {
 			significantBase = &significantAnd90Nuc;
+		} else if(strcmp(argv[args], "-bcg") == 0) {
+			baseCall = &orgBaseCaller;
 		} else if(strcmp(argv[args], "-bcNano") == 0) {
 			if(significantBase == &significantNuc) {
 				significantBase = &significantAnd90Nuc;
 			}
 			baseCall = &nanoCaller;
+		} else if(strcmp(argv[args], "-bcd") == 0) {
+			++args;
+			if(args < argc) {
+				bcd = strtol(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-ID\".\n");
+					exit(4);
+				}
+			}
 		} else if(strcmp(argv[args], "-ID") == 0) {
 			++args;
 			if(args < argc) {
@@ -632,7 +651,16 @@ int kma_main(int argc, char *argv[]) {
 			printFsa_ptr = &printFsaMt1;
 			printFsa_pair_ptr = &printFsa_pairMt1;
 		} else if(strcmp(argv[args], "-ef") == 0) {
-			extendedFeatures = 1;
+			if((args + 1) < argc && *(argv[args + 1]) != '-') {
+				++args;
+				extendedFeatures = strtol(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
+					exit(4);
+				}
+			} else {
+				extendedFeatures = 1;
+			}
 		} else if(strcmp(argv[args], "-vcf") == 0) {
 			vcf = 1;
 			if(++args < argc) {
@@ -977,7 +1005,7 @@ int kma_main(int argc, char *argv[]) {
 		exeBasic = strjoin(argv, argc);
 		strcat(exeBasic, "-s1");
 		
-		runKMA_Mt1(templatefilename, outputfilename, exeBasic, kmersize, rewards, ID_t, mq, scoreT, evalue, Mt1, ref_fsa, print_matrix, vcf, thread_num);
+		runKMA_Mt1(templatefilename, outputfilename, exeBasic, kmersize, rewards, ID_t, mq, scoreT, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, thread_num);
 		fprintf(stderr, "# Closing files\n");
 		fflush(stdout);
 	} else if(step2) {
@@ -996,11 +1024,11 @@ int kma_main(int argc, char *argv[]) {
 		strcat(exeBasic, "-s2");
 		
 		if(spltDB == 0 && targetNum != 1) {
-			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, ref_fsa, print_matrix, print_all, vcf, shm, thread_num);
+			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, shm, thread_num);
 		} else if(mem_mode) {
-			status = runKMA_MEM(templatefilename, outputfilename, exeBasic, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, ref_fsa, print_matrix, print_all, vcf, shm, thread_num);
+			status = runKMA_MEM(templatefilename, outputfilename, exeBasic, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, shm, thread_num);
 		} else {
-			status = runKMA(templatefilename, outputfilename, exeBasic, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, ref_fsa, print_matrix, print_all, vcf, shm, thread_num);
+			status = runKMA(templatefilename, outputfilename, exeBasic, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, shm, thread_num);
 		}
 		fprintf(stderr, "# Closing files\n");
 		fflush(stdout);

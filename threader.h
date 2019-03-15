@@ -16,11 +16,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-#define _XOPEN_SOURCE 600
-#include "compdna.h"
-#include "penalties.h"
-#include "qseqs.h"
 
-void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor);
-void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor);
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int thread_num);
+#define _XOPEN_SOURCE 600
+#include <pthread.h>
+#include <unistd.h>
+
+int usleep(unsigned usec);
+
+#define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {usleep(100);}}
+#define lockTime(exclude, spin) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {usleep(spin);}}
+#define unlock(exclude) (__sync_lock_release(exclude))
+#define wait_atomic(src) while(src) {usleep(100);}

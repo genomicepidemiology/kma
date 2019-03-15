@@ -60,7 +60,7 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r
 	
 }
 
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int Mt1, int ref_fsa, int print_matrix, int vcf, int thread_num) {
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int thread_num) {
 	
 	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta;
 	int *template_lengths;
@@ -241,6 +241,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		thread->mq = mq;
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
+		thread->bcd = bcd;
 		thread->template = -2;
 		thread->file_count = 1;
 		thread->files = &template_fragments;
@@ -298,6 +299,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	thread->mq = mq;
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
+	thread->bcd = bcd;
 	thread->template = 0;
 	thread->file_count = 1;
 	thread->files = &template_fragments;

@@ -8,16 +8,16 @@ PROGS = kma kma_index kma_shm kma_update
 all: $(PROGS)
 
 kma: main.c libkma.a
-	$(CC) $(CFLAGS) -o $@ main.c libkma.a -lz -lm -lpthread
+	$(CC) $(CFLAGS) -o $@ main.c -L . -lm -lpthread -lz -lkma
 
 kma_index: kma_index.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_index.c libkma.a -lz -lm
+	$(CC) $(CFLAGS) -o $@ kma_index.c -L . -lm -lz -lkma
 
 kma_shm: kma_shm.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_shm.c libkma.a
+	$(CC) $(CFLAGS) -o $@ kma_shm.c -L . -lkma
 
 kma_update: kma_update.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_update.c libkma.a
+	$(CC) $(CFLAGS) -o $@ kma_update.c -L . -lkma
 
 libkma.a: $(LIBS)
 	$(AR) -csru $@ $(LIBS)
@@ -26,9 +26,9 @@ clean:
 	$(RM) $(LIBS) $(PROGS) libkma.a
 
 align.o: align.h chain.h compdna.h hashmapindex.h nw.h stdnuc.h stdstat.h
-alnfrags.o: alnfrags.h align.h ankers.h compdna.h hashmapindex.h kmathread.h qseqs.h updatescores.h
+alnfrags.o: alnfrags.h align.h ankers.h compdna.h hashmapindex.h qseqs.h threader.h updatescores.h
 ankers.o: ankers.h compdna.h pherror.h qseqs.h
-assembly.o: assembly.h align.h filebuff.h kmapipe.h kmathread.h pherror.h stdnuc.h stdstat.h
+assembly.o: assembly.h align.h filebuff.h kmapipe.h pherror.h stdnuc.h stdstat.h threader.h
 chain.o: chain.h penalties.h pherror.h stdstat.h
 compdna.o: compdna.h pherror.h stdnuc.h
 compkmers.o: compkmers.h pherror.h
@@ -56,7 +56,7 @@ qseqs.o: qseqs.h pherror.h
 qualcheck.o: qualcheck.h compdna.h hashmap.h pherror.h stdnuc.h stdstat.h
 runinput.o: runinput.h compdna.h filebuff.h pherror.h qseqs.h seqparse.h
 runkma.o: runkma.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapindex.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h stdnuc.h stdstat.h vcf.h
-savekmers.o: savekmers.h ankers.h compdna.h hashmapkma.h kmathread.h penalties.h pherror.h qseqs.h stdnuc.h stdstat.h
+savekmers.o: savekmers.h ankers.h compdna.h hashmapkma.h penalties.h pherror.h qseqs.h stdnuc.h stdstat.h threader.h
 seq2fasta.o: seq2fasta.h pherror.h qseqs.h runkma.h stdnuc.h
 seqparse.o: seqparse.h filebuff.h qseqs.h
 shm.o: shm.h pherror.h hashmapkma.h version.h

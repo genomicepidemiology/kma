@@ -62,6 +62,7 @@ struct assemble_thread {
 	int file_count;
 	int spin;
 	int mq;
+	int bcd;
 	int thread_num;
 	double scoreT;
 	double evalue;
@@ -88,6 +89,7 @@ int significantNuc(int X, int Y, double evalue);
 int significantAnd90Nuc(int X, int Y, double evalue);
 int significantAndSupport(int X, int Y, double evalue);
 unsigned char baseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls);
+unsigned char orgBaseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls);
 unsigned char refCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls);
 unsigned char nanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls);
 unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls);

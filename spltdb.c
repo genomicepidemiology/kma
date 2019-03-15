@@ -18,6 +18,7 @@
 */
 #define _XOPEN_SOURCE 600
 #include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -385,7 +386,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -598,6 +599,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			if(matched_templates[*matched_templates + 1]) {
 				read_score = 0;
 			} else { // PE
+				target = nums[num];
 				nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_r_comp, header_r, inputfiles[num]);
 				qseq_r->len = qseq_r_comp->seqlen;
 				read_score = 1;
@@ -654,7 +656,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		}
 		
 		/* remove non-paired matches, in case of paired matches */
-		if(read_score && *matched_templates) {
+		if(*matched_templates) {
 			i = targetNum - 1;
 			uPtr = nums + i;
 			while(i) {
@@ -1332,6 +1334,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		thread->mq = mq;
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
+		thread->bcd = bcd;
 		thread->template = -2;
 		thread->file_count = fileCount;
 		thread->files = template_fragments;
@@ -1389,6 +1392,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->mq = mq;
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
+	thread->bcd = bcd;
 	thread->template = 0;
 	thread->file_count = fileCount;
 	thread->files = template_fragments;
@@ -1453,7 +1457,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		index_in_no = fileno(index_in);
 		read(index_in_no, &kmersize, sizeof(int));
 	}
-	
+	if(extendedFeatures == 2) {
+		getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
+	}
 	for(template = 1; template < DB_size; ++template) {
 		if(template == *dbBiases) {
 			/* swap indexes */
@@ -1496,6 +1502,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			}
 			seq_seeker = 0;
 			index_seeker = 0;
+			if(extendedFeatures == 2) {
+				getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
+			}
 		} else if(w_scores[template] > 0) {
 			
 			if(progress) {

@@ -25,11 +25,11 @@
 #include "chain.h"
 #include "compdna.h"
 #include "hashmapindex.h"
-#include "kmathread.h"
 #include "pherror.h"
 #include "qseqs.h"
 #include "stdnuc.h"
 #include "stdstat.h"
+#include "threader.h"
 #include "updatescores.h"
 
 void alnFragsSE(HashMap_index **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int rc_flag, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, int kmersize, Qseqs *header, int *bestTemplates, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int seq_in, int index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {

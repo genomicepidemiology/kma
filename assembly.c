@@ -29,12 +29,12 @@
 #include "filebuff.h"
 #include "hashmapindex.h"
 #include "kmapipe.h"
-#include "kmathread.h"
 #include "nw.h"
 #include "pherror.h"
 #include "qseqs.h"
 #include "stdnuc.h"
 #include "stdstat.h"
+#include "threader.h"
 
 void * (*assembly_KMA_Ptr)(void *);
 int (*significantBase)(int, int, double);
@@ -163,7 +163,7 @@ unsigned char baseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScor
 	if(depthUpdate == 0) {
 		bestNuc = '-';
 	} else {
-		/* Use MC Neymars test to test significance of the base call */
+		/* Use MnNemars test to test significance of the base call */
 		if(significantBase(bestScore, depthUpdate - bestScore, evalue) == 0) {
 			if(bestNuc == '-' && tNuc != '-') {
 				bestNuc = 'n';
@@ -176,12 +176,22 @@ unsigned char baseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScor
 	return bestNuc;
 }
 
+unsigned char orgBaseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls) {
+	
+	/* determine base at current position */
+	if(depthUpdate == 0 || bestNuc == '-') {
+		bestNuc = '-';
+	} else if(significantBase(bestScore, depthUpdate - bestScore, evalue) == 0) { /* McNemars test */
+		bestNuc = tolower(bestNuc);
+	}
+	
+	return bestNuc;
+}
+
 unsigned char refCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls) {
 	
 	/* determine base at current position */
-	if(depthUpdate == 0) {
-		bestNuc = 'n';
-	} else if(bestNuc == '-' && tNuc != '-') {
+	if(depthUpdate == 0 || (bestNuc == '-' && tNuc != '-')) {
 		bestNuc = 'n';
 	} else if(significantBase(bestScore, depthUpdate - bestScore, evalue) == 0) {
 		bestNuc = tolower(bestNuc);
@@ -266,7 +276,7 @@ void * assemble_KMA_threaded(void *arg) {
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, asm_len;
 	int read_score, depthUpdate, bestBaseScore, bestScore, template, spin;
-	int nextTemplate, file_i, file_count, delta, thread_num, mq, status;
+	int nextTemplate, file_i, file_count, delta, thread_num, mq, status, bcd;
 	int stats[4], buffer[7];
 	unsigned coverScore;
 	long unsigned depth, depthVar;
@@ -301,6 +311,7 @@ void * assemble_KMA_threaded(void *arg) {
 	mq = thread->mq;
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
+	bcd = thread->bcd;
 	spin = thread->spin;
 	thread_num = thread->thread_num;
 	
@@ -642,7 +653,11 @@ void * assemble_KMA_threaded(void *arg) {
 		}
 		
 		/* determine base at current position */
-		bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[pos]);
+		if(bcd <= depthUpdate) {
+			bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[pos]);
+		} else {
+			bestNuc = baseCall('-', aligned_assem->t[i], 0, 0, evalue, &assembly[pos]);
+		}
 		aligned_assem->q[i] = bestNuc;
 		
 		if(bestNuc != '-') {
@@ -693,7 +708,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, file_i, file_count, template, spin;
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
-	int thread_num, mq, status, stats[4], buffer[7];
+	int thread_num, mq, status, bcd, stats[4], buffer[7];
 	unsigned coverScore, delta;
 	long unsigned depth, depthVar;
 	const char bases[] = "ACGTN-";
@@ -727,6 +742,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	mq = thread->mq;
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
+	bcd = thread->bcd;
 	spin = thread->spin;
 	thread_num = thread->thread_num;
 	
@@ -1011,7 +1027,11 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		}
 		
 		/* determine base at current position */
-		bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[i]);
+		if(bcd <= depthUpdate) {
+			bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[i]);
+		} else {
+			bestNuc = baseCall('-', aligned_assem->t[i], 0, 0, evalue, &assembly[i]);
+		}
 		aligned_assem->q[i] = bestNuc;
 		
 		if(bestNuc != '-') {

@@ -35,4 +35,4 @@ struct spltDBbuff {
 void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header);
 void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header);
 unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *header, FILE *inputfile);
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num);
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num);

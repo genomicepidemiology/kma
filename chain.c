@@ -133,7 +133,7 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 						score = gap;
 						points->next[i] = j;
 					}
-				} else if(tEnd < points->tEnd[j]) { /* semi compatability */
+				} else if(kmersize <= points->tEnd[j] - tEnd) { /* semi compatability */
 					/* calculate score for this chaining */
 					if((gap = (points->qStart[j] - qEnd))) {
 						--gap;
@@ -250,8 +250,9 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 		for(j = i + 1; j < nMin; ++j) {
 			/* check compability */
 			if(qEnd < points->qStart[j]) {
-				if(tEnd < points->tStart[j]) { /* full compatability */
-					tGap = points->tStart[j] - tEnd;
+				tStart = points->tStart[j];
+				if(tEnd < tStart) { /* full compatability */
+					tGap = tStart - tEnd;
 					qGap = points->qStart[j] - qEnd;
 					
 					/* calculate score for this chaining */
@@ -276,7 +277,7 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						gap += W1;
 					}
 					/* cut mem score*/	
-					gap += (weight + points->score[j] - (points->tStart[j] - tEnd) * M);
+					gap += (weight + points->score[j] - (tStart - tEnd) * M);
 					
 					/* check if score is max */
 					if(score < gap) {
@@ -284,7 +285,7 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						points->next[i] = j;
 					}
 				} else if(points->tEnd[j] < points->tStart[i]) { /* circular joinning, full compability */
-					tGap = t_len - tEnd + points->tStart[j];
+					tGap = t_len - tEnd + tStart;
 					qGap = points->qStart[j] - qEnd;
 					
 					/* calculate score for this chaining */
@@ -295,21 +296,6 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 					}
 					//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
 					gap += weight + points->score[j];
-					
-					/* check if score is max */
-					if(score < gap) {
-						score = gap;
-						points->next[i] = j;
-					}
-				} else if(kmersize <= points->tEnd[i] - points->tEnd[j]) { /* circular joinning, semi compability */
-					/* calculate score for this chaining */
-					if((gap = points->qStart[j] - qEnd)) {
-						--gap;
-						gap *= U;
-						gap += W1;
-					}
-					//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
-					gap += (weight + points->score[j] - (points->tEnd[i] - points->tEnd[j]) * M);
 					
 					/* check if score is max */
 					if(score < gap) {

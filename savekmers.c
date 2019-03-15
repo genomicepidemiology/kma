@@ -19,18 +19,19 @@
 #define _XOPEN_SOURCE 600
 #include <limits.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "ankers.h"
 #include "compdna.h"
 #include "hashmapkma.h"
-#include "kmathread.h"
 #include "penalties.h"
 #include "pherror.h"
 #include "qseqs.h"
 #include "savekmers.h"
 #include "stdnuc.h"
 #include "stdstat.h"
+#include "threader.h"
 
 int loadFsa(CompDNA *qseq, Qseqs *header, FILE *inputfile) {
 	

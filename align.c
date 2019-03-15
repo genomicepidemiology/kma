@@ -48,6 +48,11 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	mask = 0;
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
 	key = 0;
+	/* circular, skip boundaries */
+	if(min < max) {
+		min = 0;
+		max = t_len;
+	}
 	/* find seeds */
 	if(points->len) {
 		mem_count = points->len;
@@ -199,6 +204,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	start = chainSeedsPtr(points, q_len, t_len, kmersize, &aligned->mapQ);
 	score = points->score[start];
 	
+	//fprintf(stderr, "%d\t%d\t%d\t%d\n", t_len, mem_count, aligned->mapQ, score);
 	if(aligned->mapQ < mq || score < kmersize || (score << 1) < scoreT * (points->qEnd[points->len - 1] - points->qStart[0])) {
 		Stat.score = 0;
 		Stat.len = 1;
@@ -217,6 +223,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	value = points->tStart[start] - 1;
 	Stat.pos = value;
 	i = points->qStart[start];
+	
 	/* align leading tail */
 	if(i != 0) {
 		/* get boundaries */
@@ -275,9 +282,6 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		memcpy(aligned->q + Stat.len, qseq + q_s, end);
 		Stat.len += end;
 		end = points->qEnd[start];
-		if(q_len < end) {
-			fprintf(stderr, "%d, %d, %d\n", points->qStart[start], end, q_len);
-		}
 		for(i = points->qStart[start]; i < end; ++i) {
 			nuc = qseq[i];
 			Stat.score += d[nuc][nuc];
@@ -398,7 +402,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	
 	int i, j, k, l, bias, prev, start, stop, t_len, value, end, band;
 	int t_l, t_s, t_e, q_s, q_e, mem_count, score, kmersize;
-	int W1, U, M, MM, **d;
+	int U, M, **d;
 	unsigned mapQ, shifter;
 	long unsigned key;
 	unsigned char nuc;
@@ -407,10 +411,8 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	
 	/* Extract indexes and template sequence */
 	rewards = points->rewards;
-	W1 = rewards->W1;
 	U = rewards->U;
 	M = rewards->M;
-	MM = rewards->M;
 	d = rewards->d;
 	t_len = template_index->len;
 	kmersize = template_index->kmerindex;
@@ -448,6 +450,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 					++value;
 				}
 				end -= (kmersize - 1);
+				
 				/* get end positions */
 				points->qEnd[mem_count] = j;
 				points->tEnd[mem_count] = value + 1;
@@ -519,13 +522,6 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	}
 	
 	if(mem_count) {
-		if(points->qEnd[mem_count - 1] != q_len && points->tEnd[mem_count - 1] != t_len) {
-			--mem_count;
-			score = (MIN(q_len - points->qEnd[mem_count], t_len - points->tEnd[mem_count])) * (MM + M);
-			/* W1 is deprecated, new pen for non-pairing is needed */
-			points->weight[mem_count] += MAX(W1, score);
-			++mem_count;
-		}
 		points->len = mem_count;
 	} else {
 		Stat.score = 0;
@@ -563,16 +559,16 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 		t_e = value;
 		q_s = 0;
 		q_e = i;
-		if(value > (i + 64) || value > (i << 1)) { // big leading template gap, cut down
-			t_s = value - ((i < 64) ? (i << 1) : (i + 64));
-		} else if (i > (value + 64) || i > (value << 1)) { // big leading query gap, cut down
-			q_s = i - ((value < 64) ? (value << 1) : (value + 64));
+		if((q_e << 1) < t_e || (q_e + 64) < t_e) { // big leading template gap, cut down
+			t_s = t_e - MIN(64, (q_e << 1));
+		} else if((t_e << 1) < q_e || (t_e + 64) < q_e) { // big leading query gap, cut down
+			q_s = q_e - MIN(64, (t_e << 1));
 		}
 		
 		/* align */
 		if(t_e - t_s > 0 && q_e - q_s > 0) {
 			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
-			if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
+			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
 			} else {
 				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band, matrices, t_len);
@@ -592,9 +588,6 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 		end = points->qEnd[start] - q_s;
 		Stat.len += end;
 		end = points->qEnd[start];
-		if(q_len < end) {
-			fprintf(stderr, "%d, %d, %d\n", points->qStart[start], end, q_len);
-		}
 		for(i = points->qStart[start]; i < end; ++i) {
 			nuc = qseq[i];
 			Stat.score += d[nuc][nuc];
@@ -638,7 +631,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
 				band = 4 * abs(t_l - q_e + q_s) + 64;
-				if(q_e - q_s <= (band << 1) || t_l <= (band << 1)) {
+				if(q_e - q_s <= band || t_l <= band) {
 					NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, matrices, t_len);
 				} else {
 					NWstat = NW_band_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, band, matrices, t_len);
@@ -659,15 +652,15 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	q_e = q_len;
 	t_e = t_len;
 	if((t_len - t_s) > (q_len - q_s + 64) || (t_len - t_s) > ((q_len - q_s) << 1)) { // big trailing template gap, cut down
-		t_e = t_s + ((((q_len - q_s)) < 64) ? ((q_len - q_s) << 1) : (q_len - q_s + 64));
+		t_e = t_s + MIN(64, ((q_len - q_s) << 1));
 	} else if ((q_len - q_s) > (t_len - t_s + 64) || (q_len - q_s) > ((t_len - t_s) << 1)) { // big leading query gap, cut down
-		q_e = q_s + (((t_len - t_s) < 64) ? ((t_len - t_s) << 1) : ((t_len - t_s) + 64));
+		q_e = q_s + MIN(64, ((t_len - t_s) << 1));
 	}
 	
 	/* align trailing gap */
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
 		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
-		if(q_e - q_s <= (band << 1) || t_e - t_s <= (band << 1)) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
+		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
 			NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, matrices, t_len);
 		} else {
 			NWstat = NW_band_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, band, matrices, t_len);

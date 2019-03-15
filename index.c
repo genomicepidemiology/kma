@@ -178,10 +178,7 @@ int index_main(int argc, char *argv[]) {
 					if(inputfiles == NULL) {
 						ERROR();
 					}
-					inputfiles[filecount - 1] = strdup(argv[args]);
-					if(!inputfiles[filecount - 1]) {
-						ERROR();
-					}
+					inputfiles[filecount - 1] = argv[args];
 					++args;
 				} else {
 					stop = 1;
@@ -203,10 +200,7 @@ int index_main(int argc, char *argv[]) {
 					if(deconfiles == NULL) {
 						ERROR();
 					}
-					deconfiles[deconcount] = strdup(argv[args]);
-					if(deconfiles[deconcount] == NULL) {
-						ERROR();
-					}
+					deconfiles[deconcount] = argv[args];
 					++deconcount;
 					++args;
 				} else {
@@ -478,12 +472,15 @@ int index_main(int argc, char *argv[]) {
 	} else if(filecount == 0 && deconcount != 0 && templatefilename == 0) {
 		fprintf(stderr, "Nothing to update.\n");
 		exit(0);
-	} else if(outputfilename == 0 && templatefilename == 0) {
-		fprintf(stderr, "Output destination not defined.\n");
-		helpMessage(-1);
 	} else if(outputfilename == 0 && templatefilename != 0) {
 		outputfilename = smalloc((strlen(templatefilename) + 64));
 		strcpy(outputfilename, templatefilename);
+	} else if(outputfilename == 0 && filecount != 0) {
+		outputfilename = smalloc((strlen(*inputfiles) + 64));
+		strcpy(outputfilename, *inputfiles);
+	} else if(outputfilename == 0) {
+		fprintf(stderr, "Output destination not defined.\n");
+		helpMessage(-1);
 	}
 	file_len = strlen(outputfilename);
 	
