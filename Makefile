@@ -8,16 +8,16 @@ PROGS = kma kma_index kma_shm kma_update
 all: $(PROGS)
 
 kma: main.c libkma.a
-	$(CC) $(CFLAGS) -o $@ main.c -L . -lm -lpthread -lz -lkma
+	$(CC) $(CFLAGS) -o $@ main.c libkma.a -lm -lpthread -lz
 
 kma_index: kma_index.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_index.c -L . -lm -lz -lkma
+	$(CC) $(CFLAGS) -o $@ kma_index.c libkma.a -lm -lz
 
 kma_shm: kma_shm.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_shm.c -L . -lkma
+	$(CC) $(CFLAGS) -o $@ kma_shm.c libkma.a
 
 kma_update: kma_update.c libkma.a
-	$(CC) $(CFLAGS) -o $@ kma_update.c -L . -lkma
+	$(CC) $(CFLAGS) -o $@ kma_update.c libkma.a
 
 libkma.a: $(LIBS)
 	$(AR) -csru $@ $(LIBS)
