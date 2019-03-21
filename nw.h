@@ -45,6 +45,7 @@ struct aln {
 	char *s;  /* score */
 	unsigned char *q;  /* query */
 	unsigned pos; /* start of aln, relative to template */
+	int len;
 	unsigned mapQ; /* mapping quality */
 	int score; /* aln score */
 };

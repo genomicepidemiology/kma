@@ -77,8 +77,8 @@ int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, dou
 int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths) {
 	
 	static unsigned *Scores_tot = 0, *bestTemplates = 0;
-	unsigned i, j, end, rc, thisKlen, prefix_len, prefix_shifter, shifter;
-	unsigned DB_size, *values;
+	int i, j, end, rc;
+	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, *values;
 	double bestQ, thisQ;
 	long unsigned prefix;
 	void (*updateScoreAndTemplate_ptr)(unsigned *, unsigned *, unsigned *);
@@ -97,13 +97,13 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 	DB_size = templates->DB_size;
 	
 	/* realloc */
-	if(bestTemplates) {
-		bestTemplates = smalloc(DB_size * sizeof(unsigned));
-		Scores_tot = calloc(DB_size, sizeof(unsigned));
+	if(!bestTemplates) {
+		bestTemplates = smalloc(1024 * sizeof(unsigned));
+		Scores_tot = calloc(1024, sizeof(unsigned));
 		if(!Scores_tot) {
 			ERROR();
 		}
-		*Scores_tot = DB_size;
+		*Scores_tot = 1024;
 	} else if(DB_size >= *Scores_tot) {
 		free(Scores_tot);
 		Scores_tot = calloc(2 * DB_size, sizeof(unsigned));
@@ -112,10 +112,10 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 		if(!Scores_tot || !bestTemplates) {
 			ERROR();
 		}
-		Scores_tot[0] = 2 * DB_size;
+		*Scores_tot = 2 * DB_size;
 	}
 	
-	if(USHRT_MAX <= DB_size) {
+	if(DB_size < USHRT_MAX) {
 		updateScoreAndTemplate_ptr = &updateScoreAndTemplateHU;
 	} else {
 		updateScoreAndTemplate_ptr = &updateScoreAndTemplate;
@@ -144,10 +144,14 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 			}
 			j = qseq->N[i] + 1;
 		}
+		
 		qseq->N[0]--;
 	}
 	
 	if(thisKlen < MinKlen) {
+		for(i = 1; i <= *bestTemplates; ++i) {
+			Scores_tot[bestTemplates[i]] = 0;
+		}
 		return 0;
 	}
 	
@@ -172,8 +176,8 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	
 	static unsigned *Scores = 0, *Scores_tot = 0, *bestTemplates = 0;
 	static HashMap_kmers *foundKmers = 0;
-	unsigned i, j, end, rc, thisKlen, prefix_len, prefix_shifter, shifter;
-	unsigned DB_size, *values;
+	int i, j, end, rc;
+	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, *values;
 	double bestQ, thisQ, bestT, thisT;
 	long unsigned key, prefix;
 	void (*updateScoreAndTemplate_ptr)(unsigned *, unsigned *, unsigned *);
@@ -192,12 +196,12 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
 	DB_size = templates->DB_size;
 	
-	if(USHRT_MAX <= DB_size) {
+	if(DB_size < USHRT_MAX) {
 		updateScoreAndTemplate_ptr = &updateScoreAndTemplateHU;
-		addUscore_ptr = &addUscore;
+		addUscore_ptr = &addUscoreHU;
 	} else {
 		updateScoreAndTemplate_ptr = &updateScoreAndTemplate;
-		addUscore_ptr = &addUscoreHU;
+		addUscore_ptr = &addUscore;
 	}
 	
 	if(foundKmers == 0) {
@@ -205,13 +209,13 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 		foundKmers->n = 0;
 		foundKmers->size = templates->size;
 		foundKmers->table = calloc(foundKmers->size + 1, sizeof(HashTable_kmers *));
-		Scores = calloc(DB_size, sizeof(unsigned));
-		Scores_tot = calloc(DB_size, sizeof(unsigned));
-		bestTemplates = smalloc(DB_size * sizeof(unsigned));
+		Scores = calloc(1024, sizeof(unsigned));
+		Scores_tot = calloc(1024, sizeof(unsigned));
+		bestTemplates = smalloc(1024 * sizeof(unsigned));
 		if(!Scores || !Scores_tot || !foundKmers->table) {
 			ERROR();
 		}
-		*Scores_tot = DB_size;
+		*Scores_tot = 1024;
 	}
 	
 	/* realloc */

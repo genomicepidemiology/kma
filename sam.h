@@ -17,4 +17,10 @@
  * limitations under the License.
 */
 
-#define KMA_VERSION "1.2.2"
+#include <stdio.h>
+#include "nw.h"
+#include "qseqs.h"
+
+char * makeCigar(Qseqs *Cigar, const Aln aligned);
+void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size);
+int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *qual, const char *template_name, const Aln aligned, const int *stats, Qseqs *Cigar);

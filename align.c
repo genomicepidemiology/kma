@@ -196,6 +196,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		Stat.gaps = 0;
 		Stat.pos = 0;
 		aligned->s[0] = 0;
+		aligned->len = 0;
 		points->len = 0;
 		return Stat;
 	}
@@ -211,8 +212,8 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		Stat.gaps = 0;
 		Stat.pos = 0;
 		aligned->s[0] = 0;
+		aligned->len = 0;
 		points->len = 0;
-		
 		return Stat;
 	}
 	
@@ -323,6 +324,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 				Stat.len = 1;
 				Stat.gaps = 0;
 				aligned->s[0] = 0;
+				aligned->len = 0;
 				points->len = 0;
 				return Stat;
 			}
@@ -393,6 +395,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		Stat.gaps += NWstat.gaps;
 	}
 	aligned->s[Stat.len] = 0;
+	aligned->len = Stat.len;
 	points->len = 0;
 	
 	return Stat;
