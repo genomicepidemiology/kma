@@ -89,7 +89,7 @@ void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
 		for(node = dest->table[index]; node != 0; node = node->next) {
 			if(key == node->key) { // Keys match change value
 				++node->value;
-				node = 0;
+				return;
 			} else if(node->next == 0) { // This chain is filled, create next
 				++dest->n;
 				node->next = smalloc(sizeof(HashTable_kmers));
@@ -97,7 +97,7 @@ void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
 				node->next = 0;
 				node->key = key;
 				node->value = 1;
-				node = 0;
+				return;
 			}
 		}
 	}

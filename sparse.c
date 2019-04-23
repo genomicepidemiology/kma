@@ -223,7 +223,6 @@ void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, C
 			hashMap_kmers_CountIndex(foundKmers, compressor->kmers[i]);
 		}
 	}
-	
 }
 
 void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
