@@ -18,8 +18,7 @@
 */
 
 #include <stdio.h>
-
-
+#include "qseqs.h"
 #ifndef COMPDNA
 typedef struct compDNA CompDNA;
 struct compDNA {
@@ -38,6 +37,7 @@ void resetComp(CompDNA *compressor);
 void compDNA(CompDNA *compressor, unsigned char *seq, int seqlen);
 int compDNAref(CompDNA *compressor, unsigned char *qseq, int seqlen);
 void unCompDNA(CompDNA *compressor, unsigned char *seq);
+void qseqCompDNA(CompDNA *compressor, Qseqs *qseq);
 long unsigned binRev(long unsigned mer);
 void rc_comp(CompDNA *compressor, CompDNA *compressor_rc);
 void comp_rc(CompDNA *compressor);

@@ -25,7 +25,7 @@
 #include "qseqs.h"
 #include "seqparse.h"
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans) {
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, end;
 	unsigned FASTQ;
@@ -84,7 +84,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 				if(qseq->len > kmersize) {
 					/* dump seq */
 					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor);
+					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
 				}
@@ -106,7 +106,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 				if(qseq->len > kmersize) {
 					/* dump seq */
 					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor);
+					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
 				}
@@ -130,7 +130,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 	return count;
 }
 
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans) {
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
@@ -230,18 +230,18 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
 				} else if(qseq->len > kmersize) {
 					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor);
+					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
 				} else if(qseq2->len > kmersize) {
 					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor);
+					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
 					++count;
 				}
@@ -276,18 +276,18 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
 				} else if(qseq->len > kmersize) {
 					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor);
+					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
 				} else if(qseq2->len > kmersize) {
 					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor);
+					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
 					++count;
 				}
@@ -323,7 +323,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 	return count;
 }
 
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans) {
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ;
@@ -410,18 +410,18 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
 				} else if(qseq->len > kmersize) {
 					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor);
+					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
 				} else if(qseq2->len > kmersize) {
 					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor);
+					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
 					++count;
 				}
@@ -457,18 +457,18 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				if(qseq->len > kmersize && qseq2->len > kmersize) {
 					qseq->seq += start;
 					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor);
+					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
 				} else if(qseq->len > kmersize) {
 					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor);
+					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
 				} else if(qseq2->len > kmersize) {
 					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor);
+					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
 					++count;
 				}
@@ -496,7 +496,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 	return count;
 }
 
-void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor) {
+void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	
 	int i, end, buffer[4];
 	
@@ -510,10 +510,10 @@ void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor) {
 		buffer[1] = compressor->complen;
 		buffer[2] = compressor->N[0];
 		
-		sfwrite(buffer, sizeof(int), 4, stdout);
-		sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-		sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-		sfwrite((header->seq + 1), 1, header->len, stdout);
+		sfwrite(buffer, sizeof(int), 4, out);
+		sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, out);
+		sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], out);
+		sfwrite((header->seq + 1), 1, header->len, out);
 		resetComp(compressor);
 	}
 	
@@ -522,14 +522,14 @@ void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor) {
 	buffer[0] = compressor->seqlen;
 	buffer[1] = compressor->complen;
 	buffer[2] = compressor->N[0];
-	sfwrite(buffer, sizeof(int), 4, stdout);
-	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	sfwrite((header->seq + 1), 1, header->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, out);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, out);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], out);
+	sfwrite((header->seq + 1), 1, header->len, out);
 	resetComp(compressor);
 }
 
-void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor) {
+void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	
 	int buffer[4];
 	
@@ -545,15 +545,15 @@ void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor) {
 	buffer[2] = compressor->N[0];
 	buffer[3] = header->len;
 	
-	sfwrite(buffer, sizeof(int), 4, stdout);
-	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	sfwrite((header->seq + 1), 1, header->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, out);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, out);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], out);
+	sfwrite((header->seq + 1), 1, header->len, out);
 	
 	resetComp(compressor);
 }
 
-void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor) {
+void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out) {
 	
 	int buffer[4];
 	
@@ -569,10 +569,10 @@ void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, C
 	buffer[2] = compressor->N[0];
 	buffer[3] = -header->len;
 	
-	sfwrite(buffer, sizeof(int), 4, stdout);
-	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	sfwrite((header->seq + 1), 1, header->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, out);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, out);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], out);
+	sfwrite((header->seq + 1), 1, header->len, out);
 	resetComp(compressor);
 	
 	/* translate to 2bit */
@@ -587,9 +587,9 @@ void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, C
 	buffer[2] = compressor->N[0];
 	buffer[3] = header_r->len;
 	
-	sfwrite(buffer, sizeof(int), 4, stdout);
-	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, stdout);
-	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], stdout);
-	sfwrite((header_r->seq + 1), 1, header_r->len, stdout);
+	sfwrite(buffer, sizeof(int), 4, out);
+	sfwrite(compressor->seq, sizeof(long unsigned), compressor->complen, out);
+	sfwrite(compressor->N + 1, sizeof(int), compressor->N[0], out);
+	sfwrite((header_r->seq + 1), 1, header_r->len, out);
 	resetComp(compressor);
 }

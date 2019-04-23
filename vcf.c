@@ -102,7 +102,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 	const double lnConst = -10 / log(10);
 	char *FILTER, **FILTER_ptr, *update;
 	unsigned char nuc, bestNuc;
-	const char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	Assembly *assembly;
 	
 	if(filter == 2) {

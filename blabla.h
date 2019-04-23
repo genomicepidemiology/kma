@@ -16,9 +16,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-#define _XOPEN_SOURCE 600
-#include <stdio.h>
-#include "assembly.h"
 
-void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, char *cmd);
-void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, FILE *outfile);
+#include "stddef.h"
+
+#ifndef BLABLA
+typedef struct bla Bla;
+struct bla {
+	unsigned read; /* reader */
+	unsigned write; /* writer */
+	unsigned size;
+	volatile unsigned lock;
+	void *buff;
+};
+#define BLABLA 1
+#endif
+
+Bla * blablastart(size_t size);
+void blablabreak(Bla *stream);
+void blablastop(Bla *stream);
+int blablawrite(void *msg, size_t size, Bla *stream);
+int blablaread(void *msg, size_t size, Bla *stream);
+unsigned blablaseek(Bla *stream, size_t size);

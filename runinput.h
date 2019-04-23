@@ -21,11 +21,11 @@
 #include "qseqs.h"
 
 /* pointers determining how to deliver the input */
-void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*);
-void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*);
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans);
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans);
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans);
-void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor);
-void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor);
-void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor);
+void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*);
+void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*);
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);
+void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out);
+void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out);
+void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out);

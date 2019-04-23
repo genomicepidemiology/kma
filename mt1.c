@@ -35,32 +35,51 @@
 #include "printconsensus.h"
 #include "qseqs.h"
 #include "runkma.h"
+#include "stdnuc.h"
 #include "stdstat.h"
 #include "vcf.h"
 
-void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor) {
+void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	
-	static int buff[7] = {0, 0, 1, 0, 0, 0, 0};
+	static int buff[8] = {0, 0, 1, 0, 0, 0, 0, 0};
 	
 	if(header) {
 		buff[1] = qseq->len;
 		buff[6] = header->len;
-		sfwrite(buff, sizeof(int), 7, stdout);
-		sfwrite(qseq->seq, 1, qseq->len, stdout);
-		sfwrite(header->seq + 1, 1, header->len, stdout);
+		sfwrite(buff, sizeof(int), 8, out);
+		sfwrite(qseq->seq, 1, qseq->len, out);
+		sfwrite(header->seq + 1, 1, header->len, out);
 	} else {
 		buff[5] = qseq->len;
 	}
 }
 
-void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor) {
+void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out) {
 	
-	printFsaMt1(header, qseq, compressor);
-	printFsaMt1(header_r, qseq_r, compressor);
+	static int buff[8] = {0, 0, 1, 0, 0, 0, 0, 0};
+	
+	if(header) {
+		buff[1] = qseq->len;
+		buff[6] = header->len;
+		buff[7] = 97;
+		sfwrite(buff, sizeof(int), 8, out);
+		sfwrite(qseq->seq, 1, qseq->len, out);
+		sfwrite(header->seq + 1, 1, header->len, out);
+		
+		buff[1] = qseq_r->len;
+		buff[6] = header_r->len;
+		buff[7] = 145;
+		strrc(qseq_r->seq, qseq_r->len);
+		sfwrite(buff, sizeof(int), 8, out);
+		sfwrite(qseq_r->seq, 1, qseq_r->len, out);
+		sfwrite(header_r->seq + 1, 1, header_r->len, out);
+	} else {
+		buff[5] = qseq->len;
+	}
 	
 }
 
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int thread_num) {
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int sam, int nc, int nf, int thread_num) {
 	
 	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta;
 	int *template_lengths;
@@ -82,7 +101,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	
 	/* open pipe */
 	//template_fragments = popen(exePrev, "r");
-	template_fragments = kmaPipe(exePrev, "rb", 0, 0);
+	template_fragments = kmaPipe("-s1", "rb", 0, 0);
 	if(!template_fragments) {
 		ERROR();
 	} else {
@@ -100,16 +119,25 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		strcat(outputfilename, ".res");
 		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
-		strcat(outputfilename, ".frag.gz");
-		frag_out = gzInitFileBuff(CHUNK);
-		openFileBuff(frag_out, outputfilename, "wb");
-		outputfilename[file_len] = 0;
-		strcat(outputfilename, ".aln");
-		alignment_out = sfopen(outputfilename, "w");
-		outputfilename[file_len] = 0;
-		strcat(outputfilename, ".fsa");
-		consensus_out = sfopen(outputfilename, "w");
-		outputfilename[file_len] = 0;
+		if(nf == 0) {
+			strcat(outputfilename, ".frag.gz");
+			frag_out = gzInitFileBuff(CHUNK);
+			openFileBuff(frag_out, outputfilename, "wb");
+			outputfilename[file_len] = 0;
+		} else {
+			frag_out = 0;
+		}
+		if(nc == 0) {
+			strcat(outputfilename, ".aln");
+			alignment_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+			strcat(outputfilename, ".fsa");
+			consensus_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		} else {
+			alignment_out = 0;
+			consensus_out = 0;
+		}
 		if(print_matrix) {
 			matrix_out = gzInitFileBuff(CHUNK);
 			strcat(outputfilename, ".mat.gz");
@@ -187,6 +215,10 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	nameLoad(template_name, DB_file);
 	fclose(DB_file);
 	
+	if(sam) {
+		fprintf(stdout, "@SQ\tSN:%s\tLN:%d\n", template_name->seq, *template_lengths);
+	}
+	
 	fprintf(stderr, "#\n# Doing local assemblies of found templates, and output results\n");
 	t0 = clock();
 	
@@ -242,6 +274,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
 		thread->bcd = bcd;
+		thread->sam = sam;
 		thread->template = -2;
 		thread->file_count = 1;
 		thread->files = &template_fragments;
@@ -300,6 +333,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
 	thread->bcd = bcd;
+	thread->sam = sam;
 	thread->template = 0;
 	thread->file_count = 1;
 	thread->files = &template_fragments;
@@ -351,7 +385,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			/* Output result */
 			fprintf(res_out, "%-12s\t%8lu\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				thread->template_name, read_score, 0, t_len, id, cover, q_id, q_cover, (double) depth, (double) read_score, p_value);
-			printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
+			if(nc == 0) {
+				printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
+			}
 			/* print matrix */
 			if(matrix_out) {
 				updateMatrix(matrix_out, thread->template_name, template_index->seq, matrix, t_len);
@@ -362,6 +398,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		}
 		/* destroy this DB index */
 		destroyPtr(template_index);
+	} else if(ID_t == 0.0) {
+		fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
+				thread->template_name, read_score, 0, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) read_score, p_value);
 	}
 	
 	/* join threads */
@@ -376,9 +415,13 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	
 	/* Close files */
 	fclose(res_out);
-	fclose(alignment_out);
-	fclose(consensus_out);
-	destroyGzFileBuff(frag_out);
+	if(alignment_out) {
+		fclose(alignment_out);
+		fclose(consensus_out);
+	}
+	if(frag_out) {
+		destroyGzFileBuff(frag_out);
+	}
 	if(matrix_out) {
 		destroyGzFileBuff(matrix_out);
 	}

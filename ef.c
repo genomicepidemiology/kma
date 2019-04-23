@@ -19,11 +19,30 @@
 #define _XOPEN_SOURCE 600
 #include <math.h>
 #include <stdio.h>
+#include <time.h>
 #include "assembly.h"
 #include "ef.h"
 #include "stdnuc.h"
 #include "vcf.h"
 #include "version.h"
+
+void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, char *cmd) {
+	
+	char Date[11];
+	time_t t1;
+	struct tm *tm;
+	
+	fprintf(out, "## method\tKMA\n");
+	fprintf(out, "## version\t%s\n", KMA_VERSION);
+	fprintf(out, "## database %s\n", noFolder(templatefilename));
+	fprintf(out, "## fragmentCount\t%u\n", totFrags);
+	time(&t1);
+	tm = localtime(&t1);
+	strftime(Date, sizeof(Date), "%Y-%m-%d", tm);
+	fprintf(out, "## date\t%s\n", Date);
+	fprintf(out, "## command\t%s", cmd);
+	fprintf(out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
+}
 
 void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, FILE *outfile) {
 	
@@ -75,8 +94,9 @@ void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *
 			}
 		} while((pos = assembly[pos].next) != 0);
 		
-		
 		fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum, insertSum, deletionSum);
+	} else if(aligned_assem) {
+		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%lu\t%f\t%u\t%u\t%u\t%u\t%u\n", template_name, readCount, fragmentCount, 0, 0, 0, aligned_assem->depth, 0.0, 0, 0, 0, 0, 0);
 	} else {
 		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%u\t%f\t%u\t%u\t%u\t%u\t%u\n", template_name, 0, 0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0);
 	}

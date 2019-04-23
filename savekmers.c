@@ -28,6 +28,7 @@
 #include "penalties.h"
 #include "pherror.h"
 #include "qseqs.h"
+#include "sam.h"
 #include "savekmers.h"
 #include "stdnuc.h"
 #include "stdstat.h"
@@ -83,13 +84,15 @@ void * save_kmers_threaded(void *arg) {
 	static unsigned readNum = 0;
 	KmerScan_thread *thread = arg;
 	int *Score, *Score_r, *bestTemplates, *bestTemplates_r, *regionTemplates;
-	int *regionScores, *extendScore, go, spltDB, exhaustive;
-	FILE *inputfile;
+	int *regionScores, *extendScore, *p_readNum, *pr_readNum, *preg_readNum;
+	int go, exhaustive, unmapped, sam, flag, cflag, stats[2];;
+	FILE *inputfile, *out;
 	HashMapKMA *templates;
 	CompDNA *qseq, *qseq_r;
-	Qseqs *header, *header_r;
+	Qseqs *header, *header_r, *samseq;
 	Penalties *rewards;
 	
+	stats[0] = 0;
 	templates = thread->templates;
 	exhaustive = thread->exhaustive;
 	qseq = thread->qseq;
@@ -106,6 +109,17 @@ void * save_kmers_threaded(void *arg) {
 	} else {
 		regionScores = 0;
 	}
+	
+	/* make constant part of flag */
+	if(save_kmers_pair == &save_kmers_forcePair) {
+		cflag = 1;
+	} else {
+		cflag = 0;
+	}
+	if(templates->prefix && templates->prefix_len == 0) {
+		cflag |= 2;
+	}
+	
 	extendScore = calloc((templates->DB_size + 1), sizeof(int));
 	header_r = malloc(sizeof(Qseqs));
 	if(!extendScore || !header_r) {
@@ -129,7 +143,16 @@ void * save_kmers_threaded(void *arg) {
 	*bestTemplates++ = 0;
 	*bestTemplates_r++ = 0;
 	*regionTemplates++ = 0;
-	spltDB = thread->spltDB;
+	out = thread->out;
+	if((sam = thread->sam)) {
+		samseq = setQseqs(256);
+	} else {
+		samseq = 0;
+	}
+	
+	p_readNum = (bestTemplates - 1);
+	pr_readNum = (bestTemplates_r - 1);
+	preg_readNum = (regionTemplates - 1);
 	
 	go = 1;
 	while(go != 0) {
@@ -140,12 +163,10 @@ void * save_kmers_threaded(void *arg) {
 			/* PE */
 			loadFsa(qseq_r, header_r, inputfile);
 		}
-		if(spltDB) {
-			bestTemplates[-1] = ++readNum;
-			bestTemplates_r[-1] = readNum;
-			regionTemplates[-1] = readNum;
-		}
+		*p_readNum = ++readNum;
 		unlock(excludeIn);
+		*pr_readNum = readNum;
+		*preg_readNum = readNum;
 		
 		/* allocate memory */
 		if(qseq_r->size < qseq->size && 0 < go) {
@@ -155,11 +176,76 @@ void * save_kmers_threaded(void *arg) {
 		
 		/* find ankers */
 		if(0 < go) {
-			kmerScan(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, qseq_r, header, extendScore, exhaustive, excludeOut);
+			unmapped = kmerScan(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, qseq_r, header, extendScore, exhaustive, excludeOut, out);
 		} else if(go < 0) {
-			save_kmers_pair(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores, qseq, qseq_r, header, header_r, extendScore, exhaustive, excludeOut);
+			unmapped = save_kmers_pair(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores, qseq, qseq_r, header, header_r, extendScore, exhaustive, excludeOut, out);
+		} else {
+			unmapped = 0;
+		}
+		
+		if(sam && unmapped) {
+			if(unmapped & 1) {
+				/* set flag */
+				flag = 4;
+				if(go < 0) {
+					flag |= 65;
+					if((unmapped & 2) || (cflag & 1)) {
+						flag |= 8;
+					}
+				}
+				if((cflag & 2) == 0) {
+					flag |= 16;
+					if((flag & 8) && (unmapped & 2)) {
+						flag |= 32;
+					}
+				}
+				qseqCompDNA(qseq, samseq);
+				nibble2base(samseq->seq, samseq->len);
+				stats[1] = flag;
+				samwrite(samseq, header, 0, 0, 0, stats);
+			}
+			if(unmapped & 2 || ((cflag & 1) && (unmapped & 1))) {
+				/* set flag */
+				flag = 4;
+				if(go < 0) {
+					flag |= 129;
+					if(unmapped & 1) {
+						flag |= 8;
+					}
+				}
+				if((cflag & 2) == 0) {
+					if(unmapped & 2) {
+						flag |= 16;
+					}
+					if((flag & 8)) {
+						flag |= 32;
+					}
+				}
+				qseqCompDNA(qseq_r, samseq);
+				nibble2base(samseq->seq, samseq->len);
+				stats[1] = flag;
+				samwrite(samseq, header_r, 0, 0, 0, stats);
+			}
 		}
 	}
+	
+	/* clean up */
+	if(save_kmers_pair != &save_kmers_unionPair) {
+		free(regionScores);
+	}
+	if(sam) {
+		destroyQseqs(samseq);
+	}
+	free(extendScore);
+	freeComp(qseq);
+	free(qseq);
+	freeComp(qseq_r);
+	free(qseq_r);
+	destroyQseqs(header);
+	destroyQseqs(header_r);
+	free(regionTemplates - 3);
+	free(Score);
+	free(Score_r);
 	
 	return NULL;
 }
@@ -1230,16 +1316,16 @@ int getR_Best(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r
 	return bestScore_r;
 }
 
-void save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	int i, j, k, l, n, end, rc, prefix_len, template, hitCounter, HIT, SU;
-	int M, MM, n_kmers, score, bestScore, bestHits, reps, kmersize;
+	int M, MM, n_kmers, score, bestScore, bestHits, reps, kmersize, flag;
 	unsigned shifter, prefix_shifter, *values, *last;
 	short unsigned *values_s;
 	long unsigned prefix;
 	
 	if(qseq->seqlen < (kmersize = templates->kmersize)) {
-		return;
+		return 1;
 	} else if(templates->DB_size < USHRT_MAX) {
 		SU = 1;
 	} else {
@@ -1257,6 +1343,7 @@ void save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, in
 	bestScore = 0;
 	end = qseq->seqlen;
 	if(prefix_len) {
+		flag = 16;
 		for(rc = 0; rc < 2; ++rc) {
 			if(rc) {
 				comp_rc(qseq);
@@ -1325,6 +1412,7 @@ void save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, in
 		}
 		end = n_kmers - hitCounter - bestScore;
 	} else {
+		flag = 0;
 		HIT = exhaustive;
 		j = 0;
 		qseq->N[0]++;
@@ -1440,16 +1528,17 @@ void save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, in
 		end = qseq->seqlen + 1 - bestScore;
 	}
 	
-	if(bestScore) {
-		if(bestScore * kmersize > end) {
-			lock(excludeOut);
-			deConPrintPtr(bestTemplates, qseq, bestScore, header);
-			unlock(excludeOut);
-		}
+	i = 0;
+	if(bestScore && bestScore * kmersize > end) {
+		lock(excludeOut);
+		i = deConPrintPtr(bestTemplates, qseq, bestScore, header, flag, out);
+		unlock(excludeOut);
 	}
+	
+	return i;
 }
 
-void save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	int i, j, l, n, end, template, hitCounter, gaps, Ms, MMs, Us, W1s;
 	int HIT, SU, score, bestScore, bestHits, kmersize;
@@ -1458,7 +1547,7 @@ void save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewa
 	short unsigned *values_s;
 	
 	if(qseq->seqlen < (kmersize = templates->kmersize)) {
-		return;
+		return 1;
 	} else if(templates->DB_size < USHRT_MAX) {
 		SU = 1;
 	} else {
@@ -1696,16 +1785,17 @@ void save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewa
 	}
 	end = qseq->seqlen + 1 - bestScore;
 	
-	if(bestScore) {
-		if(bestScore * kmersize > end) {
-			lock(excludeOut);
-			deConPrintPtr(bestTemplates, qseq, bestScore, header);
-			unlock(excludeOut);
-		}
+	i = 0;
+	if(bestScore && bestScore * kmersize > end) {
+		lock(excludeOut);
+		i = deConPrintPtr(bestTemplates, qseq, bestScore, header, 0, out);
+		unlock(excludeOut);
 	}
+	
+	return i;
 }
 
-void save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	int i, j, l, end, HIT, gaps, score, Ms, MMs, Us, W1s, W1, U, M, MM;
 	int template, bestHits, hitCounter, bestScore, bestScore_r, kmersize;
@@ -1713,7 +1803,7 @@ void save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *best
 	short unsigned *values_s;
 	
 	if(qseq->seqlen < (kmersize = templates->kmersize)) {
-		return;
+		return 1;
 	} else if(templates->DB_size < USHRT_MAX) {
 		SU = 1;
 	} else {
@@ -2184,16 +2274,17 @@ void save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *best
 	qseq_r->N[0]--;
 	
 	/* Validate best match */
+	i = 0;
 	if(bestScore > 0 || bestScore_r > 0) {
 		end = qseq->seqlen + 1;
 		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
 			if(bestScore > bestScore_r) {
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq, bestScore, header);
+				i = deConPrintPtr(bestTemplates, qseq, bestScore, header, 0, out);
 				unlock(excludeOut);
 			} else if(bestScore < bestScore_r) {
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header);
+				i = deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header, 16, out);
 				unlock(excludeOut);
 			} else {
 				/* merge */
@@ -2202,11 +2293,13 @@ void save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *best
 					bestTemplates[*bestTemplates] = -bestTemplates_r[i];
 				}
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq, -bestScore, header);
+				i = deConPrintPtr(bestTemplates, qseq, -bestScore, header, 0, out);
 				unlock(excludeOut);
 			}
 		}
 	}
+	
+	return i;
 }
 
 int save_kmers_intCount(const HashMapKMA *templates, int *bestTemplates, int *Score, CompDNA *qseq, unsigned *values, unsigned pos, const unsigned shifter) {
@@ -2256,7 +2349,7 @@ int save_kmers_intCount(const HashMapKMA *templates, int *bestTemplates, int *Sc
 	return pos + 1;
 }
 
-void save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	int i, j, l, end, HIT, bestHits, hitCounter, bestScore, bestScore_r, reps;
 	int n, template, SU, kmersize;
@@ -2264,7 +2357,7 @@ void save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int
 	short unsigned *values_s;
 	
 	if(qseq->seqlen < (kmersize = templates->kmersize)) {
-		return;
+		return 1;
 	} else if(templates->DB_size < USHRT_MAX) {
 		SU = 1;
 	} else {
@@ -2485,16 +2578,17 @@ void save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int
 	qseq_r->N[0]--;
 	
 	/* Validate best match */
+	i = 0;
 	if(bestScore > 0 || bestScore_r > 0) {
 		end = qseq->seqlen + 1;
 		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
 			if(bestScore > bestScore_r) {
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq, bestScore, header);
+				i = deConPrintPtr(bestTemplates, qseq, bestScore, header, 0, out);
 				unlock(excludeOut);
 			} else if(bestScore < bestScore_r) {
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header);
+				i = deConPrintPtr(bestTemplates_r, qseq_r, bestScore_r, header, 16, out);
 				unlock(excludeOut);
 			} else {
 				/* merge */
@@ -2503,20 +2597,26 @@ void save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int
 					bestTemplates[*bestTemplates] = -bestTemplates_r[i];
 				}
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq, -bestScore, header);
+				i = deConPrintPtr(bestTemplates, qseq, -bestScore, header, 0, out);
 				unlock(excludeOut);
 			}
 		}
 	}
+	return i;
 }
 
-void save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
-	int i, bestScore, bestScore_r, hitCounter, kmersize;
+	int i, bestScore, bestScore_r, hitCounter, kmersize, flag, flag_r, rev;
 	
 	/* get_kmers_for_pair, returns a positive number if templates are found.
 	zero otherwise */
 	kmersize = templates->kmersize;
+	if(templates->prefix_len == 0 && templates->prefix != 0) {
+		rev = 0;
+	} else {
+		rev = 1;
+	}
 	
 	/* get forward */
 	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, extendScore, exhaustive)) && (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
@@ -2568,94 +2668,163 @@ void save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards,
 		*bestTemplates_r = 0;
 	}
 	
+	flag = 65;
+	flag_r = 129;
 	if(0 < bestScore && 0 < bestScore_r) {
 		if(*regionTemplates < 0) {
+			flag |= 2;
+			flag_r |= 2;
+			
 			*regionTemplates = -(*regionTemplates);
 			if(0 < regionTemplates[1]) {
-				comp_rc(qseq);
+				if(rev) {
+					flag |= 32;
+					flag_r |= 16;
+					comp_rc(qseq);
+				} else {
+					flag |= 16;
+					flag_r |= 32;
+					comp_rc(qseq_r);
+				}
 				if(regionTemplates[*regionTemplates] < 0) {
 					bestScore = -bestScore;
 					bestScore_r = -bestScore_r;
 				}
 				lock(excludeOut);
-				printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore_r, header_r);
+				i = printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore_r, header_r, flag, flag_r, out);
 				unlock(excludeOut);
 			} else {
-				comp_rc(qseq_r);
+				if(rev) {
+					flag |= 16;
+					flag_r |= 32;
+					comp_rc(qseq_r);
+				} else {
+					flag |= 32;
+					flag_r |= 16;
+					comp_rc(qseq);
+				}
 				for(i = *regionTemplates; i != 0; --i) {
 					regionTemplates[i] = -regionTemplates[i];
 				}
 				lock(excludeOut);
-				printPairPtr(regionTemplates, qseq_r, bestScore_r, header_r, qseq, bestScore, header);
+				i = printPairPtr(regionTemplates, qseq_r, bestScore_r, header_r, qseq, bestScore, header, flag_r, flag, out);
 				unlock(excludeOut);
+			}
+			if(i) {
+				i = 3;
+			} else {
+				i = 0;
 			}
 		} else {
 			if(0 < regionTemplates[1]) {
-				comp_rc(qseq);
+				if(rev) {
+					comp_rc(qseq);
+				}
 				if(regionTemplates[*regionTemplates] < 0) {
 					bestScore = -bestScore;
 				}
 			} else {
+				if(rev) {
+					flag |= 16;
+					flag_r |= 32;
+				}
 				for(i = 1; i <= *regionTemplates; ++i) {
 					regionTemplates[i] = -regionTemplates[i];
 				}
 			}
-			lock(excludeOut);
-			deConPrintPtr(regionTemplates, qseq, bestScore, header);
-			unlock(excludeOut);
 			if(0 < bestTemplates[1]) {
-				comp_rc(qseq_r);
+				if(rev) {
+					comp_rc(qseq_r);
+				}
 				if(bestTemplates[*bestTemplates] < 0) {
 					bestScore_r = -bestScore_r;
 				}
 			} else {
+				if(rev) {
+					flag |= 32;
+					flag_r |= 16;
+				}
 				for(i = 1; i <= *bestTemplates; ++i) {
 					bestTemplates[i] = -bestTemplates[i];
 				}
 			}
 			lock(excludeOut);
-			deConPrintPtr(bestTemplates, qseq_r, bestScore_r, header_r);
+			i = deConPrintPtr(regionTemplates, qseq, bestScore, header, flag, out);
+			if(deConPrintPtr(bestTemplates, qseq_r, bestScore_r, header_r, flag_r, out)) {
+				i += 2;
+			}
 			unlock(excludeOut);
 		}
+		return i;
 	} else if(bestScore) {
+		if(rev) {
+			flag |= 8;
+			flag |= 32;
+		}
 		if(0 < regionTemplates[1]) {
-			comp_rc(qseq);
+			if(rev) {
+				comp_rc(qseq);
+			}
 			if(regionTemplates[*regionTemplates] < 0) {
 				bestScore = -bestScore;
 			}
 		} else {
+			if(rev) {
+				flag |= 16;
+			}
 			for(i = 1; i <= *regionTemplates; ++i) {
 				regionTemplates[i] = -regionTemplates[i];
 			}
 		}
 		lock(excludeOut);
-		deConPrintPtr(regionTemplates, qseq, bestScore, header);
+		i = deConPrintPtr(regionTemplates, qseq, bestScore, header, flag, out);
 		unlock(excludeOut);
+		if(i == 0) {
+			return 2;
+		}
 	} else if(bestScore_r) {
+		if(rev) {
+			flag_r |= 8;
+			flag_r |= 32;
+		}
 		if(0 < regionTemplates[1]) {
-			comp_rc(qseq_r);
+			if(rev) {
+				comp_rc(qseq_r);
+			}
 			if(regionTemplates[*regionTemplates] < 0) {
 				bestScore_r = -bestScore_r;
 			}
 		} else {
+			if(rev) {
+				flag_r |= 16;
+			}
 			for(i = 1; i <= *regionTemplates; ++i) {
 				regionTemplates[i] = -regionTemplates[i];
 			}
 		}
 		lock(excludeOut);
-		deConPrintPtr(regionTemplates, qseq_r, bestScore_r, header_r);
+		i = deConPrintPtr(regionTemplates, qseq_r, bestScore_r, header_r, flag_r, out);
 		unlock(excludeOut);
+		if(i == 0) {
+			return 1;
+		}
 	}
+	return 3;
 }
 
-void save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	int i, bestScore, bestScore_r, compScore, hitCounter, hitCounter_r;
-	int kmersize;
+	int kmersize, flag, flag_r, rev;
 	
 	/* get_kmers_for_pair, returns a positive number if templates are found.
 	zero otherwise */
 	kmersize = templates->kmersize;
+	if(templates->prefix_len == 0 && templates->prefix != 0) {
+		rev = 0;
+	} else {
+		rev = 1;
+	}
 	
 	/* get forward */
 	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, extendScore, exhaustive))) {
@@ -2677,115 +2846,202 @@ void save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *reward
 		bestScore_r = 0;
 	}
 	
+	flag = 65;
+	flag_r = 129;
 	if(0 < bestScore && 0 < bestScore_r) {
 		if(*regionTemplates < 0) {
+			flag |= 2;
+			flag_r |= 2;
 			compScore = MIN((hitCounter + hitCounter_r), (bestScore + bestScore_r));
 			if((qseq->seqlen + qseq_r->seqlen - compScore - (kmersize << 1)) < compScore * kmersize) {
 				*regionTemplates = -(*regionTemplates);
 				if(0 < regionTemplates[1]) {
-					comp_rc(qseq);
+					if(rev) {
+						flag |= 32;
+						flag_r |= 16;
+						comp_rc(qseq);
+					} else {
+						flag |= 16;
+						flag_r |= 32;
+						comp_rc(qseq_r);
+					}
 					if(regionTemplates[*regionTemplates] < 0) {
 						bestScore = -bestScore;
 						bestScore_r = -bestScore_r;
 					}
 					lock(excludeOut);
-					printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore_r, header_r);
+					i = printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore_r, header_r, flag, flag_r, out);
 					unlock(excludeOut);
 				} else {
-					comp_rc(qseq_r);
+					if(rev) {
+						flag |= 16;
+						flag_r |= 32;
+						comp_rc(qseq_r);
+					} else {
+						flag |= 32;
+						flag_r |= 16;
+						comp_rc(qseq);
+					}
 					for(i = *regionTemplates; i != 0; --i) {
 						regionTemplates[i] = -regionTemplates[i];
 					}
 					lock(excludeOut);
-					printPairPtr(regionTemplates, qseq_r, bestScore_r, header_r, qseq, bestScore, header);
+					i = printPairPtr(regionTemplates, qseq_r, bestScore_r, header_r, qseq, bestScore, header, flag_r, flag, out);
 					unlock(excludeOut);
 				}
+				if(i) {
+					i = 3;
+				} else {
+					i = 0;
+				}
+			} else {
+				i = 3;
 			}
 		} else {
 			hitCounter = MIN(hitCounter, bestScore);
-			if((qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
+			hitCounter = (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize;
+			if(hitCounter) {
 				if(0 < regionTemplates[1]) {
-					comp_rc(qseq);
+					if(rev) {
+						comp_rc(qseq);
+					}
 					if(regionTemplates[*regionTemplates] < 0) {
 						bestScore = -bestScore;
 					}
 				} else {
+					if(rev) {
+						flag |= 16;
+						flag_r |= 32;
+					}
 					for(i = *regionTemplates; i != 0; --i) {
 						regionTemplates[i] = -regionTemplates[i];
 					}
 				}
-				lock(excludeOut);
-				deConPrintPtr(regionTemplates, qseq, bestScore, header);
-				unlock(excludeOut);
 			}
 			hitCounter_r = MIN(hitCounter_r, bestScore_r);
-			if((qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize) {
+			hitCounter_r = (qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize;
+			if(hitCounter_r) {
 				if(0 < bestTemplates[1]) {
-					comp_rc(qseq_r);
+					if(rev) {
+						comp_rc(qseq_r);
+					}
 					if(bestTemplates[*bestTemplates] < 0) {
 						bestScore_r = -bestScore_r;
 					}
 				} else {
+					if(rev) {
+						flag |= 32;
+						flag_r |= 16;
+					}
 					for(i = *bestTemplates; i != 0; --i) {
 						bestTemplates[i] = -bestTemplates[i];
 					}
 				}
+			}
+			
+			if(hitCounter) {
 				lock(excludeOut);
-				deConPrintPtr(bestTemplates, qseq_r, bestScore_r, header_r);
+				i = deConPrintPtr(regionTemplates, qseq, bestScore, header, flag, out);
 				unlock(excludeOut);
+			} else {
+				i = 1;
+			}
+			if(hitCounter_r) {
+				lock(excludeOut);
+				if(deConPrintPtr(bestTemplates, qseq_r, bestScore_r, header_r, flag_r, out)) {
+					i += 2;
+				}
+				unlock(excludeOut);
+			} else {
+				i += 2;
 			}
 		}
+		return i;
 	} else if(0 < bestScore) {
 		hitCounter = MIN(hitCounter, bestScore);
 		if((qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
+			if(rev) {
+				flag |= 8;
+				flag |= 32;
+			}
 			if(0 < regionTemplates[1]) {
-				comp_rc(qseq);
+				if(rev) {
+					comp_rc(qseq);
+				}
 				if(regionTemplates[*regionTemplates] < 0) {
 					bestScore = -bestScore;
 				}
 			} else {
+				if(rev) {
+					flag |= 16;
+				}
 				for(i = *regionTemplates; i != 0; --i) {
 					regionTemplates[i] = -regionTemplates[i];
 				}
 			}
 			lock(excludeOut);
-			deConPrintPtr(regionTemplates, qseq, bestScore, header);
+			i = deConPrintPtr(regionTemplates, qseq, bestScore, header, flag, out);
 			unlock(excludeOut);
+		} else {
+			i = 1;
+		}
+		if(i == 0) {
+			return 2;
 		}
 	} else if(0 < bestScore_r) {
 		hitCounter_r = MIN(hitCounter_r, bestScore_r);
 		if((qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize) {
+			if(rev) {
+				flag_r |= 8;
+				flag_r |= 32;
+			}
 			if(0 < regionTemplates[1]) {
-				comp_rc(qseq_r);
+				if(rev) {
+					comp_rc(qseq_r);
+				}
 				if(regionTemplates[*regionTemplates] < 0) {
 					bestScore_r = -bestScore_r;
 				}
 			} else {
+				if(rev) {
+					flag_r |= 16;
+				}
 				for(i = 1; i <= *regionTemplates; ++i) {
 					regionTemplates[i] = -regionTemplates[i];
 				}
 			}
 			lock(excludeOut);
-			deConPrintPtr(regionTemplates, qseq_r, bestScore_r, header_r);
+			i = deConPrintPtr(regionTemplates, qseq_r, bestScore_r, header_r, flag_r, out);
 			unlock(excludeOut);
+		} else {
+			i = 1;
+		}
+		if(i == 0) {
+			return 1;
 		}
 	}
+	return 3;
 }
 
-void save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
-	int i, bestScore, hitCounter, hitCounter_r, kmersize;
+	int i, bestScore, hitCounter, hitCounter_r, kmersize, flag, flag_r, rev;
 	
 	/* get_kmers_for_pair, returns a positive number if templates are found.
 	zero otherwise */
 	kmersize = templates->kmersize;
+	if(templates->prefix_len == 0 && templates->prefix != 0) {
+		rev = 0;
+	} else {
+		rev = 1;
+	}
 	
 	/* get forward */
 	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, extendScore, exhaustive))) {
 		/* got hits */
 		getFirstForce(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores);
 	} else {
-		return;
+		return 1;
 	}
 	*extendScore = 1;
 	
@@ -2795,23 +3051,47 @@ void save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards,
 	(bestScore = getSecondForce(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores))) {
 		
 		if((qseq->seqlen + qseq_r->seqlen - bestScore) < bestScore * kmersize) {
+			flag = 67;
+			flag_r = 129;
+			
 			if(regionTemplates[*regionTemplates] < 0) {
 				bestScore = -bestScore;
 			}
 			if(0 < regionTemplates[1]) {
-				comp_rc(qseq);
+				if(rev) {
+					flag |= 32;
+					flag_r |= 16;
+					comp_rc(qseq);
+				} else {
+					flag |= 16;
+					flag_r |= 32;
+					comp_rc(qseq_r);
+				}
 				lock(excludeOut);
-				printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore, header_r);
+				i = printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore, header_r, flag, flag_r, out);
 				unlock(excludeOut);
 			} else {
-				comp_rc(qseq_r);
+				if(rev) {
+					flag |= 16;
+					flag_r |= 32;
+					comp_rc(qseq_r);
+				} else {
+					flag |= 32;
+					flag_r |= 16;
+					comp_rc(qseq);
+				}
 				for(i = *regionTemplates; i != 0; --i) {
 					regionTemplates[i] = -regionTemplates[i];
 				}
 				lock(excludeOut);
-				printPairPtr(regionTemplates, qseq_r, bestScore, header_r, qseq, bestScore, header);
+				i = printPairPtr(regionTemplates, qseq_r, bestScore, header_r, qseq, bestScore, header, flag_r, flag, out);
 				unlock(excludeOut);
 			}
+		} else {
+			i = 1;
+		}
+		if(i == 0) {
+			return 0;
 		}
 	} else if(hitCounter || hitCounter_r) {
 		i = *bestTemplates + 1;
@@ -2825,9 +3105,10 @@ void save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards,
 		}
 		*bestTemplates_r = 0;
 	}
+	return 3;
 }
 
-void save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut) {
+int save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *headerOrg, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	/* save_kmers find ankering k-mers the in query sequence,
 	and is the time determining step */
@@ -2835,11 +3116,12 @@ void save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *
 	static unsigned ***tVF_scores, ***tVR_scores;
 	int i, j, k, l, N, n, i_r, j_r, seqlen, seqend, end, HIT, Ncheck, SU;
 	int hitCounter, template, bestScore, bestHits, start, stop, kmersize;
-	int start_cut, end_cut, DB_size, deCon, *regionTemplates;
+	int start_cut, end_cut, DB_size, deCon, returner, *regionTemplates;
 	unsigned *values, *last, *rlast, **VF_scores, **VR_scores, num, shifter;
 	short unsigned *values_s;
 	int *tmpNs, reps, rreps;
 	double Ms, Ns, Ms_prev, Ns_prev, HMM_param[8];
+	Qseqs *header;
 	
 	if(qseq->seqlen < (kmersize = templates->kmersize)) {
 		if(minLen == 0) {
@@ -2872,14 +3154,16 @@ void save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *
 			}
 			minLen = MIN(minLen, templates->kmersize);
 		}
-		return;
+		return 1;
 	} else if((DB_size = templates->DB_size) < USHRT_MAX) {
 		SU = 1;
 	} else {
 		SU = 0;
 	}
+	returner = 1;
 	deCon = deConPrintPtr == &deConPrint;
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
+	header = (Qseqs *) headerOrg;
 	
 	/* calculate HMM parameters */
 	HMM_param[0] = log(1 - pow(0.25, kmersize));
@@ -3349,10 +3633,11 @@ void save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *
 								HIT = (regionTemplates[*regionTemplates] > 0) ? 1 : -1;
 								/* print */
 								if(start != 0 && j != qseq->seqlen) {
-									ankerAndClean(regionTemplates, Score, Score_r, template_lengths, VF_scores, VR_scores, tmpNs, qseq, HIT, bestScore, start_cut, end_cut, header, excludeOut);
+									ankerAndClean(regionTemplates, Score, Score_r, template_lengths, VF_scores, VR_scores, tmpNs, qseq, HIT, bestScore, start_cut, end_cut, header, excludeOut, out);
 								} else {
-									ankerPtr(regionTemplates, Score, Score_r, template_lengths, VF_scores, VR_scores, tmpNs, qseq, HIT, bestScore, start_cut, end_cut, header, excludeOut);
+									ankerPtr(regionTemplates, Score, Score_r, template_lengths, VF_scores, VR_scores, tmpNs, qseq, HIT, bestScore, start_cut, end_cut, header, excludeOut, out);
 								}
+								returner = 0;
 							} else {
 								/* clear scores */
 								for(k = 1; k <= *bestTemplates; ++k) {
@@ -3390,9 +3675,11 @@ void save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *
 			++N;
 		}
 	}
+	
+	return returner;
 }
 
-void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, const Qseqs *header, volatile int *excludeOut) {
+void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, Qseqs *header, volatile int *excludeOut, FILE *out) {
 	
 	int k, l, bestHitsCov, template, DB_size;
 	unsigned *values, n, SU;
@@ -3582,8 +3869,6 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, int *template
 		}
 	}
 	
-	
-	
 	/* modify limits of match seq */
 	start_cut = ((start_cut - 92) < 0) ? 0 : (start_cut - 92);
 	end_cut = ((end_cut + 92) > qseq->seqlen) ? qseq->seqlen : (end_cut + 92);
@@ -3615,12 +3900,26 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, int *template
 	tmpQseq.complen = (tmpQseq.seqlen >> 5) + 1;
 	tmpQseq.N[0] = l;
 	
+	/* modify header */
+	l = header->len;
+	if(header->size <= l + 22) {
+		header->size += 32;
+		header->seq = realloc(header->seq, header->size);
+		if(!header->seq) {
+			ERROR();
+		}
+	}
+	header->len += sprintf((char *) header->seq + l - 1, "\t%d\t%d", start_cut, end_cut);
+	
 	lock(excludeOut);
-	deConPrintPtr(regionTemplates, &tmpQseq, HIT * bestScore, header);
+	deConPrintPtr(regionTemplates, &tmpQseq, HIT * bestScore, header, 0, out);
 	unlock(excludeOut);
+	
+	header->seq[l] = 0;
+	header->len = l;
 }
 
-void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, const Qseqs *header, volatile int *excludeOut) {
+void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, Qseqs *header, volatile int *excludeOut, FILE *out) {
 	
 	int k, l, SU;
 	unsigned *values;
@@ -3700,7 +3999,21 @@ void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, int *temp
 	tmpQseq.complen = (tmpQseq.seqlen >> 5) + 1;
 	tmpQseq.N[0] = l;
 	
+	/* modify header */
+	l = header->len;
+	if(header->size <= l + 22) {
+		header->size += 32;
+		header->seq = realloc(header->seq, header->size);
+		if(!header->seq) {
+			ERROR();
+		}
+	}
+	header->len += sprintf((char *) header->seq + l - 1, "\t%d\t%d", start_cut, end_cut);
+	
 	lock(excludeOut);
-	deConPrintPtr(regionTemplates, &tmpQseq, HIT * bestScore, header);
+	deConPrintPtr(regionTemplates, &tmpQseq, HIT * bestScore, header, 0, out);
 	unlock(excludeOut);
+	
+	header->seq[l] = 0;
+	header->len = l;
 }

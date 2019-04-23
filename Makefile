@@ -1,5 +1,5 @@
 CFLAGS = -Wall -O3 -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmers.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o savekmers.o seq2fasta.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o update.o updateindex.o updatescores.o valueshash.o vcf.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmers.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o update.o updateindex.o updatescores.o valueshash.o vcf.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -56,6 +56,7 @@ qseqs.o: qseqs.h pherror.h
 qualcheck.o: qualcheck.h compdna.h hashmap.h pherror.h stdnuc.h stdstat.h
 runinput.o: runinput.h compdna.h filebuff.h pherror.h qseqs.h seqparse.h
 runkma.o: runkma.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapindex.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h stdnuc.h stdstat.h vcf.h
+sam.o: sam.h nw.h pherror.h qseqs.h runkma.h
 savekmers.o: savekmers.h ankers.h compdna.h hashmapkma.h penalties.h pherror.h qseqs.h stdnuc.h stdstat.h threader.h
 seq2fasta.o: seq2fasta.h pherror.h qseqs.h runkma.h stdnuc.h
 seqparse.o: seqparse.h filebuff.h qseqs.h

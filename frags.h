@@ -23,7 +23,7 @@
 #ifndef FRAG
 typedef struct frag Frag;
 struct frag {
-	int buffer[6];
+	int buffer[7];
 	unsigned char *qseq;
 	unsigned char *header;
 	struct frag *next;

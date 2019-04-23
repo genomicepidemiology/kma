@@ -44,7 +44,7 @@ typedef int key_t;
 #include <sys/shm.h>
 #endif
 
-int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char *qseq, int seqlen, int kmersize, long unsigned mask, long unsigned prefix, int prefix_len) {
+int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char *qseq, int seqlen, int kmersize, long unsigned mask, long unsigned prefix, int prefix_len, FILE *out) {
 	
 	int i, end, rc;
 	long unsigned key;
@@ -78,7 +78,7 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char 
 						Kmers[n] = makeKmer(qseq, i, kmersize);
 						++n;
 						if(n == max) {
-							sfwrite(Kmers, sizeof(long unsigned), n, stdout);
+							sfwrite(Kmers, sizeof(long unsigned), n, out);
 							n = 0;
 						}
 					}
@@ -105,7 +105,7 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char 
 					Kmers[n] = key;
 					++n;
 					if(n == max) {
-						sfwrite(Kmers, sizeof(long unsigned), n, stdout);
+						sfwrite(Kmers, sizeof(long unsigned), n, out);
 						n = 0;
 					}
 				}
@@ -226,7 +226,7 @@ void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, C
 	
 }
 
-void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans) {
+void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
 	
 	int FASTQ, fileCounter, phredCut, start, end;
 	char *filename;
@@ -276,22 +276,22 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 				/* print */
 				if(qseq->len > kmersize) {
 					/* translate to kmers */
-					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq + start, qseq->len, kmersize, templates->mask, templates->prefix, templates->prefix_len);
+					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq + start, qseq->len, kmersize, templates->mask, templates->prefix, templates->prefix_len, out);
 				}
 			}
 			if(Kmers->n) {
-				sfwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
+				sfwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, out);
 				Kmers->n = 0;
 			}
 		} else if(FASTQ & 2) {
 			while(FileBuffgetFsaSeq(inputfile, qseq, trans)) {
 				if(qseq->len > kmersize) {
 					/* translate to kmers */
-					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq, qseq->len, kmersize, templates->mask, templates->prefix, templates->prefix_len);
+					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq, qseq->len, kmersize, templates->mask, templates->prefix, templates->prefix_len, out);
 				}
 			}
 			if(Kmers->n) {
-				sfwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, stdout);
+				sfwrite(Kmers->kmers, sizeof(long unsigned), Kmers->n, out);
 				Kmers->n = 0;
 			}
 		}
@@ -380,7 +380,14 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	
 	/* set hashMap for found kmers */
 	foundKmers = smalloc(sizeof(HashMap_kmers));
-	foundKmers->size = templates->n;
+	//foundKmers->size = templates->n;
+	foundKmers->size = 1024;
+	i = templates->DB_size;
+	while(--i) {
+		if(foundKmers->size < template_lengths[i]) {
+			foundKmers->size = template_lengths[i];
+		}
+	}
 	hashMap_kmers_initialize(foundKmers, foundKmers->size);
 	
 	t1 = clock();

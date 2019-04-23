@@ -28,14 +28,19 @@
 typedef struct pid Pid;
 
 struct pid {
-	FILE *fp;
+	pthread_t id;
 	pid_t pid;
+	FILE *fp;
+	FILE *ioStream;
+	char *cmd;
 	struct pid *next;
 };
+
 #define KMAPIPE 1
 #endif
 
-extern char **environ;
-
 /* open or close pipe */
+//FILE * (*kmaPipe)(const char*, const char*, FILE*, int*);
+void * pipeThreader(void *arg);
 FILE * kmaPipe(const char *cmd, const char *type, FILE *ioStream, int *status);
+FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *status);

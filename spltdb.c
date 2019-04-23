@@ -38,6 +38,7 @@
 #include "printconsensus.h"
 #include "qseqs.h"
 #include "runkma.h"
+#include "sam.h"
 #include "spltdb.h"
 #include "stdnuc.h"
 #include "stdstat.h"
@@ -45,11 +46,11 @@
 #include "version.h"
 #include "vcf.h"
 
-void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header) {
+int print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
 	static unsigned target = 1, allIn = 0, thread_num = 1;
 	static SpltDBbuff **buffers = 0;
-	int num, size, tNum, infoSize[7];
+	int num, size, tNum, infoSize[8];
 	unsigned char *buff;
 	SpltDBbuff *node, *nodeN, *node0;
 	
@@ -59,7 +60,7 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 		if(!buffers) {
 			ERROR();
 		}
-		return;
+		return 0;
 	}
 	if(qseq == 0) {
 		/* catch remains after last call */
@@ -80,7 +81,7 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 					target = node->num;
 				}
 			}
-			sfwrite(node->buff, 1, node->size, stdout);
+			sfwrite(node->buff, 1, node->size, out);
 			
 			/* update cylinder */
 			nodeN = node->prev;
@@ -96,9 +97,9 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 			free(node);
 			buffers[tNum] = nodeN;	
 		}
-		sfwrite(&(unsigned){UINT_MAX}, sizeof(unsigned), 1, stdout);
-		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, stdout);
-		return;
+		sfwrite(&(unsigned){UINT_MAX}, sizeof(unsigned), 1, out);
+		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, out);
+		return 0;
 	}
 	
 	num = out_Tem[-1];
@@ -109,15 +110,16 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 	infoSize[4] = rc_flag;
 	infoSize[5] = *out_Tem;
 	infoSize[6] = header->len;
+	infoSize[7] = flag;
 	
 	if(num == target || thread_num == 1) {
-		sfwrite(infoSize, sizeof(int), 7, stdout);
-		sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
+		sfwrite(infoSize, sizeof(int), 8, out);
+		sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, out);
 		if(qseq->N[0]) {
-			sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
+			sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], out);
 		}
-		sfwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
-		sfwrite(header->seq, 1, header->len, stdout);
+		sfwrite(out_Tem + 1, sizeof(int), *out_Tem, out);
+		sfwrite(header->seq, 1, header->len, out);
 	} else {
 		node = smalloc(sizeof(SpltDBbuff));
 		size = header->len + sizeof(int) * (7 + qseq->N[0] + out_Tem[0]) + sizeof(long unsigned) * qseq->complen;
@@ -125,7 +127,7 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 		node->num = num;
 		node->size = size;
 		node->buff = buff;
-		memcpy(buff, infoSize, (size = sizeof(int) * 7));
+		memcpy(buff, infoSize, (size = sizeof(int) * 8));
 		buff += size;
 		memcpy(buff, qseq->seq, (size = sizeof(long unsigned) * qseq->complen));
 		buff += size;
@@ -166,7 +168,7 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 				target = node->num;
 			}
 		}
-		sfwrite(node->buff, 1, node->size, stdout);
+		sfwrite(node->buff, 1, node->size, out);
 		
 		/* update cylinder */
 		nodeN = node->prev;
@@ -183,13 +185,14 @@ void print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *
 		buffers[tNum] = nodeN;
 	}
 	
+	return 0;
 }
 
-void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header) {
+int print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
 	static unsigned target = 1, allIn = 0, thread_num = 1;;
 	static SpltDBbuff **buffers = 0;
-	int num, size, tNum, infoSize[7];
+	int num, size, tNum, infoSize[8];
 	unsigned char *buff;
 	SpltDBbuff *node, *nodeN, *node0;
 	
@@ -199,7 +202,7 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 		if(!buffers) {
 			ERROR();
 		}
-		return;
+		return 0;
 	}
 	if(qseq == 0) {
 		/* catch remains after last call */
@@ -220,7 +223,7 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 					target = node->num;
 				}
 			}
-			sfwrite(node->buff, 1, node->size, stdout);
+			sfwrite(node->buff, 1, node->size, out);
 			
 			/* update cylinder */
 			nodeN = node->prev;
@@ -236,9 +239,9 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 			free(node);
 			buffers[tNum] = nodeN;	
 		}
-		sfwrite(&(unsigned){UINT_MAX}, sizeof(unsigned), 1, stdout);
-		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, stdout);
-		return;
+		sfwrite(&(unsigned){UINT_MAX}, sizeof(unsigned), 1, out);
+		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, out);
+		return 0;
 	}
 	
 	num = out_Tem[-1];
@@ -249,15 +252,16 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 	infoSize[4] = -(abs(rc_flag));
 	infoSize[5] = *out_Tem;
 	infoSize[6] = header->len;
+	infoSize[7] = flag;
 	
 	if(num == target || thread_num == 1) {
-		sfwrite(infoSize, sizeof(int), 7, stdout);
-		sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
+		sfwrite(infoSize, sizeof(int), 8, out);
+		sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, out);
 		if(qseq->N[0]) {
-			sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
+			sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], out);
 		}
-		sfwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
-		sfwrite(header->seq, 1, header->len, stdout);
+		sfwrite(out_Tem + 1, sizeof(int), *out_Tem, out);
+		sfwrite(header->seq, 1, header->len, out);
 	} else {
 		node = smalloc(sizeof(SpltDBbuff));
 		size = header->len + sizeof(int) * (7 + qseq->N[0] + out_Tem[0]) + sizeof(long unsigned) * qseq->complen;
@@ -265,7 +269,7 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 		node->num = num;
 		node->size = size;
 		node->buff = buff;
-		memcpy(buff, infoSize, (size = sizeof(int) * 7));
+		memcpy(buff, infoSize, (size = sizeof(int) * 8));
 		buff += size;
 		memcpy(buff, qseq->seq, (size = sizeof(long unsigned) * qseq->complen));
 		buff += size;
@@ -306,7 +310,7 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 				target = node->num;
 			}
 		}
-		sfwrite(node->buff, 1, node->size, stdout);
+		sfwrite(node->buff, 1, node->size, out);
 		
 		/* update cylinder */
 		nodeN = node->prev;
@@ -323,17 +327,20 @@ void print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const 
 		buffers[tNum] = nodeN;
 	}
 	
+	return 0;
 }
 
-unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *header, FILE *inputfile) {
+unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inputfile) {
 	
 	unsigned num;
 	
 	if(qseq) {
 		qseq->seqlen = infoSize[0];
 		qseq->complen = infoSize[1];
+		*(qseq->N) = infoSize[2];
 		*out_Tem = infoSize[4];
 		header->len = infoSize[5];
+		*flag = infoSize[6];
 		
 		/* reallocate */
 		if(qseq->size <= qseq->seqlen) {
@@ -351,9 +358,9 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 			if(!qseq->seq || !qseq->N) {
 				ERROR();
 			}
+			*(qseq->N) = infoSize[2];
 		}
 		
-		qseq->N[0] = infoSize[2];
 		if(header->size < header->len) {
 			free(header->seq);
 			header->size = header->len;
@@ -378,7 +385,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	/* get info for next read */
 	cfread(&num, sizeof(int), 1, inputfile);
 	if(num != UINT_MAX) {
-		cfread(infoSize, sizeof(int), 6, inputfile);
+		cfread(infoSize, sizeof(int), 7, inputfile);
 	} else {
 		cfread(infoSize, sizeof(int), 1, inputfile);
 	}
@@ -386,16 +393,17 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
 	int i, j, k, tmp_template, tmp_tmp_template, t_len, file_len, score, tot;
-	int template, bestHits, start, end, aln_len, fragCount, maxFrag, sparse;
+	int template, bestHits, start, end, aln_len, fragCount, maxFrag, DB_size;
 	int rc_flag, coverScore, tmp_start, tmp_end, bestTemplate, status, delta;
-	int seq_in_no, index_in_no, progress, DB_size, fileCount, rand, stats[4];
-	int *template_lengths, *bestTargets, (*targetInfo)[6], (*ptrInfo)[6];
-	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
+	int seq_in_no, index_in_no, progress, sparse, fileCount, rand, stats[5];
+	int flag, flag_r;
+	int *template_lengths, *bestTargets, *matched_templates, *bestTemplates;
+	int *best_start_pos, *best_end_pos, (*targetInfo)[7], (*ptrInfo)[7];
 	unsigned randScore, num, target, targetScore, bias;
 	unsigned *fragmentCounts, *readCounts, *nums, *uPtr, *dbBiases;
 	long best_read_score, read_score, seq_seeker, index_seeker;
@@ -432,6 +440,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	dbBiases = smalloc((targetNum + 1) * sizeof(unsigned)); /* set these */
 	bestTargets = smalloc((targetNum + 1) * sizeof(int));
 	targetInfo = smalloc(targetNum * 6 * sizeof(int));
+	template_name = setQseqs(256);
 	DB_size = 0;
 	template_lengths = NULL;
 	for(i = 0; i < targetNum; ++i) {
@@ -447,9 +456,16 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		if(!template_lengths) {
 			ERROR();
 		}
-		fread(template_lengths + dbBiases[i], sizeof(int), DB_size, inputfile);
+		fread(template_lengths + dbBiases[i], sizeof(int), bias, inputfile);
 		templatefilename[file_len] = 0;
 		fclose(inputfile);
+		if(sam) {
+			strcat(templatefilename, ".name");
+			name_file = sfopen(templatefilename, "rb");
+			templatefilename[file_len] = 0;
+			saminit(template_name, name_file, template_lengths + dbBiases[i], bias);
+			fclose(name_file);
+		}
 	}
 	dbBiases[i] = DB_size;
 	if(kmersize < 4 || 32 < kmersize) {
@@ -480,7 +496,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	qseq_r = setQseqs(delta);
 	header = setQseqs(256);
 	header_r = setQseqs(256);
-	template_name = setQseqs(256);
 	points = seedPoint_init(delta, rewards);
 	
 	/* open outputfiles */
@@ -488,16 +503,25 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	strcat(outputfilename, ".res");
 	res_out = sfopen(outputfilename, "w");
 	outputfilename[file_len] = 0;
-	strcat(outputfilename, ".frag.gz");
-	frag_out = gzInitFileBuff(CHUNK);
-	openFileBuff(frag_out, outputfilename, "wb");
-	outputfilename[file_len] = 0;
-	strcat(outputfilename, ".aln");
-	alignment_out = sfopen(outputfilename, "w");
-	outputfilename[file_len] = 0;
-	strcat(outputfilename, ".fsa");
-	consensus_out = sfopen(outputfilename, "w");
-	outputfilename[file_len] = 0;
+	if(nf == 0) {
+		strcat(outputfilename, ".frag.gz");
+		frag_out = gzInitFileBuff(CHUNK);
+		openFileBuff(frag_out, outputfilename, "wb");
+		outputfilename[file_len] = 0;
+	} else {
+		frag_out = 0;
+	}
+	if(nc == 0) {
+		strcat(outputfilename, ".aln");
+		alignment_out = sfopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
+		strcat(outputfilename, ".fsa");
+		consensus_out = sfopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
+	} else {
+		alignment_out = 0;
+		consensus_out = 0;
+	}
 	frag_out_raw = tmpfile();
 	if(!frag_out_raw) {
 		ERROR();
@@ -573,7 +597,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	while(i--) {
 		cfread(--uPtr, sizeof(unsigned), 1, inputfiles[i]);
 		if(*uPtr != UINT_MAX) {
-			cfread(--ptrInfo, sizeof(int), 6, inputfiles[i]);
+			cfread(--ptrInfo, sizeof(int), 7, inputfiles[i]);
 		} else {
 			cfread(--ptrInfo, sizeof(int), 1, inputfiles[i]);
 			(*--ptrInfo)[3] = INT_MAX;
@@ -594,13 +618,13 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		qseq_r->len = 0;
 		for(i = 1; i <= *bestTargets; ++i) {
 			num = bestTargets[i];
-			nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_comp, header, inputfiles[num]);
+			nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_comp, header, &flag, inputfiles[num]);
 			qseq->len = qseq_comp->seqlen;
 			if(matched_templates[*matched_templates + 1]) {
 				read_score = 0;
 			} else { // PE
-				target = nums[num];
-				nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_r_comp, header_r, inputfiles[num]);
+				//target = nums[num];
+				nums[num] = get_ankers_spltDB(targetInfo[num], matched_templates + (*matched_templates + 1), qseq_r_comp, header_r, &flag_r, inputfiles[num]);
 				qseq_r->len = qseq_r_comp->seqlen;
 				read_score = 1;
 			}
@@ -622,11 +646,8 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				qseq_r->size = delta;
 				free(qseq->seq);
 				free(qseq_r->seq);
-				qseq->seq = malloc(delta);
-				qseq_r->seq = malloc(delta);
-				if(!qseq->seq || !qseq_r->seq) {
-					ERROR();
-				}
+				qseq->seq = smalloc(delta);
+				qseq_r->seq = smalloc(delta);
 			}
 			unCompDNA(qseq_comp, qseq->seq);
 			
@@ -641,9 +662,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			if(read_score && kmersize <= qseq_r->len) {
 				unCompDNA(qseq_r_comp, qseq_r->seq);
-				update_Scores_pe(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				update_Scores_pe(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, flag, flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			} else {
-				update_Scores(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				update_Scores(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			}
 			
 			/* dump seq to all */
@@ -655,16 +676,41 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			}
 		}
 		
-		/* remove non-paired matches, in case of paired matches */
-		if(*matched_templates) {
-			i = targetNum - 1;
-			uPtr = nums + i;
-			while(i) {
-				if(target == *uPtr) {
-					*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, inputfiles[i]);
-				} else {
-					--uPtr;
-					--i;
+		/* remove inferior read matches */
+		if(*matched_templates != 0) {
+			if(read_score || (flag & 1) == 0 || (flag & 128)) { /* PE or SE or last in pair */
+				/* wipe all from same fragment */
+				i = targetNum - 1;
+				uPtr = nums + i;
+				while(i) {
+					if(*uPtr == target) {
+						*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
+					} else {
+						--uPtr;
+						--i;
+					}
+				}
+			} else if(flag & 64) { /* first in pair */
+				/* conserve second non-paired */
+				i = targetNum - 1;
+				uPtr = nums + i;
+				while(i) {
+					if(*uPtr == target) {
+						if((targetInfo[i][6] & 128) && targetInfo[i][4] == 0) {
+							--uPtr;
+							--i;
+						} else {
+							if(targetInfo[i] == 0) {
+								*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
+							}
+							*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
+							--uPtr;
+							--i;
+						}
+					} else {
+						--uPtr;
+						--i;
+					}
 				}
 			}
 		}
@@ -678,14 +724,24 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		for(i = 0; i < targetNum; ++i) {
 			if(*uPtr < target) {
 				target = *uPtr;
-				targetScore = abs(targetInfo[i][3]);
+				rc_flag = targetInfo[i][3];
+				targetScore = abs(rc_flag);
 				*bestTargets = 1;
 				bestTargets[1] = i;
 			} else if(*uPtr == target) {
 				if(targetScore < abs(targetInfo[i][3])) {
-					target = *uPtr;
 					rc_flag = targetInfo[i][3];
 					targetScore = abs(rc_flag);
+					/* clear inferior matches */
+					/*
+					j = *bestTargets + 1;
+					while(--j) {
+						if(targetInfo[j][4] == 0) {
+							uPtr[j] = get_ankers_spltDB(targetInfo[j], matched_templates, qseq_comp, header, &flag, inputfiles[j]);
+						}
+						uPtr[j] = get_ankers_spltDB(targetInfo[j], matched_templates, qseq_comp, header, &flag, inputfiles[j]);
+					}
+					*/
 					*bestTargets = 1;
 					bestTargets[1] = i;
 				} else if(targetScore == abs(targetInfo[i][3])) {
@@ -694,7 +750,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				} else if(*uPtr == UINT_MAX) {
 					targetInfo[i][3] = INT_MAX;
 				} else {
-					*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, inputfiles[i]);
+					if(targetInfo[i][4] == 0) { /* PE */
+						*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
+					}
+					*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
 				}
 			}
 			++uPtr;
@@ -778,12 +837,13 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	
 	/* ConClave */
 	if(ConClave == 1) {
-		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
+		while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
 			read_score = abs(stats[2]);
 			header->len = stats[3];
+			flag = stats[4];
 			
 			fread(qseq->seq, 1, qseq->len, frag_in_raw);
 			fread(header->seq, 1, header->len, frag_in_raw);
@@ -872,6 +932,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			alignFrag->buffer[3] = start;
 			alignFrag->buffer[4] = end;
 			alignFrag->buffer[5] = header->len;
+			alignFrag->buffer[6] = flag;
 			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
 			alignFrag->header = ustrdup(header->seq, header->len);
 			alignFrag->next = alignFrags[bestTemplate];
@@ -883,9 +944,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				if(extendedFeatures) {
 					readCounts[bestTemplate]++;
 				}
-				fread(stats, sizeof(int), 2, frag_in_raw);
+				fread(stats, sizeof(int), 3, frag_in_raw);
 				qseq->len = stats[0];
 				header->len = stats[1];
+				flag = stats[2];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -896,6 +958,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				alignFrag->buffer[3] = start;
 				alignFrag->buffer[4] = end;
 				alignFrag->buffer[5] = header->len;
+				alignFrag->buffer[6] = flag;
 				alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
 				alignFrag->header = ustrdup(header->seq, header->len);
 				alignFrag->next = alignFrags[bestTemplate];
@@ -929,7 +992,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			header->len = stats[3];
 			
 			/* best templates, skip rest */
-			fseek(frag_in_raw, qseq->len + header->len + 2 * bestHits * sizeof(int), SEEK_CUR);
+			fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			
 			/* Several mapped templates, choose best */
@@ -984,7 +1047,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			if(stats[2] < 0) {
 				fread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1], SEEK_CUR);
+				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -1025,7 +1088,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			if(bestHits != 1) {
 				/* best templates, skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + 2 * bestHits * sizeof(int), SEEK_CUR);
+				fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 				fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 				bestTemplate = 0;
 				i = bestHits;
@@ -1046,24 +1109,25 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				}
 			} else {
 				/* skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + 3 * sizeof(int), SEEK_CUR);
+				fseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
 			}
 			
 			if(stats[2] < 0) {
 				fread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1], SEEK_CUR);
+				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
 		
 		/* choose the templates */
 		memset(w_scores, 0, DB_size * sizeof(long unsigned));
-		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
+		while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
 			qseq->len = stats[0];
 			sparse = stats[1];
 			bestHits = abs(sparse);
 			read_score = abs(stats[2]);
 			header->len = stats[3];
+			flag = stats[4];
 			
 			fread(qseq->seq, 1, qseq->len, frag_in_raw);
 			fread(header->seq, 1, header->len, frag_in_raw);
@@ -1176,8 +1240,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 						}
 					}
 				}
-				
-				
 			} else {
 				bestTemplate = *bestTemplates;
 				start = *best_start_pos;
@@ -1203,6 +1265,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			alignFrag->buffer[3] = start;
 			alignFrag->buffer[4] = end;
 			alignFrag->buffer[5] = header->len;
+			alignFrag->buffer[6] = flag;
 			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
 			alignFrag->header = ustrdup(header->seq, header->len);
 			alignFrag->next = alignFrags[bestTemplate];
@@ -1214,9 +1277,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				if(extendedFeatures) {
 					readCounts[bestTemplate]++;
 				}
-				fread(stats, sizeof(int), 2, frag_in_raw);
+				fread(stats, sizeof(int), 3, frag_in_raw);
 				qseq->len = stats[0];
 				header->len = stats[1];
+				flag = stats[2];
 				fread(qseq->seq, 1, qseq->len, frag_in_raw);
 				fread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
@@ -1227,6 +1291,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				alignFrag->buffer[3] = start;
 				alignFrag->buffer[4] = end;
 				alignFrag->buffer[5] = header->len;
+				alignFrag->buffer[6] = flag;
 				alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
 				alignFrag->header = ustrdup(header->seq, header->len);
 				alignFrag->next = alignFrags[bestTemplate];
@@ -1335,6 +1400,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
 		thread->bcd = bcd;
+		thread->sam = sam;
 		thread->template = -2;
 		thread->file_count = fileCount;
 		thread->files = template_fragments;
@@ -1393,6 +1459,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
 	thread->bcd = bcd;
+	thread->sam = sam;
 	thread->template = 0;
 	thread->file_count = fileCount;
 	thread->files = template_fragments;
@@ -1437,7 +1504,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	templatefilename[file_len] = 0;
 	strcat(templatefilename, ".index.b");
 	index_in = fopen(templatefilename, "rb");
-	templatefilename[file_len] = 0;
 	if(!index_in) {
 		alignLoadPtr = &alignLoad_fly_build_mem;
 		destroyPtr = &alignClean;
@@ -1457,6 +1523,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		index_in_no = fileno(index_in);
 		read(index_in_no, &kmersize, sizeof(int));
 	}
+	templatefilename[file_len] = 0;
 	if(extendedFeatures == 2) {
 		getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
 	}
@@ -1564,7 +1631,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
-					printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
+					if(nc == 0) {
+						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
+					}
 					/* print matrix */
 					if(matrix_out) {
 						updateMatrix(matrix_out, thread->template_name, thread->template_index->seq, matrix, t_len);
@@ -1579,7 +1648,21 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				/* destroy this DB index */
 				destroyPtr(thread->template_index);
 			} else {
-				nameSkip(name_file, end);
+				if(sam || ID_t == 0.0) {
+					thread->template_name = nameLoad(template_name, name_file);
+					skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
+					if(ID_t == 0.0) {
+						depth = aligned_assem->depth;
+						depth /= t_len;
+						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
+							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
+						if(extendedFeatures) {
+							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+						}
+					}
+				} else {
+					nameSkip(name_file, end);
+				}
 				if(index_in) {
 					index_seeker += (template_lengths[template] << 1);
 				}
@@ -1614,10 +1697,14 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	}
 	fclose(seq_in);
 	fclose(res_out);
-	fclose(alignment_out);
-	fclose(consensus_out);
+	if(alignment_out) {
+		fclose(alignment_out);
+		fclose(consensus_out);
+	}
 	fclose(name_file);
-	destroyGzFileBuff(frag_out);
+	if(frag_out) {
+		destroyGzFileBuff(frag_out);
+	}
 	if(matrix_out) {
 		destroyGzFileBuff(matrix_out);
 	}

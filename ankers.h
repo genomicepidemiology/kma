@@ -20,14 +20,14 @@
 #include "compdna.h"
 #include "qseqs.h"
 
-void (*printPtr)(int*, CompDNA*, int, const Qseqs*);
-void (*printPairPtr)(int*, CompDNA*, int, const Qseqs*, CompDNA*, int, const Qseqs*);
-void (*deConPrintPtr)(int*, CompDNA*, int, const Qseqs*);
-void print_ankers(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header);
-void print_ankers_Sparse(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header);
+int (*printPtr)(int*, CompDNA*, int, const Qseqs*, const int, FILE *out);
+int (*printPairPtr)(int*, CompDNA*, int, const Qseqs*, CompDNA*, int, const Qseqs*, const int flag, const int flag_r, FILE *out);
+int (*deConPrintPtr)(int*, CompDNA*, int, const Qseqs*, const int flag, FILE *out);
+int print_ankers(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out);
+int print_ankers_Sparse(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out);
 int find_contamination(int *out_Tem, const int contamination);
 int find_contamination2(int *out_Tem, const int contamination);
-void deConPrint(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header);
-void deConPrintPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r);
-void printPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r);
-int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, FILE *inputfile);
+int deConPrint(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out);
+int deConPrintPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r, const int flag, const int flag_r, FILE *out);
+int printPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r, const int flag, const int flag_r, FILE *out);
+int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inputfile);

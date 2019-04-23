@@ -40,7 +40,7 @@ FILE * printFrags(Frag **alignFrags, int DB_size) {
 				next = alignFrag->next;
 				
 				sfwrite(&i, sizeof(int), 1, OUT);
-				sfwrite(alignFrag->buffer, sizeof(int), 6, OUT);
+				sfwrite(alignFrag->buffer, sizeof(int), 7, OUT);
 				sfwrite(alignFrag->qseq, 1, alignFrag->buffer[0], OUT);
 				sfwrite(alignFrag->header, 1, alignFrag->buffer[5], OUT);
 				
@@ -61,7 +61,8 @@ FILE * printFrags(Frag **alignFrags, int DB_size) {
 void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, Qseqs *header, FileBuff *dest) {
 	
 	int i, check, avail;
-	char *update, bases[] = "ACGTN-";
+	char *update;
+	const char bases[6] = "ACGTN-";
 	
 	check = q_len;
 	avail = dest->bytes;

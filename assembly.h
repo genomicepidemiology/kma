@@ -63,6 +63,7 @@ struct assemble_thread {
 	int spin;
 	int mq;
 	int bcd;
+	int sam;
 	int thread_num;
 	double scoreT;
 	double evalue;
@@ -95,3 +96,4 @@ unsigned char nanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScor
 unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls);
 void * assemble_KMA_threaded(void *arg);
 void * assemble_KMA_dense_threaded(void *arg);
+void skip_assemble_KMA(int template, int sam, int t_len, char *template_name, int file_count, FILE **files, Assem *aligned_assem, Qseqs *qseq, Qseqs *header);

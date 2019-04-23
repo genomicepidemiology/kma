@@ -20,5 +20,5 @@
 #include <stdio.h>
 #include "qseqs.h"
 
-void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw);
-void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int qr_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, Qseqs *header_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw);
+void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw);
+void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int qr_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, Qseqs *header_r, int flag, int flag_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw);

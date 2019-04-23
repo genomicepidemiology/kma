@@ -77,3 +77,16 @@ void strtranslate(unsigned char *strp, char *trans) {
 		*strp = trans[*strp];
 	}
 }
+
+void nibble2base(unsigned char *seq, int len) {
+	
+	const char bases[6] = "ACGTN-";
+	
+	seq += len;
+	*seq-- = 0;
+	++len;
+	while(--len) {
+		*seq = bases[*seq];
+		--seq;
+	}	
+}

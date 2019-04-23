@@ -32,40 +32,6 @@ void hashMap_kmers_initialize(HashMap_kmers *dest, unsigned newSize) {
 	}
 }
 
-void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
-	
-	unsigned index;
-	HashTable_kmers *node;
-	
-	/* get index */
-	index = key % dest->size;
-	
-	/* find pos */
-	if(dest->table[index] == 0) { // New value, no collision
-		++dest->n;
-		dest->table[index] = smalloc(sizeof(HashTable_kmers));
-		node = dest->table[index];
-		node->value = 1;
-		node->key = key;
-		node->next = 0;
-	} else {
-		for(node = dest->table[index]; node != 0; node = node->next) {
-			if(key == node->key) { // Keys match change value
-				++node->value;
-				return;
-			} else if(node->next == 0) { // This chain is filled, create next
-				++dest->n;
-				node->next = smalloc(sizeof(HashTable_kmers));
-				node = node->next;
-				node->next = 0;
-				node->key = key;
-				node->value = 1;
-				return;
-			}
-		}
-	}
-}
-
 void reallocHashMap_kmers(HashMap_kmers *dest) {
 	
 	long unsigned index;
@@ -96,6 +62,44 @@ void reallocHashMap_kmers(HashMap_kmers *dest) {
 		index = node->key & dest->size;
 		node->next = dest->table[index];
 		dest->table[index] = node;
+	}
+}
+
+void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
+	
+	unsigned index;
+	HashTable_kmers *node;
+	
+	if(dest->n == dest->size) {
+		reallocHashMap_kmers(dest);
+	}
+	
+	/* get index */
+	index = key % dest->size;
+	
+	/* find pos */
+	if(dest->table[index] == 0) { // New value, no collision
+		++dest->n;
+		dest->table[index] = smalloc(sizeof(HashTable_kmers));
+		node = dest->table[index];
+		node->value = 1;
+		node->key = key;
+		node->next = 0;
+	} else {
+		for(node = dest->table[index]; node != 0; node = node->next) {
+			if(key == node->key) { // Keys match change value
+				++node->value;
+				node = 0;
+			} else if(node->next == 0) { // This chain is filled, create next
+				++dest->n;
+				node->next = smalloc(sizeof(HashTable_kmers));
+				node = node->next;
+				node->next = 0;
+				node->key = key;
+				node->value = 1;
+				node = 0;
+			}
+		}
 	}
 }
 

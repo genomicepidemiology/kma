@@ -23,48 +23,49 @@
 #include "pherror.h"
 #include "qseqs.h"
 
-void (*printPtr)(int*, CompDNA*, int, const Qseqs*);
-void (*printPairPtr)(int*, CompDNA*, int, const Qseqs*, CompDNA*, int, const Qseqs*);
-void (*deConPrintPtr)(int*, CompDNA*, int, const Qseqs*);
-
-void print_ankers(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header) {
+int print_ankers(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
-	int infoSize[6];
+	int infoSize[7];
 	
 	infoSize[0] = qseq->seqlen;
 	infoSize[1] = qseq->complen;
-	infoSize[2] = qseq->N[0];
+	infoSize[2] = *(qseq->N);
 	infoSize[3] = rc_flag;
 	infoSize[4] = *out_Tem;
 	infoSize[5] = header->len;
-	sfwrite(infoSize, sizeof(int), 6, stdout);
-	sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
-	if(qseq->N[0]) {
-		sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
+	infoSize[6] = flag;
+	sfwrite(infoSize, sizeof(int), 7, out);
+	sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, out);
+	if(*(qseq->N)) {
+		sfwrite(qseq->N + 1, sizeof(int), *(qseq->N), out);
 	}
-	sfwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
-	sfwrite(header->seq, 1, header->len, stdout);
+	sfwrite(out_Tem + 1, sizeof(int), *out_Tem, out);
+	sfwrite(header->seq, 1, header->len, out);
+	
+	return 0;
 }
 
-void print_ankers_Sparse(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header) {
+int print_ankers_Sparse(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
-	int infoSize[6];
+	int infoSize[7];
 	
 	infoSize[0] = qseq->seqlen;
 	infoSize[1] = qseq->complen;
-	infoSize[2] = qseq->N[0];
+	infoSize[2] = *(qseq->N);
 	infoSize[3] = -(abs(rc_flag));
 	infoSize[4] = *out_Tem;
 	infoSize[5] = header->len;
-	sfwrite(infoSize, sizeof(int), 6, stdout);
+	infoSize[6] = flag;
+	sfwrite(infoSize, sizeof(int), 7, out);
+	sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, out);
+	if(*(qseq->N)) {
+		sfwrite(qseq->N + 1, sizeof(int), *(qseq->N), out);
+	}
+	sfwrite(out_Tem + 1, sizeof(int), *out_Tem, out);
+	sfwrite(header->seq, 1, header->len, out);
 	
-	sfwrite(qseq->seq, sizeof(long unsigned), qseq->complen, stdout);
-	sfwrite(qseq->N + 1, sizeof(int), qseq->N[0], stdout);
-	sfwrite(out_Tem + 1, sizeof(int), *out_Tem, stdout);
-	sfwrite(header->seq, 1, header->len, stdout);
-	
+	return 0;
 }
-
 
 int find_contamination(int *out_Tem, const int contamination) {
 	
@@ -98,7 +99,7 @@ int find_contamination2(int *out_Tem, const int contamination) {
 	return 0;
 }
 
-void deConPrint(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header) {
+int deConPrint(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
 	int contPos;
 	
@@ -112,11 +113,13 @@ void deConPrint(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header) {
 	}
 	
 	if(0 < *out_Tem) {
-		printPtr(out_Tem, qseq, rc_flag, header);
+		return printPtr(out_Tem, qseq, rc_flag, header, flag, out);
 	}
+	
+	return 1;
 }
 
-void deConPrintPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r) {
+int deConPrintPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r, const int flag, const int flag_r, FILE *out) {
 	
 	int contPos;
 	
@@ -132,33 +135,37 @@ void deConPrintPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *hea
 	if(0 < *out_Tem) {
 		contPos = *out_Tem;
 		*out_Tem = 0;
-		printPtr(out_Tem, qseq, bestScore, header);
+		printPtr(out_Tem, qseq, bestScore, header, flag, out);
 		*out_Tem = contPos;
-		printPtr(out_Tem, qseq_r, bestScore_r, header_r);
+		return printPtr(out_Tem, qseq_r, bestScore_r, header_r, flag_r, out);
 	}
+	
+	return 1;
 }
 
-void printPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r) {
+int printPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, CompDNA *qseq_r, int bestScore_r, const Qseqs *header_r, const int flag, const int flag_r, FILE *out) {
 	
 	int contPos;
 	
 	contPos = *out_Tem;
 	*out_Tem = 0;
-	printPtr(out_Tem, qseq, bestScore, header);
+	printPtr(out_Tem, qseq, bestScore, header, flag, out);
 	*out_Tem = contPos;
-	out_Tem[-1]++;
-	printPtr(out_Tem, qseq_r, bestScore_r, header_r);
+	printPtr(out_Tem, qseq_r, bestScore_r, header_r, flag_r, out);
+	
+	return 0;
 }
 
-int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, FILE *inputfile) {
+int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inputfile) {
 	
-	int infoSize[6];
+	int infoSize[7];
 	
-	if(fread(infoSize, sizeof(int), 6, inputfile)) {
+	if(fread(infoSize, sizeof(int), 7, inputfile) == 7) {
 		qseq->seqlen = infoSize[0];
 		qseq->complen = infoSize[1];
 		*out_Tem = infoSize[4];
 		header->len = infoSize[5];
+		*flag = infoSize[6];
 		
 		/* reallocate */
 		if(qseq->size <= qseq->seqlen) {
@@ -193,7 +200,8 @@ int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, FILE *inputfile) {
 		fread(out_Tem + 1, sizeof(int), *out_Tem, inputfile);
 		fread(header->seq, 1, header->len, inputfile);
 	} else {
-		infoSize[3] = 0;
+		*out_Tem = infoSize[0];
+		return 0;
 	}
 	
 	/* return score */

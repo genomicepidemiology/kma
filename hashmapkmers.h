@@ -36,7 +36,7 @@ struct hashMap_kmers {
 #endif
 
 void hashMap_kmers_initialize(HashMap_kmers *dest, unsigned newSize);
-void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key);
 void reallocHashMap_kmers(HashMap_kmers *dest);
+void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key);
 int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key);
 void emptyHash(HashMap_kmers *dest);

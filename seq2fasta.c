@@ -50,7 +50,7 @@ int * getLengths(char *filename) {
 
 void printFastas(char *filename, int *template_lengths) {
 	
-	char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	int i, j, max, DB_size, file_len;
 	long unsigned *compseq;
 	char *seq;
@@ -101,7 +101,7 @@ int intCmpAscend(const void * a, const void * b) {
 
 void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 	
-	char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	int i, j, n, max, DB_size, file_len;
 	long unsigned *compseq;
 	char *seq;

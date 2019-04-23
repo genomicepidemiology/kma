@@ -397,7 +397,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid < 0) {
 		/* not shared */
-		fprintf(stderr, "DB not shared, see kma_shm\n");
+		fprintf(stderr, "DB e not shared, see kma_shm\n");
 		exit(2);
 	} else {
 		/* found */
@@ -420,7 +420,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid < 0) {
 		/* not shared */
-		fprintf(stderr, "DB not shared, see kma_shm\n");
+		fprintf(stderr, "DB v not shared, see kma_shm\n");
 		exit(2);
 	} else {
 		/* found */
@@ -449,7 +449,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid < 0) {
 		/* not shared */
-		fprintf(stderr, "DB not shared, see kma_shm\n");
+		fprintf(stderr, "DB k not shared, see kma_shm\n");
 		exit(2);
 	} else {
 		/* found */
@@ -470,7 +470,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid < 0) {
 		/* not shared */
-		fprintf(stderr, "DB not shared, see kma_shm\n");
+		fprintf(stderr, "DB i not shared, see kma_shm\n");
 		exit(2);
 	} else {
 		/* found */
@@ -549,6 +549,12 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 	
 	/* check for megaMap */
 	if((dest->size - 1) == dest->mask) {
+		dest->values = 0;
+		dest->values_s = 0;
+		dest->key_index = 0;
+		dest->key_index_l = 0;
+		dest->value_index = 0;
+		dest->value_index_l = 0;
 		return 0;
 	}
 	
@@ -697,4 +703,21 @@ void hashMapKMA_addExist(HashMapKMA *dest, long unsigned index, long unsigned re
 
 void hashMapKMA_addExistL(HashMapKMA *dest, long unsigned index, long unsigned relative) {
 	dest->exist_l[index] = relative;
+}
+
+void hashMapKMA_destroy(HashMapKMA *dest) {
+	
+	if(dest->exist) {
+		free(dest->exist);
+	}
+	if(dest->values) {
+		free(dest->values);
+	}
+	if(dest->key_index) {
+		free(dest->key_index);
+	}
+	if(dest->value_index) {
+		free(dest->value_index);
+	}
+	free(dest);
 }

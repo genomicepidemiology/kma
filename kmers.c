@@ -46,9 +46,9 @@ typedef int key_t;
 #define shmctl(shmid, cmd, buf) fprintf(stderr, "sysV not available on Windows.\n")
 #endif
 
-int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards) {
+int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam) {
 	
-	int i, file_len, shmid, deCon, spltDB, *bestTemplates, *template_lengths;
+	int i, file_len, shmid, deCon, *bestTemplates, *template_lengths;
 	FILE *inputfile, *templatefile;
 	time_t t0, t1;
 	key_t key;
@@ -63,8 +63,12 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	if(!inputfile) {
 		ERROR();
 	}
-	
 	t0 = clock();
+	
+	/* do not output not mapped sam reads */
+	if(sam != 1 || out == stdout) {
+		sam = 0;
+	}
 	
 	/* initialize seqs */
 	Qseq = smalloc(thread_num * sizeof(CompDNA *));
@@ -96,8 +100,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 			exit(2);
 		}
 	}
-	fclose(templatefile);
 	templatefilename[file_len] = 0;
+	fclose(templatefile);
 	
 	/* check if DB is sparse */
 	if(templates->prefix_len != 0 || templates->prefix != 0) {
@@ -121,7 +125,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	
 	/* allocate scoring arrays */
 	if(printPtr == &print_ankers_spltDB || printPtr == &print_ankers_Sparse_spltDB) {
-		printPtr(0, 0, thread_num, 0);
+		printPtr(0, 0, thread_num, 0, 0, 0);
 	}
 	if(kmerScan == &save_kmers_HMM) {
 		/* load lengths */
@@ -144,13 +148,9 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		}
 		templatefilename[file_len] = 0;
 		fclose(templatefile);
-		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, *Qseq, 0, 0, 0, 0, 0);
-	}
-	
-	if(printPtr == &print_ankers_spltDB || printPtr == &print_ankers_Sparse_spltDB) {
-		spltDB = 1;
+		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, *Qseq, 0, 0, 0, 0, 0, 0);
 	} else {
-		spltDB = 0;
+		template_lengths = 0;
 	}
 	
 	t1 = clock();
@@ -166,6 +166,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		thread = smalloc(sizeof(KmerScan_thread));
 		thread->num = i;
 		thread->exhaustive = exhaustive;
+		thread->sam = sam;
 		thread->bestScore = 0;
 		thread->bestScore_r = 0;
 		thread->bestTemplates = calloc((templates->DB_size << 1) + 4, sizeof(int));
@@ -179,7 +180,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		thread->header = Header[i];
 		thread->inputfile = inputfile;
 		thread->rewards = rewards;
-		thread->spltDB = spltDB;
+		thread->out = out;
 		thread->next = threads;
 		threads = thread;
 		
@@ -213,7 +214,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	thread->inputfile = inputfile;
 	thread->rewards = rewards;
 	thread->exhaustive = exhaustive;
-	thread->spltDB = spltDB;
+	thread->sam = sam;
+	thread->out = out;
 	
 	/* start k-mer search */
 	save_kmers_threaded(thread);
@@ -230,12 +232,32 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	
 	/* print remaining buffer */
 	if(printPtr == &print_ankers_spltDB || printPtr == &print_ankers_Sparse_spltDB) {
-		printPtr(bestTemplates, 0, 0, 0);
+		printPtr(bestTemplates, 0, 0, 0, 0, out);
+	} else {
+		/* print number of fragments */
+		sfwrite(&(int){bestTemplates[1] - 1}, sizeof(int), 1, out);
 	}
 	
+	kmaPipe(0, 0, inputfile, &i);
 	t1 = clock();
 	fprintf(stderr, "#\n# Total time used ankering query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
 	
-	kmaPipe(0, 0, inputfile, &i);
+	/* clean up */
+	free(Qseq);
+	free(Qseq_r);
+	free(Header);
+	if(!((shm & 1) || (deCon && (shm & 2)))) {
+		hashMapKMA_destroy(templates);
+	}
+	if(kmerScan == &save_kmers_HMM && (shm & 4) == 0) {
+		free(template_lengths);
+	}
+	for(thread = threads; thread; thread = threads) {
+		threads = thread->next;
+		free(thread->bestTemplates);
+		free(thread->bestTemplates_r);
+		free(thread);
+	}
+	
 	return i;
 }

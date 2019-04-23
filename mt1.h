@@ -17,10 +17,11 @@
  * limitations under the License.
 */
 #define _XOPEN_SOURCE 600
+#include <stdio.h>
 #include "compdna.h"
 #include "penalties.h"
 #include "qseqs.h"
 
-void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor);
-void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor);
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int thread_num);
+void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out);
+void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out);
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int sam, int nc, int nf, int thread_num);

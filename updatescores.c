@@ -23,17 +23,18 @@
 #include "qseqs.h"
 #include "updatescores.h"
 
-void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
 	
-	int i, buffer[4];
+	int i, buffer[5];
 	
 	/* print frag */
 	buffer[0] = q_len;
 	buffer[1] = counter;
 	buffer[2] = score;
 	buffer[3] = header->len;
+	buffer[4] = flag;
 	counter = abs(counter);
-	sfwrite(buffer, sizeof(int), 4, frag_out_raw);
+	sfwrite(buffer, sizeof(int), 5, frag_out_raw);
 	sfwrite(qseq, 1, q_len, frag_out_raw);
 	sfwrite(header->seq, 1, header->len, frag_out_raw);
 	sfwrite(start, sizeof(int), counter, frag_out_raw);
@@ -55,17 +56,18 @@ void update_Scores(unsigned char *qseq, int q_len, int counter, int score, int *
 	}
 }
 
-void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int qr_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, Qseqs *header_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int qr_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, Qseqs *header_r, int flag, int flag_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
 	
-	int i, buffer[4];
+	int i, buffer[5];
 	
 	/* print frag */
 	buffer[0] = q_len;
 	buffer[1] = counter;
 	buffer[2] = -score;
 	buffer[3] = header->len;
+	buffer[4] = flag;
 	counter = abs(counter);
-	sfwrite(buffer, sizeof(int), 4, frag_out_raw);
+	sfwrite(buffer, sizeof(int), 5, frag_out_raw);
 	sfwrite(qseq, 1, q_len, frag_out_raw);
 	sfwrite(header->seq, 1, header->len, frag_out_raw);
 	sfwrite(start, sizeof(int), counter, frag_out_raw);
@@ -74,7 +76,8 @@ void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int
 	
 	buffer[0] = qr_len;
 	buffer[1] = header_r->len;
-	sfwrite(buffer, sizeof(int), 2, frag_out_raw);
+	buffer[2] = flag_r;
+	sfwrite(buffer, sizeof(int), 3, frag_out_raw);
 	sfwrite(qseq_r, 1, qr_len, frag_out_raw);
 	sfwrite(header_r->seq, 1, header_r->len, frag_out_raw);
 	

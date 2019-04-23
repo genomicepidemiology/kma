@@ -26,6 +26,5 @@
 unsigned char * ustrdup(unsigned char *src, size_t n);
 int load_DBs_KMA(char *templatefilename, long unsigned **alignment_scores, long unsigned **uniq_alignment_scores, int **template_lengths, unsigned shm);
 char * nameLoad(Qseqs *name, FILE *infile);
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num);
-/* mem_mode */
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, unsigned shm, int thread_num);
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num);
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num);

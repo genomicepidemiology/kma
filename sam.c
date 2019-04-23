@@ -23,10 +23,12 @@
 #include "pherror.h"
 #include "qseqs.h"
 #include "runkma.h"
+#include "sam.h"
+#include "threader.h"
 
-int makeCigar(Qseqs *Cigar, const Aln *aligned) {
+char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	
-	int len, cLen, rep, consume;
+	int len, cLen, rep;
 	char op, pop, *s, *cigar;
 	unsigned char *t, *q;
 	
@@ -38,7 +40,7 @@ int makeCigar(Qseqs *Cigar, const Aln *aligned) {
 		return 0;
 	}
 	
-	len = aligned->len + 1;
+	len = aligned->len;
 	t = aligned->t;
 	s = aligned->s;
 	q = aligned->q;
@@ -55,38 +57,33 @@ int makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	} else {
 		pop = 'X';
 	}
-	if(pop != 'I') {
-		consume = 1;
-	} else {
-		consume = -1;
-	}
+	++t;
+	++s;
+	++q;
 	while(--len) {
 		if(*s == '|') {
 			op = '=';
-		} else if(*t == '-') {
+		} else if(*t == 5) {
 			op = 'I';
-		} else if(*q == '-') {
+		} else if(*q == 5) {
 			op = 'D';
 		} else {
 			op = 'X';
-		}
-		if(0 < consume) {
-			--consume;
-			if(op != 'I') {
-				consume = -consume;
-			}
 		}
 		if(op == pop) {
 			++rep;
 		} else {
 			cLen += sprintf(cigar + cLen, "%d%c", rep, pop);
 			rep = 1;
+			pop = op;
 		}
+		++t;
+		++s;
+		++q;
 	}
 	Cigar->len = cLen + sprintf(cigar + cLen, "%d%c", rep, pop);
-	consume = consume < 0 ? 0 : consume;
 	
-	return consume;
+	return cigar;
 }
 
 void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size) {
@@ -97,36 +94,81 @@ void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int D
 	fseek(name_file, 0, SEEK_SET);
 }
 
-int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rname, const Aln *aligned, const int *stats, Qseqs *Cigar) {
+int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rname, const Aln *aligned, const int *stats) {
 	
-	int flag, pos, mapQ, pnext, tlen;
-	char *qname, *cigar, *rnext, *seq, *qual;
+	static volatile int lock[1] = {0}; 
+	static Qseqs *Cigar = 0;
+	int flag, pos, mapQ, pnext, tlen, size, et, score;
+	char *qname, *cigar, *rnext, *qual;
+	unsigned char *seq;
+	
+	/* flag */
+	/*
+	1		read paired
+	2		read mapped in proper pair
+	4		read unmapped
+	8		mate unmapped
+	16		read reverse strand
+	32		mate reverse strand
+	64		first in pair
+	128		second in pair
+	256		not primary alignment
+	512		read fails platform/vendor quality checks
+	1024	read is PCR or optical duplicate
+	2048	supplementary alignment
+	
+	1		template having multiple segments in sequencing
+	2		each segment properly aligned according to the aligner
+	4		segment unmapped
+	8		next segment in the template unmapped
+	16		SEQ being reverse complemented
+	32		SEQ of the next segment in the template being reverse complemented
+	64		the first segment in the template
+	128		the last segment in the template
+	256		secondary alignment
+	512		not passing filters, such as platform/vendor quality controls
+	1024	PCR or optical duplicate
+	2048	supplementary alignment
+	*/
 	
 	
 	qname = (char *) header->seq;
-	seq = (char *) qseq->seq;
+	seq = qseq->seq;
 	if(Qual) {
 		qual = (char *) Qual->seq;
 	} else {
 		qual = "*";
 	}
-	
-	if(rname) {
+	if(aligned) {
 		mapQ = 254 < aligned->mapQ ? 254 : aligned->mapQ;
-		pos = stats[2] + makeCigar(Cigar, aligned);
+		et = *stats;
+		score = stats[1];
+		pos = stats[2] + 1;
 		tlen = stats[3] - pos;
 		flag = stats[4];
-		cigar = (char *) Cigar->seq;
+		if(Cigar == 0) {
+			Cigar = setQseqs(256);
+		}
+		cigar = makeCigar(Cigar, aligned);
 	} else {
-		rname = "*";
 		mapQ = 0;
+		et = 0;
+		score = 0;
 		pos = 0;
 		tlen = 0;
-		flag = *stats;
+		et = *stats;
+		flag = stats[1];
+		if(rname == 0) {
+			rname = "*";
+		}
 		cigar = "*";
 	}
 	rnext = "*";
 	pnext = 0;
 	
-	return fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, seq, qual);
+	lock(lock);
+	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);
+	unlock(lock);
+	
+	return size;
 }

@@ -187,6 +187,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			i = end + 1;
 		}
 	}
+	aligned->mapQ = 0;
 	
 	if(mem_count) {
 		points->len = mem_count;
@@ -206,7 +207,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	score = points->score[start];
 	
 	//fprintf(stderr, "%d\t%d\t%d\t%d\n", t_len, mem_count, aligned->mapQ, score);
-	if(aligned->mapQ < mq || score < kmersize || (score << 1) < scoreT * (points->qEnd[points->len - 1] - points->qStart[0])) {
+	if(aligned->mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.gaps = 0;
@@ -419,11 +420,12 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	d = rewards->d;
 	t_len = template_index->len;
 	kmersize = template_index->kmerindex;
-	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (template_index->kmerindex << 1);
+	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
 	
 	/* find seeds */
 	mem_count = 0;
-	for(i = 1, j = 0; i <= qseq_comp->N[0]; ++i) {
+	j = 0;
+	for(i = 1; i <= qseq_comp->N[0]; ++i) {
 		end = qseq_comp->N[i] - kmersize + 1;
 		while(j < end) {
 			value = hashMap_index_get(template_index, getKmer(qseq_comp->seq, j, shifter), shifter);
@@ -531,6 +533,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 		Stat.len = 1;
 		Stat.gaps = 0;
 		Stat.pos = 0;
+		points->len = 0;
 		return Stat;
 	}
 	
@@ -539,11 +542,12 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	score = points->score[start];
 	
 	//if(score < (q_len >> 5)) {
-	if(mapQ < mq || score < kmersize || (score << 1) < scoreT * (points->qEnd[points->len - 1] - points->qStart[0])) {
+	if(mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.gaps = 0;
 		Stat.pos = 0;
+		points->len = 0;
 		return Stat;
 	}
 	
@@ -630,6 +634,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 				Stat.score = 0;
 				Stat.len = 1;
 				Stat.gaps = 0;
+				points->len = 0;
 				return Stat;
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
@@ -672,6 +677,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 		Stat.len += NWstat.len;
 		Stat.gaps += NWstat.gaps;
 	}
+	points->len = 0;
 	
 	return Stat;
 }

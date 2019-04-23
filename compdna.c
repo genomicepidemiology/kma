@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "compdna.h"
 #include "pherror.h"
+#include "qseqs.h"
 #include "stdnuc.h"
 
 void allocComp(CompDNA *compressor, int size) {
@@ -146,14 +147,34 @@ void unCompDNA(CompDNA *compressor, unsigned char *seq) {
 	int i;
 	
 	/* get nucs */
+	i = compressor->seqlen;
+	seq += i;
+	*seq = 0;
+	while(i--) {
+		*--seq = getNuc(compressor->seq, i);
+	}
+	/*
 	for(i = 0; i < compressor->seqlen; ++i) {
 		seq[i] = getNuc(compressor->seq, i);
 	}
+	*/
 	
 	/* get N's */
 	for(i = 1; i <= compressor->N[0]; ++i) {
 		seq[compressor->N[i]] = 4;
 	}
+	
+}
+
+void qseqCompDNA(CompDNA *compressor, Qseqs *qseq) {
+	
+	qseq->len = compressor->seqlen;
+	if(qseq->size <= qseq->len) {
+		qseq->size = qseq->len << 1;
+		free(qseq->seq);
+		qseq->seq = smalloc(qseq->size);
+	}
+	unCompDNA(compressor, qseq->seq);
 	
 }
 

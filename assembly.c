@@ -32,6 +32,7 @@
 #include "nw.h"
 #include "pherror.h"
 #include "qseqs.h"
+#include "sam.h"
 #include "stdnuc.h"
 #include "stdstat.h"
 #include "threader.h"
@@ -84,7 +85,8 @@ void updateFrags(FileBuff *dest, Qseqs *qseq, Qseqs *header, char *template_name
 void updateMatrix(FileBuff *dest, char *template_name, long unsigned *template_seq, AssemInfo *matrix, int t_len) {
 	
 	unsigned i, pos, check, avail, asm_len;
-	char *update, bases[] = "ACGTN-";
+	char *update;
+	const char bases[6] = "ACGTN-";
 	Assembly *assembly;
 	
 	/* check buffer capacity */
@@ -203,7 +205,7 @@ unsigned char refCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore
 unsigned char nanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls) {
 	
 	int j, bestBaseScore;
-	const char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	
 	/* determine base at current position */
 	if(depthUpdate == 0) {
@@ -236,7 +238,7 @@ unsigned char nanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScor
 unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScore, int depthUpdate, double evalue, Assembly *calls) {
 	
 	int j, bestBaseScore;
-	const char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	
 	/* determine base at current position */
 	if(depthUpdate == 0) {
@@ -274,13 +276,13 @@ void * assemble_KMA_threaded(void *arg) {
 	static char *template_name;
 	static HashMap_index *template_index;
 	Assemble_thread *thread = arg;
-	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, asm_len;
-	int read_score, depthUpdate, bestBaseScore, bestScore, template, spin;
+	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, spin, sam;
+	int read_score, depthUpdate, bestBaseScore, bestScore, template, asm_len;
 	int nextTemplate, file_i, file_count, delta, thread_num, mq, status, bcd;
-	int stats[4], buffer[7];
+	int stats[5], buffer[8];
 	unsigned coverScore;
 	long unsigned depth, depthVar;
-	const char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	double score, scoreT, evalue;
 	unsigned char bestNuc;
 	FILE **files, *file;
@@ -312,6 +314,7 @@ void * assemble_KMA_threaded(void *arg) {
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
+	sam = thread->sam;
 	spin = thread->spin;
 	thread_num = thread->thread_num;
 	
@@ -382,7 +385,7 @@ void * assemble_KMA_threaded(void *arg) {
 			lockTime(excludeIn, spin);
 			file = files[file_i];
 			if(file != 0) {
-				fread(buffer, sizeof(int), 7, file);
+				fread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -391,6 +394,7 @@ void * assemble_KMA_threaded(void *arg) {
 					stats[2] = buffer[4];
 					stats[3] = buffer[5];
 					header->len = buffer[6];
+					stats[4] = buffer[7];
 					
 					if(qseq->size < qseq->len) {
 						free(qseq->seq);
@@ -539,12 +543,35 @@ void * assemble_KMA_threaded(void *arg) {
 							qseq->seq[qseq->len] = 0;
 							
 							/* Save fragment */
-							//lock(excludeOut);
-							lockTime(excludeOut, 10);
-							updateFrags(frag_out, qseq, header, template_name, stats);
-							unlock(excludeOut);
-							//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+							if(frag_out) {
+								lockTime(excludeOut, 10);
+								updateFrags(frag_out, qseq, header, template_name, stats);
+								unlock(excludeOut);
+							}
+							if(sam) {
+								header->seq[header->len - 1] = 0;
+								samwrite(qseq, header, 0, template_name, aligned, stats);
+							}
+						} else if(sam) {
+							stats[1] = read_score;
+							stats[2] = start;
+							stats[3] = end;
+							header->seq[header->len - 1] = 0;
+							nibble2base(qseq->seq, qseq->len);
+							if(read_score) {
+								samwrite(qseq, header, 0, template_name, aligned, stats);
+							} else {
+								stats[4] |= 4;
+								stats[1] = stats[4];
+								samwrite(qseq, header, 0, template_name, 0, stats);
+							}
 						}
+					} else if(sam) {
+						stats[4] |= 4;
+						stats[1] = stats[4];
+						header->seq[header->len - 1] = 0;
+						nibble2base(qseq->seq, qseq->len);
+						samwrite(qseq, header, 0, template_name, 0, stats);
 					}
 				} else if(nextTemplate == -1) {
 					if(template) {
@@ -562,7 +589,7 @@ void * assemble_KMA_threaded(void *arg) {
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-7) * sizeof(int), SEEK_CUR);
+					fseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -708,10 +735,10 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, file_i, file_count, template, spin;
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
-	int thread_num, mq, status, bcd, stats[4], buffer[7];
+	int sam, thread_num, mq, status, bcd, stats[5], buffer[8];
 	unsigned coverScore, delta;
 	long unsigned depth, depthVar;
-	const char bases[] = "ACGTN-";
+	const char bases[6] = "ACGTN-";
 	double score, scoreT, evalue;
 	unsigned char bestNuc;
 	FILE **files, *file;
@@ -743,6 +770,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
+	sam = thread->sam;
 	spin = thread->spin;
 	thread_num = thread->thread_num;
 	
@@ -830,7 +858,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 			lockTime(excludeIn, spin);
 			file = files[file_i];
 			if(file != 0) {
-				fread(buffer, sizeof(int), 7, file);
+				fread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -839,6 +867,8 @@ void * assemble_KMA_dense_threaded(void *arg) {
 					stats[2] = buffer[4];
 					stats[3] = buffer[5];
 					header->len = buffer[6];
+					stats[4] = buffer[7];
+					
 					if(qseq->size < qseq->len) {
 						free(qseq->seq);
 						qseq->size = qseq->len << 1;
@@ -930,13 +960,37 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							qseq->seq[qseq->len] = 0;
 							
 							/* Save fragment */
-							//lock(excludeOut);
-							lockTime(excludeOut, 10);
-							updateFrags(frag_out, qseq, header, template_name, stats);
-							unlock(excludeOut);
-							
-							//fprintf(frag_out, "%s\t%d\t%d\t%d\t%d\t%s\t%s\n", qseq->seq, stats[0], stats[1], stats[2], stats[3], template_names[template], header->seq);
+							if(frag_out) {
+								lockTime(excludeOut, 10);
+								updateFrags(frag_out, qseq, header, template_name, stats);
+								unlock(excludeOut);
+							}
+							if(sam) {
+								header->seq[header->len - 1] = 0;
+								samwrite(qseq, header, 0, template_name, aligned, stats);
+							}
+						} else if(sam) {
+							/* here */
+							stats[1] = read_score;
+							stats[2] = start;
+							stats[3] = end;
+							/* flag */
+							header->seq[header->len - 1] = 0;
+							nibble2base(qseq->seq, qseq->len);
+							if(read_score) {
+								samwrite(qseq, header, 0, template_name, aligned, stats);
+							} else {
+								stats[4] |= 4;
+								stats[1] = stats[4];
+								samwrite(qseq, header, 0, template_name, 0, stats);
+							}
 						}
+					} else if(sam) {
+						stats[4] |= 4;
+						stats[1] = stats[4];
+						header->seq[header->len - 1] = 0;
+						nibble2base(qseq->seq, qseq->len);
+						samwrite(qseq, header, 0, template_name, 0, stats);
 					}
 				} else if (nextTemplate == -1) {
 					if(template) {
@@ -954,7 +1008,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-7) * sizeof(int), SEEK_CUR);
+					fseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -1057,4 +1111,79 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	aligned_assem->aln_len = aln_len;
 	
 	return NULL;
+}
+
+void skip_assemble_KMA(int template, int sam, int t_len, char *template_name, int file_count, FILE **files, Assem *aligned_assem, Qseqs *qseq, Qseqs *header) {
+	
+	int nextTemplate, file_i, status, stats[5], buffer[8];
+	FILE *file;
+	
+	aligned_assem->cover = 0;
+	aligned_assem->depth = 0;
+	aligned_assem->depthVar = 0;
+	aligned_assem->t[0] = 0;
+	aligned_assem->s[0] = 0;
+	aligned_assem->q[0] = 0;
+	aligned_assem->len = t_len;
+	aligned_assem->aln_len = t_len;
+	
+	/* load reads of this template */
+	file_i = 0;
+	while(file_i < file_count) {
+		file = files[file_i];
+		if(file != 0) {
+			fread(buffer, sizeof(int), 8, file);
+			if((nextTemplate = buffer[0]) == template) {
+				/* load frag */
+				qseq->len = buffer[1];
+				stats[0] = buffer[2];
+				stats[2] = buffer[4];
+				stats[3] = buffer[5];
+				header->len = buffer[6];
+				stats[4] = buffer[7];
+				
+				if(qseq->size < qseq->len) {
+					free(qseq->seq);
+					qseq->size = qseq->len << 1;
+					qseq->seq = smalloc(qseq->size);
+				}
+				if(header->size < header->len) {
+					header->size = header->len + 1;
+					free(header->seq);
+					header->seq = smalloc(header->size);
+				}
+				fread(qseq->seq, 1, qseq->len, file);
+				fread(header->seq, 1, header->len, file);
+				
+				/* Update with read */
+				aligned_assem->depth += qseq->len;
+				if(sam) {
+					stats[4] |= 4;
+					stats[1] = stats[4];
+					header->seq[header->len - 1] = 0;
+					nibble2base(qseq->seq, qseq->len);
+					samwrite(qseq, header, 0, template_name, 0, stats);
+				}
+				
+			} else if (nextTemplate == -1) {
+				if(template) {
+					fclose(file);
+				} else {
+					kmaPipe(0, 0, file, &status);
+					errno |= status;
+				}
+				files[file_i] = 0;
+				++file_i;
+			} else if(nextTemplate < template) {
+				/* Move pointer forward */
+				fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+			} else {
+				/* Move pointer back */
+				fseek(file, (-8) * sizeof(int), SEEK_CUR);
+				++file_i;
+			}
+		} else {
+			++file_i;
+		}
+	}
 }

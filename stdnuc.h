@@ -27,3 +27,4 @@ long unsigned makeKmer(const unsigned char *qseq, unsigned pos, unsigned size);
 int charpos(const unsigned char *src, unsigned char target, int start, int len);
 void strrc(unsigned char *qseq, int q_len);
 void strtranslate(unsigned char *strp, char *trans);
+void nibble2base(unsigned char *seq, int len);
