@@ -40,7 +40,7 @@ struct pid {
 #endif
 
 /* open or close pipe */
-//FILE * (*kmaPipe)(const char*, const char*, FILE*, int*);
+extern FILE * (*kmaPipe)(const char*, const char*, FILE*, int*);
 void * pipeThreader(void *arg);
-FILE * kmaPipe(const char *cmd, const char *type, FILE *ioStream, int *status);
+FILE * kmaPipeThread(const char *cmd, const char *type, FILE *ioStream, int *status);
 FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *status);

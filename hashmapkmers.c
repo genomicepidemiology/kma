@@ -70,37 +70,25 @@ void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
 	unsigned index;
 	HashTable_kmers *node;
 	
-	if(dest->n == dest->size) {
-		reallocHashMap_kmers(dest);
-	}
-	
 	/* get index */
 	index = key % dest->size;
 	
-	/* find pos */
-	if(dest->table[index] == 0) { // New value, no collision
-		++dest->n;
-		dest->table[index] = smalloc(sizeof(HashTable_kmers));
-		node = dest->table[index];
-		node->value = 1;
-		node->key = key;
-		node->next = 0;
-	} else {
-		for(node = dest->table[index]; node != 0; node = node->next) {
-			if(key == node->key) { // Keys match change value
-				++node->value;
-				return;
-			} else if(node->next == 0) { // This chain is filled, create next
-				++dest->n;
-				node->next = smalloc(sizeof(HashTable_kmers));
-				node = node->next;
-				node->next = 0;
-				node->key = key;
-				node->value = 1;
-				return;
-			}
+	for(node = dest->table[index]; node != 0; node = node->next) {
+		if(key == node->key) { // Keys match change value
+			++node->value;
+			return;
 		}
 	}
+	
+	if(dest->n == dest->size) {
+		reallocHashMap_kmers(dest);
+	}
+	++dest->n;
+	node = smalloc(sizeof(HashTable_kmers));
+	node->value = 1;
+	node->key = key;
+	node->next = dest->table[index];
+	dest->table[index] = node;
 }
 
 int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key) {
@@ -108,33 +96,23 @@ int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key) {
 	long unsigned index;
 	HashTable_kmers *node;
 	
+	index = key & dest->size;
+	for(node = dest->table[index]; node != 0; node = node->next) {
+		if(node->key == key) {
+			return 0;
+		}
+	}
+	
 	if(dest->n == dest->size) {
 		reallocHashMap_kmers(dest);
 	}
+	++dest->n;
+	node = smalloc(sizeof(HashTable_kmers));
+	node->key = key;
+	node->next = dest->table[index];
+	dest->table[index] = node;
 	
-	index = key & dest->size;
-	if(dest->table[index] == 0) {
-		dest->table[index] = smalloc(sizeof(HashTable_kmers));
-		node = dest->table[index];
-		node->key = key;
-		node->next = 0;
-		++dest->n;
-		return 1;
-	} else {
-		for(node = dest->table[index]; node != 0; node = node->next) {
-			if(node->key == key) {
-				return 0;
-			} else if(node->next == 0) {
-				node->next = smalloc(sizeof(HashTable_kmers));
-				node = node->next;
-				node->key = key;
-				node->next = 0;
-				++dest->n;
-				return 1;
-			}
-		}
-	}
-	return -1;
+	return 1;
 }
 
 void emptyHash(HashMap_kmers *dest) {

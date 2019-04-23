@@ -28,6 +28,7 @@
 #include "chain.h"
 #include "hashmapkma.h"
 #include "kma.h"
+#include "kmapipe.h"
 #include "kmers.h"
 #include "mt1.h"
 #include "penalties.h"
@@ -708,6 +709,8 @@ int kma_main(int argc, char *argv[]) {
 				PE = 17;
 			} else if(strcmp(argv[args], "-spltDB") == 0) {
 				spltDB = 1;
+			} else if(strcmp(argv[args], "-status") == 0) {
+				kmaPipe = &kmaPipeFork;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
@@ -721,6 +724,11 @@ int kma_main(int argc, char *argv[]) {
 			++args;
 		}
 		preseed(0, 0, exhaustive);
+		
+		if(sam) {
+			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");
+			kmaPipe = &kmaPipeThread;
+		}
 		
 		if(spltDB || targetNum != 1) {
 			printPtr = &print_ankers_spltDB;
@@ -1023,8 +1031,12 @@ int kma_main(int argc, char *argv[]) {
 			}
 		}
 		free((to2Bit - 128));
-		t1 = clock();
-		fprintf(stderr, "#\n# Total time used for converting query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+		if(kmaPipe == &kmaPipeFork) {
+			t1 = clock();
+			fprintf(stderr, "#\n# Total time used for converting query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+		} else {
+			fprintf(stderr, "#\n# Query converted\n#\n");
+		}
 	} else if(Mt1) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);

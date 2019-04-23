@@ -33,6 +33,8 @@
 #include <sys/wait.h>
 #endif
 
+FILE * (*kmaPipe)(const char*, const char*, FILE*, int*) = &kmaPipeThread;
+
 void * pipeThreader(void *arg) {
 	
 	char *cmd[2];
@@ -50,7 +52,7 @@ void * pipeThreader(void *arg) {
 	return NULL;
 }
 
-FILE * kmaPipe(const char *cmd, const char *type, FILE *ioStream, int *status) {
+FILE * kmaPipeThread(const char *cmd, const char *type, FILE *ioStream, int *status) {
 	
 	/* kmaPipe is a combination of popen and pclose, but allows for binary mode */
 	static volatile int lock[1] = {0};

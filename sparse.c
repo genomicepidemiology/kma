@@ -379,7 +379,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	
 	/* set hashMap for found kmers */
 	foundKmers = smalloc(sizeof(HashMap_kmers));
-	//foundKmers->size = templates->n;
+	/* foundKmers->size = templates->n; */
 	foundKmers->size = 1024;
 	i = templates->DB_size;
 	while(--i) {
@@ -405,8 +405,12 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	}
 	kmaPipe(0, 0, inputfile, &status);
 	
-	t1 = clock();
-	fprintf(stderr, "#\n# Total time used to identify k-mers in query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+	if(kmaPipe == &kmaPipeFork) {
+		t1 = clock();
+		fprintf(stderr, "#\n# Total time used to identify k-mers in query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+	} else {
+		fprintf(stderr, "# k-mers in query identified\n#\n");
+	}
 	t0 = clock();
 	fprintf(stderr, "# Finding best matches and output results.\n");
 	

@@ -239,8 +239,12 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	}
 	
 	kmaPipe(0, 0, inputfile, &i);
-	t1 = clock();
-	fprintf(stderr, "#\n# Total time used ankering query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+	if(kmaPipe == &kmaPipeFork) {
+		t1 = clock();
+		fprintf(stderr, "#\n# Total time used ankering query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+	} else {
+		fprintf(stderr, "# Query ankered\n#\n");
+	}
 	
 	/* clean up */
 	free(Qseq);

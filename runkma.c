@@ -520,8 +520,12 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		free(alnThread);
 	}
 	
-	t1 = clock();
-	fprintf(stderr, "#\n# KMA mapping time\t%.2f s.\n", difftime(t1, t0) / 1000000);
+	if(kmaPipe == &kmaPipeFork) {
+		t1 = clock();
+		fprintf(stderr, "#\n# KMA mapping time\t%.2f s.\n", difftime(t1, t0) / 1000000);
+	} else {
+		fprintf(stderr, "# KMA mapping done\n");
+	}
 	fprintf(stderr, "#\n# Sort, output and select KMA alignments.\n");
 	t0 = clock();
 	
@@ -1517,8 +1521,12 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	if(frag_out_all) {
 		destroyGzFileBuff(frag_out_all);
 	}
-	t1 = clock();
-	fprintf(stderr, "#\n# Time for score collecting:\t%.2f s.\n", difftime(t1, t0) / 1000000);
+	if(kmaPipe == &kmaPipeFork) {
+		t1 = clock();
+		fprintf(stderr, "#\n# Time for score collecting:\t%.2f s.\n", difftime(t1, t0) / 1000000);
+	} else {
+		fprintf(stderr, "# Score collection done\n");
+	}
 	fprintf(stderr, "#\n# Sort, output and select k-mer alignments.\n");
 	t0 = clock();
 	
