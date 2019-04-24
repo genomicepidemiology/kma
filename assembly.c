@@ -965,6 +965,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 								updateFrags(frag_out, qseq, header, template_name, stats);
 								unlock(excludeOut);
 							}
+							
 							if(sam) {
 								header->seq[header->len - 1] = 0;
 								samwrite(qseq, header, 0, template_name, aligned, stats);
