@@ -1556,7 +1556,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			ERROR();
 		}
 		strcat(outputfilename, ".mapstat");
-		extendedFeatures_out = sfopen(outputfilename, "ab");
+		extendedFeatures_out = sfopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		initExtendedFeatures(extendedFeatures_out, templatefilename, *matched_templates, exePrev);
 	} else {
