@@ -53,6 +53,9 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		min = 0;
 		max = t_len;
 	}
+	aligned->start = 0;
+	aligned->end = 0;
+	
 	/* find seeds */
 	if(points->len) {
 		mem_count = points->len;
@@ -254,6 +257,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 				while(bias < NWstat.len && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
 					if(Frag_align->t[bias] == 5) {
 						--NWstat.gaps;
+						++(Frag_align->start);
 					}
 					++bias;
 				}
@@ -266,10 +270,13 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			memcpy(aligned->t, Frag_align->t + bias, NWstat.len);
 			memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
 			memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
+			aligned->start = q_s + Frag_align->start;
 			Stat.pos -= (NWstat.len - NWstat.gaps);
 			Stat.score = NWstat.score;
 			Stat.len = NWstat.len;
 			Stat.gaps = NWstat.gaps;
+		} else {
+			aligned->start = q_s;
 		}
 	}
 	
@@ -337,6 +344,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
 				}
+				
 				memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
 				memcpy(aligned->s + Stat.len, Frag_align->s, NWstat.len);
 				memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
@@ -376,6 +384,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			while(bias && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
 				if(Frag_align->t[bias] == 5) {
 					--NWstat.gaps;
+					++(Frag_align->end);
 				}
 				--bias;
 			}
@@ -394,9 +403,13 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
 		Stat.gaps += NWstat.gaps;
+	} else {
+		Frag_align->end = 0;
 	}
+	
 	aligned->s[Stat.len] = 0;
 	aligned->len = Stat.len;
+	aligned->end = q_len - q_e + Frag_align->end;
 	points->len = 0;
 	
 	return Stat;

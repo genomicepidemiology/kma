@@ -48,6 +48,8 @@ struct aln {
 	int len;
 	unsigned mapQ; /* mapping quality */
 	int score; /* aln score */
+	int start;
+	int end;
 };
 #define NWLOAD 1
 #endif

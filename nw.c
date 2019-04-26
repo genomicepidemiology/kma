@@ -38,6 +38,8 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	d = rewards->d;
 	q_len = q_e - q_s;
 	t_len = t_e - t_s;
+	aligned->start = 0;
+	aligned->end = 0;
 	template_length = aligned->pos;
 	if(t_len < 0) {
 		t_len += aligned->pos;
@@ -231,7 +233,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 				if(D_prev[n] > Stat.score) {
 					Stat.score = D_prev[n];
 					pos[0] = 0;
-					pos[1] = n;
+					pos[1] = (aligned->start = n);
 				}
 			}
 		}
@@ -291,6 +293,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 		++Stat.len;
 	}
 	aligned->s[Stat.len] = 0;
+	aligned->end = q_len - n;
 	
 	return Stat;
 }
@@ -311,6 +314,8 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	d = rewards->d;
 	q_len = q_e - q_s;
 	t_len = t_e - t_s;
+	aligned->start = 0;
+	aligned->end = 0;
 	template_length = aligned->pos;
 	if(t_len < 0) {
 		t_len += aligned->pos;
@@ -548,7 +553,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 				if(D_prev[n] > Stat.score) {
 					Stat.score = D_prev[n];
 					pos[0] = 0;
-					pos[1] = n;
+					pos[1] = (aligned->start = n);
 				}
 			}
 		}
@@ -614,6 +619,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		++Stat.len;
 	}
 	aligned->s[Stat.len] = 0;
+	aligned->end = q_len - q_pos;
 	
 	return Stat;
 }

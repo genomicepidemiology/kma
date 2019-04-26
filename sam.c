@@ -46,7 +46,11 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	q = aligned->q;
 	cigar = (char *) Cigar->seq;
 	
-	cLen = 0;
+	if(aligned->start) {
+		cLen = sprintf(cigar, "%dS", aligned->start);
+	} else {
+		cLen = 0;
+	}
 	rep = 1;
 	if(*s == '|') {
 		pop = '=';
@@ -81,7 +85,11 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 		++s;
 		++q;
 	}
-	Cigar->len = cLen + sprintf(cigar + cLen, "%d%c", rep, pop);
+	cLen += sprintf(cigar + cLen, "%d%c", rep, pop);
+	if(aligned->end) {
+		cLen += sprintf(cigar + cLen, "%dS", aligned->end);
+	}
+	Cigar->len = cLen;
 	
 	return cigar;
 }
