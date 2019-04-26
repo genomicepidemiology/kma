@@ -40,7 +40,7 @@ void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, 
 	tm = localtime(&t1);
 	strftime(Date, sizeof(Date), "%Y-%m-%d", tm);
 	fprintf(out, "## date\t%s\n", Date);
-	fprintf(out, "## command\t%s", cmd);
+	fprintf(out, "## command\t%s\n", cmd);
 	fprintf(out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
 }
 
