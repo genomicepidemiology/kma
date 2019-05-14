@@ -3,3 +3,4 @@ kma_index
 kma_shm
 kma_update
 *.o
+*.a
