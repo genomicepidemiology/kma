@@ -329,6 +329,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->seq_indexes = seq_indexes;
 		alnThread->inputfile = inputfile;
 		alnThread->frag_out_raw = frag_out_raw;
+		alnThread->frag_out_all = frag_out_all;
 		alnThread->index_in = index_in_no;
 		alnThread->seq_in = seq_in_no;
 		alnThread->qseq_comp = qseq_comp;
@@ -401,6 +402,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->seq_indexes = seq_indexes;
 	alnThread->inputfile = inputfile;
 	alnThread->frag_out_raw = frag_out_raw;
+	alnThread->frag_out_all = frag_out_all;
 	alnThread->index_in = index_in_no;
 	alnThread->seq_in = seq_in_no;
 	alnThread->qseq_comp = qseq_comp;

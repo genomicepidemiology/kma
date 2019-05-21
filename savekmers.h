@@ -51,9 +51,17 @@ void (*ankerPtr)(int*, int*, int*, int*, unsigned**, unsigned**, int*, CompDNA*,
 int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, int*, const int, volatile int*, FILE*);
 int (*save_kmers_pair)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, const Qseqs*, int*, const int, volatile int*, FILE*);
 int (*get_kmers_for_pair_ptr)(const HashMapKMA *, const Penalties *, int *, int *, int *, int *, CompDNA *, int *, int);
-
+extern int (*getMatch)(int*, int*);
+extern int (*getMatchSparse)(int*, int*, int, int, int, int);
+extern int (*getMatchHMM)(int*, int*, int*, int*, int*);
 int loadFsa(CompDNA *qseq, Qseqs *header, FILE *inputfile);
 void * save_kmers_threaded(void *arg);
+int getBestMatch(int *bestTemplates, int *Score);
+int getProxiMatch(int *bestTemplates, int *Score);
+int getBestMatchSparse(int *bestTemplates, int *Score, int kmersize, int n_kmers, int M, int MM);
+int getProxiMatchSparse(int *bestTemplates, int *Score, int kmersize, int n_kmers, int M, int MM);
+int getBestMatchHMM(int *regionTemplates, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r);
+int getProxiMatchHMM(int *regionTemplates, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r);
 int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, int *extendScore, const int exhaustive);
 int get_kmers_for_pair_count(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, int *extendScore, const int exhaustive);
 int get_kmers_for_pair_Sparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, int *extendScore, const int exhaustive);
@@ -67,7 +75,6 @@ int getR_Best(int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r
 int save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
 int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
 int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
-int save_kmers_intCount(const HashMapKMA *templates, int *bestTemplates, int *Score, CompDNA *qseq, unsigned *values, unsigned pos, const unsigned shifter);
 int save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
 int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
 int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, int *regionTemplates, int *regionScores, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, const Qseqs *header_r, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);

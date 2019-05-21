@@ -34,7 +34,7 @@ void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, 
 	
 	fprintf(out, "## method\tKMA\n");
 	fprintf(out, "## version\t%s\n", KMA_VERSION);
-	fprintf(out, "## database %s\n", noFolder(templatefilename));
+	fprintf(out, "## database\t%s\n", noFolder(templatefilename));
 	fprintf(out, "## fragmentCount\t%u\n", totFrags);
 	time(&t1);
 	tm = localtime(&t1);

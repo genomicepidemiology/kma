@@ -168,6 +168,7 @@ void loadPrefix(HashMapKMA *dest, FILE *file) {
 	dest->mask = 0;
 	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
 	
+	dest->shmFlag = 0;
 	dest->exist = 0;
 	dest->exist_l = 0;
 	dest->values = 0;
@@ -206,6 +207,7 @@ int hashMapKMA_load(HashMapKMA *dest, FILE *file, const char *filename) {
 	
 	dest->mask = 0;
 	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
+	dest->shmFlag = 0;
 	
 	/* simple check for old indexing */
 	if(dest->size < dest->n) {
@@ -242,6 +244,7 @@ int hashMapKMA_load(HashMapKMA *dest, FILE *file, const char *filename) {
 			return 1;
 		}
 		seekSize = 0;
+		dest->shmFlag |= 1;
 	} else {
 		/* found */
 		dest->exist = shmat(shmid, NULL, 0);
@@ -274,6 +277,7 @@ int hashMapKMA_load(HashMapKMA *dest, FILE *file, const char *filename) {
 		if(check != size) {
 			return 1;
 		}
+		dest->shmFlag |= 2;
 	} else {
 		/* found */
 		dest->values = shmat(shmid, NULL, 0);
@@ -312,6 +316,7 @@ int hashMapKMA_load(HashMapKMA *dest, FILE *file, const char *filename) {
 		if(check != size) {
 			return 1;
 		}
+		dest->shmFlag |= 4;
 	} else {
 		/* found */
 		dest->key_index = shmat(shmid, NULL, 0);
@@ -342,6 +347,7 @@ int hashMapKMA_load(HashMapKMA *dest, FILE *file, const char *filename) {
 		if(check != size) {
 			return 1;
 		}
+		dest->shmFlag |= 8;
 	} else {
 		/* found */
 		dest->value_index = shmat(shmid, NULL, 0);
@@ -373,6 +379,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	
 	dest->mask = 0;
 	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
+	dest->shmFlag = 0;
 	
 	/* check shared memory */
 	size = dest->size;
@@ -498,6 +505,7 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 	
 	dest->mask = 0;
 	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
+	dest->shmFlag = 0;
 	
 	/* exist */
 	size = dest->size;
@@ -528,6 +536,7 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 		return 1;
 	}
 	dest->exist_l = (long unsigned *)(dest->exist);
+	dest->shmFlag |= 1;
 	
 	/* values */
 	size = dest->v_index;
@@ -546,6 +555,7 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 		return 1;
 	}
 	dest->values_s = (short unsigned *)(dest->values);
+	dest->shmFlag |= 2;
 	
 	/* check for megaMap */
 	if((dest->size - 1) == dest->mask) {
@@ -573,6 +583,7 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 		return 1;
 	}
 	dest->key_index_l = (long unsigned *)(dest->key_index);
+	dest->shmFlag |= 4;
 	
 	/* value indexes */
 	size = dest->n;
@@ -591,6 +602,7 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 		return 1;
 	}
 	dest->value_index_l = (long unsigned *)(dest->value_index);
+	dest->shmFlag |= 8;
 	
 	return 0;
 }
@@ -707,17 +719,19 @@ void hashMapKMA_addExistL(HashMapKMA *dest, long unsigned index, long unsigned r
 
 void hashMapKMA_destroy(HashMapKMA *dest) {
 	
-	if(dest->exist) {
-		free(dest->exist);
+	if(dest) {
+		if(dest->exist && dest->shmFlag & 1) {
+			free(dest->exist);
+		}
+		if(dest->values && dest->shmFlag & 2) {
+			free(dest->values);
+		}
+		if(dest->key_index && dest->shmFlag & 4) {
+			free(dest->key_index);
+		}
+		if(dest->value_index && dest->shmFlag & 8) {
+			free(dest->value_index);
+		}
+		free(dest);
 	}
-	if(dest->values) {
-		free(dest->values);
-	}
-	if(dest->key_index) {
-		free(dest->key_index);
-	}
-	if(dest->value_index) {
-		free(dest->value_index);
-	}
-	free(dest);
 }

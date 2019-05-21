@@ -95,7 +95,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	if((shm & 1) || (deCon && (shm & 2))) {
 		hashMapKMA_load_shm(templates, templatefile, templatefilename);
 	} else {
-		if(hashMapKMA_load(templates, templatefile, templatefilename)) {
+		if(hashMapKMA_load(templates, templatefile, templatefilename) == 1) {
 			fprintf(stderr, "Wrong format of DB.\n");
 			exit(2);
 		}
@@ -225,8 +225,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		/* join thread */
 		if((errno = pthread_join(thread->id, NULL))) {
 			ERROR();
-		} else if(bestTemplates[1] < thread->bestTemplates[1]) {
-			bestTemplates[1] = thread->bestTemplates[1];
+		} else if(bestTemplates[2] < thread->bestTemplates[2]) {
+			bestTemplates[2] = thread->bestTemplates[2];
 		}
 	}
 	
@@ -235,7 +235,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		printPtr(bestTemplates, 0, 0, 0, 0, out);
 	} else {
 		/* print number of fragments */
-		sfwrite(&(int){bestTemplates[1] - 1}, sizeof(int), 1, out);
+		sfwrite(&(int){bestTemplates[2] - 1}, sizeof(int), 1, out);
 	}
 	
 	kmaPipe(0, 0, inputfile, &i);

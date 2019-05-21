@@ -98,7 +98,7 @@ int print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *h
 			buffers[tNum] = nodeN;	
 		}
 		sfwrite(&(unsigned){UINT_MAX}, sizeof(unsigned), 1, out);
-		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, out);
+		sfwrite(&(int){out_Tem[2] - 1}, sizeof(int), 1, out);
 		return 0;
 	}
 	
@@ -122,7 +122,7 @@ int print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *h
 		sfwrite(header->seq, 1, header->len, out);
 	} else {
 		node = smalloc(sizeof(SpltDBbuff));
-		size = header->len + sizeof(int) * (7 + qseq->N[0] + out_Tem[0]) + sizeof(long unsigned) * qseq->complen;
+		size = header->len + sizeof(int) * (8 + qseq->N[0] + out_Tem[0]) + sizeof(long unsigned) * qseq->complen;
 		buff = smalloc(size);
 		node->num = num;
 		node->size = size;
@@ -153,7 +153,7 @@ int print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *h
 		}
 		buffers[tNum] = node;
 	}
-	
+		
 	/* collect remains */
 	while(allIn == thread_num) {
 		/* find and write next target */
@@ -184,7 +184,7 @@ int print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *h
 		free(node);
 		buffers[tNum] = nodeN;
 	}
-	
+		
 	return 0;
 }
 
@@ -240,7 +240,7 @@ int print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Q
 			buffers[tNum] = nodeN;	
 		}
 		sfwrite(&(unsigned){UINT_MAX}, sizeof(unsigned), 1, out);
-		sfwrite(&(int){out_Tem[1] - 1}, sizeof(int), 1, out);
+		sfwrite(&(int){out_Tem[2] - 1}, sizeof(int), 1, out);
 		return 0;
 	}
 	
@@ -264,7 +264,7 @@ int print_ankers_Sparse_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Q
 		sfwrite(header->seq, 1, header->len, out);
 	} else {
 		node = smalloc(sizeof(SpltDBbuff));
-		size = header->len + sizeof(int) * (7 + qseq->N[0] + out_Tem[0]) + sizeof(long unsigned) * qseq->complen;
+		size = header->len + sizeof(int) * (8 + qseq->N[0] + out_Tem[0]) + sizeof(long unsigned) * qseq->complen;
 		buff = smalloc(size);
 		node->num = num;
 		node->size = size;
@@ -557,7 +557,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		fprintf(extendedFeatures_out, "## method\tKMA\n");
 		fprintf(extendedFeatures_out, "## version\t%s\n", KMA_VERSION);
 		
-		fprintf(extendedFeatures_out, "## databases %s", noFolder(*templatefilenames));
+		fprintf(extendedFeatures_out, "## databases\t%s", noFolder(*templatefilenames));
 		for(i = 1; i < targetNum; ++i) {
 			fprintf(extendedFeatures_out, ", %s", noFolder(templatefilenames[i]));
 		}

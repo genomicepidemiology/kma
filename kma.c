@@ -110,7 +110,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ipe\t\tInput paired end file name(s)\n");
 	fprintf(helpOut, "#\t-int\t\tInput interleaved file name(s)\n");
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%s\n", "DB defined");
-	fprintf(helpOut, "#\t-e\t\tevalue\t\t\t\t0.05\n");
+	fprintf(helpOut, "#\t-p\t\tp-value\t\t\t\t0.05\n");
 	fprintf(helpOut, "#\t-ConClave\tConClave version\t\t1\n");
 	fprintf(helpOut, "#\t-mem_mode\tUse kmers to choose best\n#\t\t\ttemplate, and save memory\tFalse\n");
 	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
@@ -172,7 +172,7 @@ int kma_main(int argc, char *argv[]) {
 	static double ID_t, scoreT, evalue;
 	static Penalties *rewards;
 	int i, j, args, exe_len, status, size, escape, step1, step2;
-	long unsigned totFrags;
+	unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
 	double support;
 	FILE *templatefile, *ioStream;
@@ -504,9 +504,6 @@ int kma_main(int argc, char *argv[]) {
 				print_matrix = 1;
 			} else if(strcmp(argv[args], "-a") == 0) {
 				print_all = 1;
-				mem_mode = 1;
-				alignLoadPtr = &alignLoad_fly_mem;
-				ankerPtr = &ankerAndClean_MEM;
 			} else if(strcmp(argv[args], "-ref_fsa") == 0) {
 				ref_fsa = 1;
 			} else if(strcmp(argv[args], "-Sparse") == 0) {
@@ -516,11 +513,31 @@ int kma_main(int argc, char *argv[]) {
 				one2one = 1;
 			} else if(strcmp(argv[args], "-ck") == 0) {
 				get_kmers_for_pair_ptr = &get_kmers_for_pair_count;
+			} else if(strcmp(argv[args], "-proxi") == 0) {
+				/* here */
+				if(++args < argc) {
+					support = strtod(argv[args], &exeBasic);
+					if(*exeBasic != 0 || support < 0 || 1 < support) {
+						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
+						exit(4);
+					} if(support != 1) {
+						/* set proximity parameter */
+						getMatch = &getProxiMatch;
+						getMatchSparse = &getProxiMatchSparse;
+						getMatchHMM = &getProxiMatchHMM;
+						getMatch((int *)(&support), 0);
+						getMatchSparse((int *)(&support), 0, 0, 0, 0, 0);
+						getMatchHMM((int *)(&support), 0, 0, 0, 0);
+					}
+				} else {
+					fprintf(stderr, "Need argument at: \"-proxi\".\n");
+					exit(4);
+				}
+				
 			} else if(strcmp(argv[args], "-ca") == 0) {
 				chainSeedsPtr = &chainSeeds_circular;
 			} else if(strcmp(argv[args], "-ss") == 0) {
-				++args;
-				if(args < argc) {
+				if(++args < argc) {
 					if(argv[args][0] == 'q') {
 						ss = 'q';
 					} else if(argv[args][0] == 'c') {
@@ -528,15 +545,14 @@ int kma_main(int argc, char *argv[]) {
 					} else if(argv[args][0] == 'd') {
 						ss = 'd';
 					} else {
-						fprintf(stderr, "# Invalid argument parsed to option: \"-ss\", using default.\n");
+						fprintf(stderr, "Invalid argument parsed to option: \"-ss\", using default.\n");
 					}
 				}
-			} else if(strcmp(argv[args], "-e") == 0) {
-				++args;
-				if(args < argc) {
+			} else if(strcmp(argv[args], "-p") == 0 || strcmp(argv[args], "-e") == 0) {
+				if(++args < argc) {
 					evalue = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-e\".\n");
+						fprintf(stderr, "Invalid argument at \"%s\".\n", argv[--args]);
 						exit(4);
 					}
 				}

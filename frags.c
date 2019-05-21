@@ -23,6 +23,7 @@
 #include "frags.h"
 #include "pherror.h"
 #include "qseqs.h"
+#include "threader.h"
 
 FILE * printFrags(Frag **alignFrags, int DB_size) {
 	
@@ -60,10 +61,12 @@ FILE * printFrags(Frag **alignFrags, int DB_size) {
 
 void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, Qseqs *header, FileBuff *dest) {
 	
+	static volatile int lock[1] = {0};
 	int i, check, avail;
 	char *update;
 	const char bases[6] = "ACGTN-";
 	
+	lock(lock);
 	check = q_len;
 	avail = dest->bytes;
 	
@@ -157,4 +160,5 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	
 	dest->bytes = avail - check;
 	dest->next = (unsigned char *) update;
+	unlock(lock);
 }

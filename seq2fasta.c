@@ -214,10 +214,10 @@ static void helpMessage(int status) {
 		out = stdout;
 	}
 	fprintf(out, "kma seq2fasta prints the fasta sequence of a given kma index to stdout.\n");
-	fprintf(out, "# Options are:\tDesc:\tDefault:\tRequirements:\n");
-	fprintf(out, "#\t-t_db\tNone\tREQUIRED\n");
-	fprintf(out, "#\t-seqs\tPrint entire index.\n");
-	fprintf(out, "#\t-h\t\tShows this help message\n");
+	fprintf(out, "# Options are:\tDesc:\t\t\t\t\tDefault:\tRequirements:\n");
+	fprintf(out, "#\t-t_db\tTemplate DB\t\t\t\tNone\t\tREQUIRED\n");
+	fprintf(out, "#\t-seqs\tComma separated list of templates\tPrint entire index.\n");
+	fprintf(out, "#\t-h\tShows this help message\n");
 	exit(status);
 }
 
