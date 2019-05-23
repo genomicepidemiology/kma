@@ -27,6 +27,7 @@
 #include "hashmapkma.h"
 #include "hashtable.h"
 #include "kmapipe.h"
+#include "kmmap.h"
 #include "pherror.h"
 #include "runinput.h"
 #include "savekmers.h"
@@ -352,6 +353,8 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	hashMap_get = &hashMap_getGlobal;
 	if((shm & 1) || (deCon && (shm & 2))) {
 		hashMapKMA_load_shm(templates, templatefile, templatefilename);
+	} else if(shm & 32) {
+		hashMapKMAmmap(templates, templatefile);
 	} else {
 		if(hashMapKMA_load(templates, templatefile, templatefilename)) {
 			fprintf(stderr, "Wrong format of DB.\n");

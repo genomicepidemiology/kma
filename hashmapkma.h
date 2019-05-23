@@ -48,6 +48,7 @@ struct hashMapKMA {
 #endif
 
 /* DB size dependent pointers */
+extern void (*hashMapKMA_destroy)(HashMapKMA *);
 long unsigned (*getExistPtr)(const unsigned *, const long unsigned);
 long unsigned (*getKeyPtr)(const unsigned *, const long unsigned);
 long unsigned (*getValueIndexPtr)(const unsigned *, const long unsigned);
@@ -86,4 +87,4 @@ void hashMapKMA_addValue(HashMapKMA *dest, long unsigned index, long unsigned v_
 void hashMapKMA_addValueL(HashMapKMA *dest, long unsigned index, long unsigned v_index);
 void hashMapKMA_addExist(HashMapKMA *dest, long unsigned index, long unsigned relative);
 void hashMapKMA_addExistL(HashMapKMA *dest, long unsigned index, long unsigned relative);
-void hashMapKMA_destroy(HashMapKMA *dest);
+void hashMapKMA_free(HashMapKMA *dest);

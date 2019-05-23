@@ -1,5 +1,5 @@
 CFLAGS = -Wall -O3 -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmers.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o update.o updateindex.o updatescores.o valueshash.o vcf.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmers.o kmmap.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o update.o updateindex.o updatescores.o valueshash.o vcf.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -46,6 +46,7 @@ index.o: index.h compress.h decon.h hashmap.h hashmapkma.h loadupdate.h makeinde
 kma.o: kma.h ankers.h assembly.h chain.h hashmapkma.h kmers.h mt1.h penalties.h pherror.h qseqs.h runinput.h runkma.h savekmers.h sparse.h spltdb.h version.h
 kmapipe.o: kmapipe.h pherror.h
 kmers.o: kmers.h ankers.h compdna.h hashmapkma.h kmapipe.h pherror.h qseqs.h savekmers.h spltdb.h
+kmmap.o: kmmap.h hashmapkma.h
 loadupdate.o: loadupdate.h pherror.h hashmap.h hashmapkma.h updateindex.h
 makeindex.o: makeindex.h compdna.h filebuff.h hashmap.h pherror.h qseqs.h seqparse.h updateindex.h
 mt1.o: mt1.h assembly.h chain.h filebuff.h hashmapindex.h kmapipe.h nw.h penalties.h pherror.h printconsensus.h qseqs.h runkma.h stdstat.h vcf.h

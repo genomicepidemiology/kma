@@ -28,6 +28,7 @@
 #include "hashmapkma.h"
 #include "kmapipe.h"
 #include "kmers.h"
+#include "kmmap.h"
 #include "penalties.h"
 #include "pherror.h"
 #include "qseqs.h"
@@ -94,6 +95,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	hashMap_get = &hashMap_getGlobal;
 	if((shm & 1) || (deCon && (shm & 2))) {
 		hashMapKMA_load_shm(templates, templatefile, templatefilename);
+	} else if(shm & 32) {
+		hashMapKMAmmap(templates, templatefile);
 	} else {
 		if(hashMapKMA_load(templates, templatefile, templatefilename) == 1) {
 			fprintf(stderr, "Wrong format of DB.\n");

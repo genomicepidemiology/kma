@@ -33,6 +33,8 @@ typedef int key_t;
 #include <sys/types.h>
 #endif
 
+void (*hashMapKMA_destroy)(HashMapKMA *) = &hashMapKMA_free;
+
 long unsigned getExist(const unsigned *exist, const long unsigned pos) {
 	return exist[pos];
 }
@@ -559,8 +561,6 @@ int hashMapKMAload(HashMapKMA *dest, FILE *file) {
 	
 	/* check for megaMap */
 	if((dest->size - 1) == dest->mask) {
-		dest->values = 0;
-		dest->values_s = 0;
 		dest->key_index = 0;
 		dest->key_index_l = 0;
 		dest->value_index = 0;
@@ -717,7 +717,7 @@ void hashMapKMA_addExistL(HashMapKMA *dest, long unsigned index, long unsigned r
 	dest->exist_l[index] = relative;
 }
 
-void hashMapKMA_destroy(HashMapKMA *dest) {
+void hashMapKMA_free(HashMapKMA *dest) {
 	
 	if(dest) {
 		if(dest->exist && dest->shmFlag & 1) {

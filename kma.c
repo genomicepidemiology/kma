@@ -30,6 +30,7 @@
 #include "kma.h"
 #include "kmapipe.h"
 #include "kmers.h"
+#include "kmmap.h"
 #include "mt1.h"
 #include "penalties.h"
 #include "pherror.h"
@@ -134,6 +135,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-fpm\t\tFine Pairing method (p,u,f)\tu\n");
 	fprintf(helpOut, "#\t-apm\t\tSets both pm and fpm\t\tu\n");
 	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\t0 (lvl)\n");
+	fprintf(helpOut, "#\t-mmap\t\tMemory map *.comp.by\n");
 	//fprintf(helpOut, "#\t-swap\t\tSwap DB to disk\t\t\t0 (lvl)\n");
 	fprintf(helpOut, "#\t-1t1\t\tForce end to end mapping\tFalse\n");
 	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
@@ -428,6 +430,9 @@ int kma_main(int argc, char *argv[]) {
 					--args;
 					shm = 3;
 				}
+			} else if(strcmp(argv[args], "-mmap") == 0) {
+				shm |= 32;
+				hashMapKMA_destroy = &hashMapKMA_munmap;
 			} else if(strcmp(argv[args], "-t") == 0) {
 				++args;
 				if(args < argc && argv[args][0] != '-') {
