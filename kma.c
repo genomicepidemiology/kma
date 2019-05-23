@@ -117,7 +117,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
 	fprintf(helpOut, "#\t-ef\t\tPrint additional features\tFalse\n");
 	fprintf(helpOut, "#\t-vcf\t\tMake vcf file, 2 to apply FT\tFalse/0\n");
-	fprintf(helpOut, "#\t-sam\t\tOutput sam, 4 to only output\n#\t\t\tmapped reads\t\t\tFalse/0\n");
+	fprintf(helpOut, "#\t-sam\t\tOutput sam to stdout, 4 to \n#\t\t\tonly outputmapped reads\t\tFalse/0\n");
 	fprintf(helpOut, "#\t-nc\t\tNo consensus file\t\tFalse\n");
 	fprintf(helpOut, "#\t-nf\t\tNo frag file\t\tFalse\n");
 	fprintf(helpOut, "#\t-deCon\t\tRemove contamination\t\tFalse\n");
