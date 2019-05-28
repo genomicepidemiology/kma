@@ -37,9 +37,6 @@ struct kmerScan_thread {
 	FILE *inputfile;
 	FILE *out;
 	HashMapKMA *templates;
-	CompDNA *qseq;
-	CompDNA *qseq_r;
-	Qseqs *header;
 	Penalties *rewards;
 	struct kmerScan_thread *next;
 };

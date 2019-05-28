@@ -54,8 +54,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	time_t t0, t1;
 	key_t key;
 	HashMapKMA *templates;
-	Qseqs **Header;
-	CompDNA **Qseq, **Qseq_r;
 	KmerScan_thread *threads, *thread;
 	
 	/* open pipe */
@@ -69,18 +67,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	/* do not output not mapped sam reads */
 	if(sam != 1 || out == stdout) {
 		sam = 0;
-	}
-	
-	/* initialize seqs */
-	Qseq = smalloc(thread_num * sizeof(CompDNA *));
-	Qseq_r = smalloc(thread_num * sizeof(CompDNA *));
-	Header = smalloc(thread_num * sizeof(Qseqs *));
-	for(i = 0; i < thread_num; ++i) {
-		Qseq[i] = smalloc(sizeof(CompDNA));
-		Qseq_r[i] = smalloc(sizeof(CompDNA));
-		Header[i] = setQseqs(256);
-		allocComp(Qseq[i], 1024);
-		allocComp(Qseq_r[i], 1024);
 	}
 	
 	/* load hashMap */
@@ -151,7 +137,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		}
 		templatefilename[file_len] = 0;
 		fclose(templatefile);
-		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, *Qseq, 0, 0, 0, 0, 0, 0);
+		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	} else {
 		template_lengths = 0;
 	}
@@ -173,14 +159,11 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		thread->bestScore = 0;
 		thread->bestScore_r = 0;
 		thread->bestTemplates = calloc((templates->DB_size << 1) + 4, sizeof(int));
-		thread->bestTemplates_r = calloc(templates->DB_size + 4, sizeof(int));
+		thread->bestTemplates_r = calloc((templates->DB_size << 1) + 4, sizeof(int));
 		if(!thread->bestTemplates || !thread->bestTemplates_r) {
 			ERROR();
 		}
 		thread->templates = templates;
-		thread->qseq = Qseq[i];
-		thread->qseq_r = Qseq_r[i];
-		thread->header = Header[i];
 		thread->inputfile = inputfile;
 		thread->rewards = rewards;
 		thread->out = out;
@@ -211,9 +194,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		ERROR();
 	}
 	thread->templates = templates;
-	thread->qseq = *Qseq;
-	thread->qseq_r = *Qseq_r;
-	thread->header = *Header;
 	thread->inputfile = inputfile;
 	thread->rewards = rewards;
 	thread->exhaustive = exhaustive;
@@ -240,7 +220,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		/* print number of fragments */
 		sfwrite(&(int){bestTemplates[2] - 1}, sizeof(int), 1, out);
 	}
-	
 	kmaPipe(0, 0, inputfile, &i);
 	if(kmaPipe == &kmaPipeFork) {
 		t1 = clock();
@@ -250,9 +229,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	}
 	
 	/* clean up */
-	free(Qseq);
-	free(Qseq_r);
-	free(Header);
 	if(!((shm & 1) || (deCon && (shm & 2)))) {
 		hashMapKMA_destroy(templates);
 	}
