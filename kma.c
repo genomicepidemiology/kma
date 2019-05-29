@@ -114,6 +114,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-p\t\tp-value\t\t\t\t0.05\n");
 	fprintf(helpOut, "#\t-ConClave\tConClave version\t\t1\n");
 	fprintf(helpOut, "#\t-mem_mode\tUse kmers to choose best\n#\t\t\ttemplate, and save memory\tFalse\n");
+	fprintf(helpOut, "#\t-proxi\t\tUse proximity scoring under\n#\t\t\ttemplate mapping\t\tFalse/1.0\n");
 	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
 	fprintf(helpOut, "#\t-ef\t\tPrint additional features\tFalse\n");
 	fprintf(helpOut, "#\t-vcf\t\tMake vcf file, 2 to apply FT\tFalse/0\n");
@@ -136,7 +137,6 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-apm\t\tSets both pm and fpm\t\tu\n");
 	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\t0 (lvl)\n");
 	fprintf(helpOut, "#\t-mmap\t\tMemory map *.comp.by\n");
-	//fprintf(helpOut, "#\t-swap\t\tSwap DB to disk\t\t\t0 (lvl)\n");
 	fprintf(helpOut, "#\t-1t1\t\tForce end to end mapping\tFalse\n");
 	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
 	fprintf(helpOut, "#\t-ca\t\tMake circular alignments\tFalse\n");
@@ -201,8 +201,6 @@ int kma_main(int argc, char *argv[]) {
 		spltDB = 0;
 		extendedFeatures = 0;
 		status = 0;
-		assembly_KMA_Ptr = &assemble_KMA_threaded;
-		cmp = &cmp_or;
 		minPhred = 20;
 		fiveClip = 0;
 		sparse_run = 0;
@@ -231,6 +229,16 @@ int kma_main(int argc, char *argv[]) {
 		U = -1;
 		PE = 7;
 		thread_num = 1;
+		inputfiles_PE = 0;
+		inputfiles_INT = 0;
+		inputfiles = 0;
+		templatefilenames = 0;
+		Mt1 = 0;
+		inputfiles = 0;
+		deConPrintPtr = printPtr;
+		/*
+		assembly_KMA_Ptr = &assemble_KMA_threaded;
+		cmp = &cmp_or;
 		kmerScan = &save_kmers_HMM;
 		get_kmers_for_pair_ptr = &get_kmers_for_pair;
 		save_kmers_pair = &save_kmers_unionPair;
@@ -238,20 +246,15 @@ int kma_main(int argc, char *argv[]) {
 		printPairPtr = &printPair;
 		printPtr = &print_ankers;
 		printFsa_pair_ptr = &printFsa_pair;
-		deConPrintPtr = printPtr;
 		ankerPtr = &ankerAndClean;
 		alignLoadPtr = &alignLoad_fly;
 		destroyPtr = &alignClean;
 		printFsa_ptr = &printFsa;
-		inputfiles_PE = 0;
-		inputfiles_INT = 0;
-		inputfiles = 0;
-		templatefilenames = 0;
-		Mt1 = 0;
 		significantBase = &significantNuc; //-bc
 		baseCall = &baseCaller;
 		chainSeedsPtr = &chainSeeds;
-		inputfiles = 0;
+		deConPrintPtr = printPtr;
+		*/
 		
 		
 		/* PARSE COMMAND LINE OPTIONS */
@@ -430,7 +433,7 @@ int kma_main(int argc, char *argv[]) {
 					--args;
 					shm = 3;
 				}
-			} else if(strcmp(argv[args], "-mmap") == 0) {
+			} else if(strcmp(argv[args], "-mmap") == 0 || strcmp(argv[args], "-swap") == 0) {
 				shm |= 32;
 				hashMapKMA_destroy = &hashMapKMA_munmap;
 			} else if(strcmp(argv[args], "-t") == 0) {
@@ -446,11 +449,6 @@ int kma_main(int argc, char *argv[]) {
 				}
 				if(thread_num < 1) {
 					thread_num = 1;
-				}
-			} else if(strcmp(argv[args], "-swap") == 0) {
-				++args;
-				if(!(args < argc && argv[args][0] != '-')) {
-					--args;
 				}
 			} else if(strcmp(argv[args], "-s1") == 0) {
 				step1 = 1;
@@ -529,10 +527,16 @@ int kma_main(int argc, char *argv[]) {
 						/* set proximity parameter */
 						getMatch = &getProxiMatch;
 						getMatchSparse = &getProxiMatchSparse;
-						getMatchHMM = &getProxiMatchHMM;
+						getSecondForce = &getSecondProxiForce;
+						getSecondPen = &getSecondProxiPen;
+						getF = &getF_Proxi;
+						getR = &getR_Proxi;
 						getMatch((int *)(&support), 0);
 						getMatchSparse((int *)(&support), 0, 0, 0, 0, 0);
-						getMatchHMM((int *)(&support), 0, 0, 0, 0);
+						getSecondPen((int *)(&support), 0, 0, 0, 0, 0, 0, 0);
+						getF((int *)(&support), 0, 0, 0, 0);
+						ankerAndClean((int *)(&support), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+						ankerAndClean_MEM((int *)(&support), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 					}
 				} else {
 					fprintf(stderr, "Need argument at: \"-proxi\".\n");

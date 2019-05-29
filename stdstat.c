@@ -20,6 +20,8 @@
 #include <math.h>
 #include "stdstat.h"
 
+int (*cmp)(int, int) = &cmp_or;
+
 int cmp_or(int t, int q) {
 	return (t || q);
 }

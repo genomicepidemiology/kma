@@ -37,7 +37,7 @@ struct alnPoints {
 #endif
 
 /* pointer to chaining method */
-int (*chainSeedsPtr)(AlnPoints *, int, int, int, unsigned *);
+extern int (*chainSeedsPtr)(AlnPoints *, int, int, int, unsigned *);
 
 /* FUNCTIONS */
 AlnPoints * seedPoint_init(int size, Penalties *rewards);

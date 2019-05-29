@@ -20,7 +20,7 @@
 #define MIN(X, Y) ((X < Y) ? X : Y)
 #define MAX(X, Y) ((X < Y) ? Y : X)
 
-int (*cmp)(int, int);
+extern int (*cmp)(int, int);
 int cmp_or(int t, int q);
 int cmp_and(int t, int q);
 double fastp(long double q);

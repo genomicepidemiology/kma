@@ -37,9 +37,9 @@
 #include "stdstat.h"
 #include "threader.h"
 
-void * (*assembly_KMA_Ptr)(void *);
-int (*significantBase)(int, int, double);
-unsigned char (*baseCall)(unsigned char, unsigned char, int, int, double, Assembly*);
+void * (*assembly_KMA_Ptr)(void *) = &assemble_KMA_threaded;
+int (*significantBase)(int, int, double) = &significantNuc;
+unsigned char (*baseCall)(unsigned char, unsigned char, int, int, double, Assembly*) = &baseCaller;
 
 void updateFrags(FileBuff *dest, Qseqs *qseq, Qseqs *header, char *template_name, int *stats) {
 	

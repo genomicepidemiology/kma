@@ -25,6 +25,9 @@
 #include "qseqs.h"
 #include "seqparse.h"
 
+void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
+void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
+
 long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, end;

@@ -82,9 +82,9 @@ struct assemble_thread {
 #define ASSEMBLY 1
 #endif
 
-void * (*assembly_KMA_Ptr)(void *);
-int (*significantBase)(int, int, double);
-unsigned char (*baseCall)(unsigned char, unsigned char, int, int, double, Assembly*);
+extern void * (*assembly_KMA_Ptr)(void *);
+extern int (*significantBase)(int, int, double);
+extern unsigned char (*baseCall)(unsigned char, unsigned char, int, int, double, Assembly*);
 void updateMatrix(FileBuff *dest, char *template_name, long unsigned *template_seq, AssemInfo *matrix, int t_len);
 int significantNuc(int X, int Y, double evalue);
 int significantAnd90Nuc(int X, int Y, double evalue);

@@ -20,9 +20,9 @@
 #include "compdna.h"
 #include "qseqs.h"
 
-int (*printPtr)(int*, CompDNA*, int, const Qseqs*, const int, FILE *out);
-int (*printPairPtr)(int*, CompDNA*, int, const Qseqs*, CompDNA*, int, const Qseqs*, const int flag, const int flag_r, FILE *out);
-int (*deConPrintPtr)(int*, CompDNA*, int, const Qseqs*, const int flag, FILE *out);
+extern int (*printPtr)(int*, CompDNA*, int, const Qseqs*, const int, FILE *out);
+extern int (*printPairPtr)(int*, CompDNA*, int, const Qseqs*, CompDNA*, int, const Qseqs*, const int flag, const int flag_r, FILE *out);
+extern int (*deConPrintPtr)(int*, CompDNA*, int, const Qseqs*, const int flag, FILE *out);
 int print_ankers(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out);
 int print_ankers_Sparse(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out);
 int find_contamination(int *out_Tem, const int contamination);

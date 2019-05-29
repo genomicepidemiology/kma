@@ -23,6 +23,10 @@
 #include "pherror.h"
 #include "qseqs.h"
 
+int (*printPtr)(int*, CompDNA*, int, const Qseqs*, const int, FILE *out) = &print_ankers;
+int (*printPairPtr)(int*, CompDNA*, int, const Qseqs*, CompDNA*, int, const Qseqs*, const int flag, const int flag_r, FILE *out) = &printPair;
+int (*deConPrintPtr)(int*, CompDNA*, int, const Qseqs*, const int flag, FILE *out) = &print_ankers;
+
 int print_ankers(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
 	int infoSize[7];

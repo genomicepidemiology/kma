@@ -24,6 +24,8 @@
 #include "pherror.h"
 #include "stdstat.h"
 
+int (*chainSeedsPtr)(AlnPoints *, int, int, int, unsigned *) = &chainSeeds;
+
 AlnPoints * seedPoint_init(int size, Penalties *rewards) {
 	
 	AlnPoints *dest;

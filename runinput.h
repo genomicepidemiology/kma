@@ -21,8 +21,8 @@
 #include "qseqs.h"
 
 /* pointers determining how to deliver the input */
-void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*);
-void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*);
+extern void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*);
+extern void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*);
 long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);
 long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);
 long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);

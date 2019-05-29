@@ -34,6 +34,9 @@ typedef int key_t;
 #define shmat(shmid, NULL_Ptr, integer) (NULL)
 #endif
 
+void (*destroyPtr)(HashMap_index *) = &alignClean;
+HashMap_index * (*alignLoadPtr)(HashMap_index *, int, int, int, int, long unsigned, long unsigned) = &alignLoad_fly;
+
 void hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex) {
 	
 	dest->len = len;
