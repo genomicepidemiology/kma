@@ -162,7 +162,7 @@ int printPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, C
 
 int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inputfile) {
 	
-	int infoSize[7];
+	static int infoSize[7];
 	
 	if(fread(infoSize, sizeof(int), 7, inputfile) == 7) {
 		qseq->seqlen = infoSize[0];
