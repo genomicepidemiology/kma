@@ -218,7 +218,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		printPtr(bestTemplates, 0, 0, 0, 0, out);
 	} else {
 		/* print number of fragments */
-		sfwrite(&(int){bestTemplates[2] - 1}, sizeof(int), 1, out);
+		sfwrite(&(int){bestTemplates[2]}, sizeof(int), 1, out);
 	}
 	kmaPipe(0, 0, inputfile, &i);
 	if(kmaPipe == &kmaPipeFork) {
