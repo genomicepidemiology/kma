@@ -114,7 +114,7 @@ FILE * kmaPipeThread(const char *cmd, const char *type, FILE *ioStream, int *sta
 		unlock(lock);
 		
 		/* close stream and get exit status */
-		*status = 1;
+		*status = 0;
 		id = src->id;
 		if((errno = pthread_join(id, NULL))) {
 			ERROR();
@@ -237,10 +237,10 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 		while ((pid = waitpid(src->pid, status, 0)) == -1 && errno == EINTR) {
 			usleep(100);
 		}
-		*status = 0;
 		#else
 		WaitForSingleObject(src->pid, INFINITE);
 		#endif
+		*status = 0;
 		fclose(ioStream);
 		
 		/* Remove the entry from the linked list. */
