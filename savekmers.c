@@ -128,14 +128,11 @@ void * save_kmers_threaded(void *arg) {
 		cflag |= 2;
 	}
 	
-	if(templates->prefix_len == 0) {
-		extendScore = calloc((templates->DB_size + 1) * sizeof(int) + templates->DB_size + 1, 1);
-		if(!extendScore) {
-			ERROR();
-		}
-	} else {
-		extendScore = 0;
+	extendScore = calloc((templates->DB_size + 1) * sizeof(int) + templates->DB_size + 1, 1);
+	if(!extendScore) {
+		ERROR();
 	}
+	
 	qseq = smalloc(sizeof(CompDNA));
 	qseq_r = smalloc(sizeof(CompDNA));
 	header = setQseqs(256);
