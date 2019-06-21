@@ -604,6 +604,9 @@ int index_main(int argc, char *argv[]) {
 		makeDB(templates, kmerindex, inputfiles, filecount, outputfilename, appender, to2Bit, MinLen, MinKlen, homQ, homT, &template_lengths, &template_ulengths, &template_slengths);
 		t1 = clock();
 		fprintf(stderr, "#\n# Total time used for DB indexing: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
+		free(template_lengths);
+		free(template_slengths);
+		free(template_ulengths);
 		
 		/* compress db */
 		fprintf(stderr, "# Compressing templates\n");
@@ -618,10 +621,8 @@ int index_main(int argc, char *argv[]) {
 			valuesSize = &uSize;
 		}
 		strcat(outputfilename, ".comp.b");
-		out = fopen(outputfilename, "wb");
-		if(!out) {
-			ERROR();
-		} else if(templates->table != 0) {
+		out = sfopen(outputfilename, "wb+");
+		if(templates->table != 0) {
 			finalDB = compressKMA_DB(templates, out);
 		} else {
 			finalDB = compressKMA_megaDB(templates, out);
@@ -640,6 +641,17 @@ int index_main(int argc, char *argv[]) {
 	if(deconcount != 0) {
 		/* open values */
 		fprintf(stderr, "# Openning values\n");
+		if(!finalDB) {
+			strcat(outputfilename, ".comp.b");
+			out = sfopen(outputfilename, "rb");
+			finalDB = smalloc(sizeof(HashMapKMA));
+			if(hashMapKMAload(finalDB, out)) {
+				fprintf(stderr, "Wrong format of DB\n");
+				exit(1);
+			}
+			fclose(out);
+			outputfilename[file_len] = 0;
+		}
 		Values = hashMapKMA_openValues(finalDB);
 		
 		/* get decontamination info */
