@@ -497,9 +497,13 @@ int index_main(int argc, char *argv[]) {
 	if(templatefilename != 0) {
 		/* load */
 		fprintf(stderr, "# Loading database: %s\n", outputfilename);
-		finalDB = load_DBs(templatefilename, outputfilename, &template_lengths, &template_ulengths, &template_slengths);
+		finalDB = smalloc(sizeof(HashMapKMA));
+		kmerindex = load_DBs(templatefilename, outputfilename, &template_lengths, &template_ulengths, &template_slengths, finalDB);
 		kmersize = finalDB->kmersize;
-		kmerindex = *template_lengths;
+		mask = 0;
+		mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+		prefix = finalDB->prefix;
+		prefix_len = finalDB->prefix_len;
 		
 		/* determine params based on loaded DB */
 		if(prefix_len == 0 && prefix == 0) {
@@ -598,7 +602,6 @@ int index_main(int argc, char *argv[]) {
 				*template_lengths = 1024;
 			}
 		}
-		
 		fprintf(stderr, "# Indexing databases.\n");
 		t0 = clock();
 		makeDB(templates, kmerindex, inputfiles, filecount, outputfilename, appender, to2Bit, MinLen, MinKlen, homQ, homT, &template_lengths, &template_ulengths, &template_slengths);

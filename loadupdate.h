@@ -24,4 +24,4 @@ void * memdup(const void * src, size_t size);
 int CP(char *templatefilename, char *outputfilename);
 HashMap * hashMapKMA_openChains(HashMapKMA *src);
 unsigned ** hashMapKMA_openValues(HashMapKMA *src);
-HashMapKMA * load_DBs(char *templatefilename, char *outputfilename, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths);
+unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths, HashMapKMA *finalDB);

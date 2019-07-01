@@ -702,6 +702,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 		fprintf(stderr, "# Overflow bypassed.\n");
 	}
 	free(templates->values);
+	
 	/* convert valuesHash to a linked list */
 	table = 0;
 	i = shmValues->size;

@@ -44,9 +44,9 @@ int CP(char *templatefilename, char *outputfilename) {
 	
 	if(strcmp(templatefilename, outputfilename) == 0) {
 		return 1;
+	} else if(!(file_in = fopen(templatefilename, "rb"))) {
+		return 2;
 	}
-	
-	file_in = sfopen(templatefilename, "rb");
 	file_out = sfopen(outputfilename, "wb");
 	buffer = smalloc((buffSize = 1048576));
 	
@@ -148,17 +148,15 @@ unsigned ** hashMapKMA_openValues(HashMapKMA *src) {
 	return Values;
 }
 
-HashMapKMA * load_DBs(char *templatefilename, char *outputfilename, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
+unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths, HashMapKMA *finalDB) {
 	
-	int file_len, out_len, DB_size;
+	int file_len, out_len, DB_size, kmerindex;
 	FILE *infile;
-	HashMapKMA *finalDB;
 	
 	file_len = strlen(templatefilename);
 	out_len = strlen(outputfilename);
 	
 	/* load hash */
-	finalDB = smalloc(sizeof(HashMapKMA));
 	strcat(templatefilename, ".comp.b");
 	infile = sfopen(templatefilename, "rb");
 	if(hashMapKMAload(finalDB, infile)) {
@@ -178,13 +176,14 @@ HashMapKMA * load_DBs(char *templatefilename, char *outputfilename, unsigned **t
 	}
 	templatefilename[file_len] = 0;
 	fread(&DB_size, sizeof(unsigned), 1, infile);
-	if(finalDB->prefix_len) {
+	if(finalDB->prefix) {
 		*template_lengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_slengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_ulengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		fread(*template_slengths, sizeof(unsigned), DB_size, infile);
 		fread(*template_ulengths, sizeof(unsigned), DB_size, infile);
 		fread(*template_lengths, sizeof(unsigned), DB_size, infile);
+		kmerindex = **template_slengths;
 		**template_ulengths = DB_size << 1;
 		**template_slengths = DB_size << 1;
 	} else {
@@ -192,6 +191,7 @@ HashMapKMA * load_DBs(char *templatefilename, char *outputfilename, unsigned **t
 		*template_slengths = 0;
 		*template_ulengths = 0;
 		fread(*template_lengths, sizeof(unsigned), DB_size, infile);
+		kmerindex = **template_lengths;
 		**template_lengths = DB_size << 1;
 	}
 	fclose(infile);
@@ -222,5 +222,5 @@ HashMapKMA * load_DBs(char *templatefilename, char *outputfilename, unsigned **t
 	}
 	templatefilename[file_len] = 0;
 	
-	return finalDB;
+	return kmerindex;
 }
