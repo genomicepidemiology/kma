@@ -103,7 +103,7 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 	
 	const char bases[6] = "ACGTN-";
 	int i, j, n, max, DB_size, file_len;
-	long unsigned *compseq;
+	long unsigned skip, *compseq;
 	char *seq;
 	FILE *seqfile, *namefile;
 	Qseqs *template_name;
@@ -139,10 +139,11 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 	if(!seq || !compseq) {
 		ERROR();
 	}
-	
+	skip = 0;
 	for(i = 1; n && i < DB_size; i++) {
 		if(i == *seqlist) {
 			/* get seq */
+			fseek(seqfile, skip, SEEK_CUR);
 			fread(compseq, sizeof(long unsigned), (template_lengths[i] >> 5) + 1, seqfile);
 			j = template_lengths[i];
 			*(seq += j) = '\n';
@@ -156,8 +157,10 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 			
 			/* get next target */
 			while(--n && i == *++seqlist);
+			skip = 0;
 		} else {
 			nameSkip(namefile, max);
+			skip += ((template_lengths[i] >> 5) + 1) * sizeof(long unsigned);
 		}
 	}
 }

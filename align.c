@@ -757,6 +757,7 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 			if(end == -1) {
 				end = q_len;
 			}
+			
 			if(i < end - kmersize) {
 				key = makeKmer(qseq, i, kmersize - 1);
 				i += (kmersize - 1);
@@ -767,6 +768,7 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 			while(i < end) {
 				key = ((key << 2) | qseq[i]) & mask;
 				value = hashMap_index_get_bound(template_index, key, 0, t_len, shifter);
+				
 				if(value == 0) {
 					++i;
 				} else if(0 < value) {
@@ -870,6 +872,8 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 						
 						stop = hashMap_index_getNextDubPos(template_index, key, 0, t_len, stop, shifter);
 					}
+					/* add best anker score */
+					score_r += (bias - i);
 					i = bias + 1;
 					
 					/* update position */
@@ -883,6 +887,7 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 			}
 			i = end + 1;
 		}
+		
 		if(bestScore < score_r) {
 			bestScore = score_r;
 		}
