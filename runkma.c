@@ -43,6 +43,7 @@
 #include "sam.h"
 #include "stdnuc.h"
 #include "stdstat.h"
+#include "tmp.h"
 #include "updatescores.h"
 #include "vcf.h"
 #ifndef _WIN32
@@ -254,7 +255,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			alignment_out = 0;
 			consensus_out = 0;
 		}
-		frag_out_raw = tmpfile();
+		frag_out_raw = tmpF(0);
 		if(!frag_out_raw) {
 			ERROR();
 		}
@@ -1394,7 +1395,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			alignment_out = 0;
 			consensus_out = 0;
 		}
-		frag_out_raw = tmpfile();
+		frag_out_raw = tmpF(0);
 		if(!frag_out_raw) {
 			ERROR();
 		}

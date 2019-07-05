@@ -42,6 +42,7 @@
 #include "spltdb.h"
 #include "stdnuc.h"
 #include "stdstat.h"
+#include "tmp.h"
 #include "updatescores.h"
 #include "version.h"
 #include "vcf.h"
@@ -522,7 +523,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		alignment_out = 0;
 		consensus_out = 0;
 	}
-	frag_out_raw = tmpfile();
+	frag_out_raw = tmpF(0);
 	if(!frag_out_raw) {
 		ERROR();
 	}

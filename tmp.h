@@ -17,4 +17,6 @@
  * limitations under the License.
 */
 
-#define KMA_VERSION "1.2.9"
+#include <stdio.h>
+
+FILE * tmpF(const char *location);

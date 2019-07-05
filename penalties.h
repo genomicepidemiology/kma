@@ -21,10 +21,12 @@
 typedef struct penalties Penalties;
 struct penalties {
 	int **d;
-	int W1;
-	int U;
 	int M;
 	int MM;
+	int U;
+	int W1;
+	int Wl;
+	int Mn;
 	int PE;
 };
 #endif

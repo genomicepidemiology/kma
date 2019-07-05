@@ -41,6 +41,7 @@
 #include "sparse.h"
 #include "spltdb.h"
 #include "stdstat.h"
+#include "tmp.h"
 #include "vcf.h"
 #include "version.h"
 
@@ -137,6 +138,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-apm\t\tSets both pm and fpm\t\tu\n");
 	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\t0 (lvl)\n");
 	fprintf(helpOut, "#\t-mmap\t\tMemory map *.comp.by\n");
+	fprintf(helpOut, "#\t-tmp\t\tSet directory for temporary files.\n");
 	fprintf(helpOut, "#\t-1t1\t\tForce end to end mapping\tFalse\n");
 	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
 	fprintf(helpOut, "#\t-ca\t\tMake circular alignments\tFalse\n");
@@ -167,13 +169,13 @@ int kma_main(int argc, char *argv[]) {
 	static int minPhred, fiveClip, sparse_run, mem_mode, Mt1, ConClave, bcd;
 	static int fileCounter, fileCounter_PE, fileCounter_INT, targetNum, vcf;
 	static int extendedFeatures, spltDB, mq, thread_num, kmersize, one2one;
-	static int ref_fsa, print_matrix, print_all, sam, **d, W1, U, M, MM, PE;
+	static int ref_fsa, print_matrix, print_all, sam, Ts, Tv, **d;
 	static unsigned nc, nf, shm, exhaustive;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
 	static double ID_t, scoreT, evalue;
 	static Penalties *rewards;
-	int i, j, args, exe_len, status, size, escape, step1, step2;
+	int i, j, args, exe_len, status, size, escape, tmp, step1, step2;
 	unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
 	double support;
@@ -223,16 +225,22 @@ int kma_main(int argc, char *argv[]) {
 		one2one = 0;
 		ss = 'q';
 		mem_mode = 0;
-		M = 1;
-		MM = -2;
-		W1 = -3;
-		U = -1;
-		PE = 7;
+		rewards = smalloc(sizeof(Penalties));
+		rewards->M = 1;
+		rewards->MM = -2;
+		rewards->U = -1;
+		rewards->W1 = -3;
+		rewards->Wl = -6;
+		rewards->Mn = -1;
+		rewards->PE = 7;
+		Tv = -2;
+		Ts = -2;
 		thread_num = 1;
 		inputfiles_PE = 0;
 		inputfiles_INT = 0;
 		inputfiles = 0;
 		templatefilenames = 0;
+		tmp = 0;
 		Mt1 = 0;
 		inputfiles = 0;
 		deConPrintPtr = printPtr;
@@ -618,8 +626,8 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-reward") == 0) {
 				++args;
 				if(args < argc) {
-					M = strtol(argv[args], &exeBasic, 10);
-					M = abs(M);
+					rewards->M = strtol(argv[args], &exeBasic, 10);
+					rewards->M = abs(rewards->M);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-reward\".\n");
 						exit(4);
@@ -628,8 +636,8 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-penalty") == 0) {
 				++args;
 				if(args < argc) {
-					MM = strtol(argv[args], &exeBasic, 10);
-					MM = MIN(-MM, MM);
+					rewards->MM = strtol(argv[args], &exeBasic, 10);
+					rewards->MM = MIN(-rewards->MM, rewards->MM);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-penalty\".\n");
 						exit(4);
@@ -638,8 +646,8 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-gapopen") == 0) {
 				++args;
 				if(args < argc) {
-					W1 = strtol(argv[args], &exeBasic, 10);
-					W1 = MIN(-W1, W1);
+					rewards->W1 = strtol(argv[args], &exeBasic, 10);
+					rewards->W1 = MIN(-rewards->W1, rewards->W1);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-gapopen\".\n");
 						exit(4);
@@ -648,20 +656,68 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-gapextend") == 0) {
 				++args;
 				if(args < argc) {
-					U = strtol(argv[args], &exeBasic, 10);
-					U = MIN(-U, U);
+					rewards->U = strtol(argv[args], &exeBasic, 10);
+					rewards->U = MIN(-rewards->U, rewards->U);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-gapextend\".\n");
+						exit(4);
+					}
+				}
+			} else if(strcmp(argv[args], "-localopen") == 0) {
+				/* here */
+				/* add to help */
+				++args;
+				if(args < argc) {
+					rewards->Wl = strtol(argv[args], &exeBasic, 10);
+					rewards->Wl = MIN(-rewards->Wl, rewards->Wl);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
+						exit(4);
+					}
+				}
+			} else if(strcmp(argv[args], "-Npenalty") == 0) {
+				/* here */
+				/* add to help */
+				++args;
+				if(args < argc) {
+					rewards->Mn = strtol(argv[args], &exeBasic, 10);
+					rewards->Mn = MIN(-rewards->Mn, rewards->Mn);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
 						exit(4);
 					}
 				}
 			} else if(strcmp(argv[args], "-per") == 0) {
 				++args;
 				if(args < argc) {
-					PE = strtol(argv[args], &exeBasic, 10);
-					PE = abs(PE);
+					rewards->PE = strtol(argv[args], &exeBasic, 10);
+					rewards->PE = abs(rewards->PE);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-per\".\n");
+						exit(4);
+					}
+				}
+			} else if(strcmp(argv[args], "-transition") == 0) {
+				/* here */
+				/* add to help */
+				++args;
+				if(args < argc) {
+					Ts = strtol(argv[args], &exeBasic, 10);
+					Ts = MIN(-Ts, Ts);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
+						exit(4);
+					}
+				}
+			} else if(strcmp(argv[args], "-transversion") == 0) {
+				/* here */
+				/* add to help */
+				++args;
+				if(args < argc) {
+					Tv = strtol(argv[args], &exeBasic, 10);
+					Tv = MIN(-Tv, Tv);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
 						exit(4);
 					}
 				}
@@ -727,11 +783,21 @@ int kma_main(int argc, char *argv[]) {
 				nf = 1;
 			} else if(strcmp(argv[args], "-cge") == 0) {
 				scoreT = 0.75;
-				M = 1;
-				MM = -3;
-				W1 = -5;
-				U = -1;
-				PE = 17;
+				rewards->M = 1;
+				rewards->MM = -3;
+				rewards->W1 = -5;
+				rewards->U = -1;
+				rewards->PE = 17;
+			} else if(strcmp(argv[args], "-tmp") == 0) {
+				tmp = 1;
+				if(++args < argc) {
+					if(argv[args][0] != '-') {
+						tmpF(argv[args]);
+						tmp = 0;
+					} else {
+						--args;
+					}
+				}
 			} else if(strcmp(argv[args], "-spltDB") == 0) {
 				spltDB = 1;
 			} else if(strcmp(argv[args], "-status") == 0) {
@@ -782,40 +848,40 @@ int kma_main(int argc, char *argv[]) {
 			fprintf(stderr, " Too few arguments handed\n");
 			fprintf(stderr, " Printing help message:\n");
 			helpMessage(1);
+		} else if(tmp) {
+			/* set tmp files */
+			tmpF(outputfilename);
 		}
 		
 		if(fileCounter == 0 && fileCounter_PE == 0 && fileCounter_INT == 0) {
-			inputfiles = malloc(sizeof(char*));
-			if(!inputfiles) {
-				ERROR();
-			}
+			inputfiles = smalloc(sizeof(char*));
 			inputfiles[0] = "--";
 			fileCounter = 1;
 		}
 		status = 0;
 		
 		/* set scoring matrix */
-		d = smalloc(5 * sizeof(int *));
-		for(i = 0; i < 4; ++i) {
-			d[i] = smalloc(5 * sizeof(int));
-			for(j = 0; j < 4; ++j) {
-				d[i][j] = MM;
+		rewards->MM = (Ts + Tv - 1) / 2; /* avg. of transition and transversion, rounded down */
+		d = smalloc(5 * sizeof(int *) + 25 * sizeof(int));
+		*d = (int *) (d + 5);
+		i = 0;
+		while(i < 4) {
+			j = 4;
+			d[i][j] = rewards->Mn;
+			while(j--) {
+				d[i][j] = Tv;
 			}
-			d[i][i] = M;
+			d[i][(i - 2) < 0 ? (i + 2) : (i - 2)] = Ts;
+			d[i][i] = rewards->M;
+			j = i++;
+			d[i] = d[j] + 5;
 		}
-		d[4] = smalloc(5 * sizeof(int));
-		for(i = 0; i < 5; ++i) {
-			d[4][i] = U;
-			d[i][4] = U;
+		i = 5;
+		while(i--) {
+			d[4][i] = rewards->Mn;
 		}
 		d[4][4] = 0;
-		rewards = smalloc(sizeof(Penalties));
 		rewards->d = (int **) d;
-		rewards->W1 = W1;
-		rewards->U = U;
-		rewards->M = M;
-		rewards->MM = MM;
-		rewards->PE = PE;
 		
 		if(spltDB && targetNum != 1) {
 			/* allocate space for commands */

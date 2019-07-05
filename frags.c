@@ -24,6 +24,7 @@
 #include "pherror.h"
 #include "qseqs.h"
 #include "threader.h"
+#include "tmp.h"
 
 FILE * printFrags(Frag **alignFrags, int DB_size) {
 	
@@ -31,7 +32,7 @@ FILE * printFrags(Frag **alignFrags, int DB_size) {
 	FILE *OUT;
 	Frag *alignFrag, *next;
 	
-	if(!(OUT = tmpfile())) {
+	if(!(OUT = tmpF(0))) {
 		fprintf(stderr, "Could not create tmp files.\n");
 		ERROR();
 	}
