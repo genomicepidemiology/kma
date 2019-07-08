@@ -80,8 +80,7 @@ void printFastas(char *filename, int *template_lengths) {
 	if(!seq || !compseq) {
 		ERROR();
 	}
-	
-	for(i = 1; i < DB_size; i++) {
+	for(i = 1; i < DB_size; ++i) {
 		fread(compseq, sizeof(long unsigned), (template_lengths[i] >> 5) + 1, seqfile);
 		
 		j = template_lengths[i];
@@ -140,11 +139,12 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 		ERROR();
 	}
 	skip = 0;
-	for(i = 1; n && i < DB_size; i++) {
+	for(i = 1; n && i < DB_size; ++i) {
 		if(i == *seqlist) {
 			/* get seq */
 			fseek(seqfile, skip, SEEK_CUR);
 			fread(compseq, sizeof(long unsigned), (template_lengths[i] >> 5) + 1, seqfile);
+			
 			j = template_lengths[i];
 			*(seq += j) = '\n';
 			while(j--) {
@@ -160,7 +160,7 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 			skip = 0;
 		} else {
 			nameSkip(namefile, max);
-			skip += ((template_lengths[i] >> 5) + 1) * sizeof(long unsigned);
+			skip += (((template_lengths[i] >> 5) + 1) * sizeof(long unsigned));
 		}
 	}
 }

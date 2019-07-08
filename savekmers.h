@@ -25,6 +25,8 @@
 
 #ifndef SAVEKMERS
 typedef struct kmerScan_thread KmerScan_thread;
+typedef struct kmerAnker KmerAnker;
+
 struct kmerScan_thread {
 	pthread_t id;
 	int num;
@@ -40,6 +42,16 @@ struct kmerScan_thread {
 	Penalties *rewards;
 	struct kmerScan_thread *next;
 };
+
+struct kmerAnker {
+	int score;
+	int weight;
+	unsigned start;
+	unsigned end;
+	unsigned *values;
+	struct kmerAnker *next;
+};
+
 #define SAVEKMERS 1;
 #endif
 
@@ -84,3 +96,4 @@ int save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards, 
 int save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
 void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, char *include, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, Qseqs *header, volatile int *excludeOut, FILE *out);
 void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, char *include, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, Qseqs *header, volatile int *excludeOut, FILE *out);
+int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);

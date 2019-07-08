@@ -48,6 +48,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	mask = 0;
 	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
 	key = 0;
+	
 	/* circular, skip boundaries */
 	if(min < max) {
 		min = 0;

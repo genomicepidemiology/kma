@@ -44,9 +44,9 @@ int CP(char *templatefilename, char *outputfilename) {
 	
 	if(strcmp(templatefilename, outputfilename) == 0) {
 		return 1;
-	} else if(!(file_in = fopen(templatefilename, "rb"))) {
-		return 2;
 	}
+	
+	file_in = sfopen(templatefilename, "rb");
 	file_out = sfopen(outputfilename, "wb");
 	buffer = smalloc((buffSize = 1048576));
 	
@@ -180,9 +180,9 @@ unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **templ
 		*template_lengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_slengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_ulengths = smalloc((DB_size << 1) * sizeof(unsigned));
+		fread(*template_lengths, sizeof(unsigned), DB_size, infile);
 		fread(*template_slengths, sizeof(unsigned), DB_size, infile);
 		fread(*template_ulengths, sizeof(unsigned), DB_size, infile);
-		fread(*template_lengths, sizeof(unsigned), DB_size, infile);
 		kmerindex = **template_slengths;
 		**template_ulengths = DB_size << 1;
 		**template_slengths = DB_size << 1;

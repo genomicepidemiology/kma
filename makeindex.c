@@ -71,7 +71,6 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 		seq_out = sfopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 	}
-	
 	if(dumpIndex == &makeIndexing) {
 		if(appender) {
 			strcat(outputfilename, ".index.b");
@@ -109,16 +108,16 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 					while(isspace(*--seq)) {
 						*seq = 0;
 					}
-					
 					if(bias > 0) {
 						fprintf(name_out, "%s B%d\n", header->seq + 1, bias);
 					} else {
 						fprintf(name_out, "%s\n", header->seq + 1);
 					}
 					updateAnnotsPtr(compressor, templates->DB_size, kmerindex, seq_out, index_out, template_lengths, template_ulengths, template_slengths);
+					/* here */
 					fprintf(stderr, "# Added:\t%s\n", header->seq + 1);
 					
-					if(++templates->DB_size == USHRT_MAX) {
+					if(++(templates->DB_size) == USHRT_MAX) {
 						/* convert values to unsigned */
 						convertToU(templates);
 					}
