@@ -893,8 +893,8 @@ int kma_main(int argc, char *argv[]) {
 				} else if(escape) {
 					size += 2;
 				}
-				size += strlen(argv[i]);
-				if(strncmp(argv[i], "-i", 2) == 0) {
+				size += strlen(argv[args]);
+				if(strncmp(argv[args], "-i", 2) == 0) {
 					escape = 1;
 				}
 			}
