@@ -400,14 +400,12 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	Kmers = smalloc(sizeof(CompKmers));
 	allocCompKmers(Kmers, 1024);
 	Ntot = 0;
-	
 	/* count kmers */
 	while((Kmers->n = fread(Kmers->kmers, sizeof(long unsigned), Kmers->size, inputfile))) {
 		Ntot += Kmers->n;
 		save_kmers_sparse(templates, foundKmers, Kmers);
 	}
 	kmaPipe(0, 0, inputfile, &status);
-	
 	if(kmaPipe == &kmaPipeFork) {
 		t1 = clock();
 		fprintf(stderr, "#\n# Total time used to identify k-mers in query: %.2f s.\n#\n", difftime(t1, t0) / 1000000);

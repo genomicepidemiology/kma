@@ -25,11 +25,13 @@
 #include "ankers.h"
 #include "compdna.h"
 #include "hashmapkma.h"
+#include "kmeranker.h"
 #include "penalties.h"
 #include "pherror.h"
 #include "qseqs.h"
 #include "sam.h"
 #include "savekmers.h"
+#include "seqmenttree.h"
 #include "stdnuc.h"
 #include "stdstat.h"
 #include "threader.h"
@@ -4760,17 +4762,19 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	
 	/* return 0 for match, 1 otherwise */
 	static int *Sizes = 0;
+	static double mrs = 0.5, coverT = 0.5;
 	static KmerAnker **tVF_scores, **tVR_scores;
+	static SeqmentTree **tSeqments;
 	
-	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, score, gaps, template, maxS;
-	int *bests;
+	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, score, gaps, template, *bests;
 	unsigned i, j, rc, shifter, kmersize, DB_size, SU, HIT, start, end, pos;
-	unsigned hitCounter, hitCounter_r;
-	unsigned *values, *last;
+	unsigned hitCounter, hitCounter_r, ties, len, *values, *last;
 	short unsigned *values_s;
 	char *include;
 	CompDNA *qseqP;
 	KmerAnker *V_score, *V_scores, *VF_scores, *VR_scores, *tmp_score;
+	KmerAnker *best_score, *best_score_r;
+	SeqmentTree *chainSeqments;
 	
 	if(qseq == 0) {
 		if(Sizes) {
@@ -4782,10 +4786,18 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			}
 			free(tVF_scores);
 		} else {
+			/* here */
+			/* set mrs and coverT */
+			
+			
 			i = *bestTemplates;
 			Sizes = smalloc(i * sizeof(int));
 			tVF_scores = smalloc(2 * i * sizeof(KmerAnker *));
 			tVR_scores = tVF_scores + i;
+			tSeqments = calloc(i, sizeof(SeqmentTree *));
+			if(!tSeqments) {
+				ERROR();
+			}
 			while(i--) {
 				Sizes[i] = 256;
 				tVF_scores[i] = calloc(512, sizeof(KmerAnker));
@@ -4828,6 +4840,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	}
 	VF_scores = tVF_scores[*Score];
 	VR_scores = tVR_scores[*Score];
+	chainSeqments = tSeqments[*Score];
 	
 	V_scores = VF_scores;
 	qseqP = qseq;
@@ -4857,16 +4870,20 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			}
 		}
 		
+		V_score = V_scores;
+		V_score->start = 0;
+		V_score->end = 0;
+		V_score->values = 0;
+		V_score->next = 0;
+		V_score->descend = 0;
 		if(HIT) {
-			V_score = V_scores;
-			V_score->start = (j = 0);
-			V_score->values = (last = 0);
-			V_score->next = 0;
 			Ms = 0;
 			MMs = 0;
 			Us = 0;
 			W1s = 0;
 			gaps = 0;
+			last = 0;
+			j = 0;
 			for(i = 1; i <= *(qseqP->N); ++i) {
 				end = qseqP->N[i] - kmersize + 1;
 				while(j < end) {
@@ -4901,10 +4918,12 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 								/* update and link between ankers */
 								V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
 								V_score->end = j - gaps + kmersize;
+								V_score->descend = V_score + 1;
 								++V_score;
 							}
 							V_score->start = j;
 							V_score->values = (last = values);
+							V_score->descend = 0;
 							Ms = 0;
 							MMs = 0;
 							Us = 0;
@@ -4927,34 +4946,27 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		--*(qseqP->N);
 	}
 	
-	/* here */
-	/* chaining */
-	
-	/*
-	while(chain is good) {
-		1. make chain. OK
-		2. choose best.
-		3. silence "used" ankers.
-		4. redo chaining if next best hits a silenced anker.
+	/* no matches */
+	if(!hitCounter && !hitCounter_r) {
+		*include = 0;
+		return 1;
 	}
-	*/
-	
-	/*
-	for each anker
-		mark last anker w.r.t. highest score on anker
-	*/
 	
 	/* make chains */
-	maxS = 0;
 	V_score = VF_scores;
+	best_score = 0;
+	best_score_r = V_score;
 	HIT = hitCounter + 1;
 	bests = bestTemplates;
+	ties = 0;
 	rc = 2;
 	while(rc--) {
 		if(rc == 0) {
 			V_score = VR_scores;
 			HIT = hitCounter_r + 1;
 			bests = bestTemplates_r;
+			best_score = best_score_r;
+			best_score_r = V_score;
 		}
 		*bests = 0;
 		while(--HIT) {
@@ -5006,38 +5018,134 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				if(score < Wl) {
 					score = Wl + V_score->weight;
 					/* mark as terminating */
-					V_score->next = 0;
+					tmp_score = 0;
 					extendScore[template] = 0;
 				} else {
 					score += V_score->weight;
 					/* mark descendant */
 					tmp_score = V_score;
-					while((--tmp_score)->end != pos);
-					V_score->next = tmp_score;
 					extendScore[template] = end;
 				}
 				
 				/* update Scores */
 				if(V_score->score < score) {
 					V_score->score = score;
-					/* here */
-					/* consider several bests */
-					if(maxS < score) {
-						maxS = score;
+					/* find link chain */
+					if(tmp_score) {
+						while((--tmp_score)->end != pos);
 					}
+					V_score->next = tmp_score;	
 				}
 				Score[template] = score;
 			}
+			
+			/* Mark (first) best hit */
+			if(best_score_r->score < V_score->score) {
+				best_score_r = V_score;
+				ties = 0;
+			} else if(best_score_r->score == V_score->score) {
+				/* lower uncertainty in shorter chains */
+				if((V_score->end - V_score->start) < (best_score_r->end - best_score_r->start)) {
+					best_score_r = V_score;
+					ties = 0;
+				} else if((V_score->end - V_score->start) == (best_score_r->end - best_score_r->start)) {
+					/* equals */
+					++ties;
+					/* first hit on rc is likely last hit on forward */
+					if(rc) {
+						best_score_r = V_score;
+					}
+				}
+			}
+			
+			V_score->flag = 0;
 			++V_score;
 		}
 		
-		/* clear Score */
+		/* clear Score arrays */
+		clearScore(bests, Score);
+		clearScore(bests, extendScore);
 		i = *bests + 1;
 		while(--i) {
 			include[*++bests] = 0;
 		}
-		clearScore(bests, Score);
-		clearScore(bests, extendScore);
+	}
+	
+	/* no good hits */
+	if(best_score->score < kmersize && best_score_r->score < kmersize) {
+		*include = 0;
+		return 1;
+	}
+	
+	/* get best chain, 
+	start/end, score, template(s)
+	and zero out ankers */
+	*include = SU;
+	*bestTemplates = 0;
+	if(best_score_r->score < best_score->score ||
+	(best_score_r->score < best_score->score && 
+	(best_score->end - best_score->start) <= (best_score_r->end - best_score->start))) {
+		tmp_score = getBestChainTemplates(best_score, rewards, bestTemplates, Score, extendScore, include);
+		score = best_score->score;
+		start = tmp_score->start;
+		len = best_score->end - start;
+		rc = 0;
+	} else {
+		tmp_score = getBestChainTemplates(best_score_r, rewards, bestTemplates, Score, extendScore, include);
+		score = best_score_r->score;
+		start = tmp_score->start;
+		len = best_score_r->end - start;
+		rc = 1;
+	}
+	
+	if(score < mrs * len) {
+		*include = 0;
+		return 1;
+	}
+	
+	/* prune hits */
+	VF_scores = pruneAnkers(VF_scores, kmersize);
+	VR_scores = pruneAnkers(VR_scores, kmersize);
+	
+	/* get best chains */
+	while(best_score || best_score_r) {
+		/* get equal ankers inside chain,
+		that lies under the threshold */
+		/* here */
+		if(ties && best_score != tmp_score) {
+			V_score = best_score;
+			while(V_score && (V_score = getTieAnker(tmp_score, V_score, best_score->score, len))) {
+				/*
+				1. tie anker -> tie_len == best_len
+				2. Best match is last on seq -> tie_start < best_start
+				1. && 2. -> cover = |tie_start - best_end| / len
+				*/
+				if((V_score->end - start) < coverT * len ) {
+					/* not a co-match / overlap is insufficient ->
+					no more equal matches */
+					V_score = 0;
+				} else { /* Anker is equal, update with templates */
+					/* Mark current templates to avoid double hitting */
+					i = *bestTemplates + 1;
+					bests = bestTemplates;
+					while(--i) {
+						include[*++bests] = 1;
+					}
+					/* update best template candidates */
+					template = *bests;
+					*bests = 0;
+					getBestChainTemplates(V_score, rewards, bests, Score, extendScore, include);
+					*bestTemplates += *bests;
+					*bests = template;
+					start = V_score->end - len;
+				}
+			}
+			
+			
+		}
+		
+		
+		
 	}
 	
 	
@@ -5045,9 +5153,421 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	
 	
 	
+	/*
+	Best template(s) must in values on best anker, 
+	remove non-union of A and B, while backtracking.
+	Where A and B are templates on ankerA and ankerB.
+	For proxi scoring the score has to be imputed while tracking.
+	*/
+	
+	/* here */
+	/* what happens when two equal chains overlap */
+	/*
+	-------------       -------------       -------------
+	          -------------        -------------
+	
+	------------- ------------- -------------
+	  -------------       -------------
+	*/
 	
 	
 	
+	
+	/* no rechaining */
+	
+	/*
+	Q = set of best chains
+	
+	while(score is good) 
+		1. if in Q.
+			if(<50%)
+				add to Q
+			else if(scores equal)
+				add with match
+			else
+				skip chain
+		   else
+			add to Q.
+		2. Silence it.
+		3. find best chain.
+	*/
+	*include = 0;
 	
 	return 1;
 }
+
+int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
+	
+	/* return 0 for match, 1 otherwise */
+	static int *Sizes = 0;
+	static double mrs = 0.5, coverT = 0.5;
+	static KmerAnker **tVF_scores;
+	static SeqmentTree **tSeqments;
+	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, score, gaps, template, *bests;
+	unsigned i, j, shifter, kmersize, DB_size, SU, HIT, start, end, pos;
+	unsigned len, cover, hitCounter, ties, *values, *last;
+	short unsigned *values_s;
+	char *include;
+	KmerAnker *V_score, *VF_scores, *tmp_score, *best_score;
+	SeqmentTree *chainSeqments;
+	
+	if(qseq == 0) {
+		if(Sizes) {
+			free(Sizes);
+			Sizes = 0;
+			i = *bestTemplates;
+			while(i--) {
+				free(tVF_scores[i]);
+			}
+			free(tVF_scores);
+		} else {
+			/* here */
+			/* set mrs and coverT */
+			
+			
+			i = *bestTemplates;
+			Sizes = smalloc(i * sizeof(int));
+			tVF_scores = smalloc(i * sizeof(KmerAnker *));
+			tSeqments = calloc(i, sizeof(SeqmentTree *));
+			if(!tSeqments) {
+				ERROR();
+			}
+			while(i--) {
+				Sizes[i] = 256;
+				tVF_scores[i] = calloc(512, sizeof(KmerAnker));
+				if(!tVF_scores[i]) {
+					ERROR();
+				}
+			}
+		}
+		return 0;
+	} else if(qseq->seqlen < (kmersize = templates->kmersize)) {
+		return 1;
+	} else if((DB_size = templates->DB_size) < USHRT_MAX) {
+		SU = 1;
+	} else {
+		SU = 0;
+	}
+	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
+	M = rewards->M;
+	MM = rewards->MM;
+	U = rewards->U;
+	W1 = rewards->W1;
+	Wl = rewards->Wl;
+	include = (char *) (extendScore + (templates->DB_size + 1));
+	hitCounter = 0;
+	values = 0;
+	values_s = 0;
+	
+	if(Sizes[*Score] < qseq->size) {
+		Sizes[*Score] = qseq->size << 1;
+		free(tVF_scores[*Score]);
+		tVF_scores[*Score] = calloc(qseq->size, sizeof(KmerAnker));
+		if(!tVF_scores[*Score]) {
+			ERROR();
+		}
+	}
+	VF_scores = tVF_scores[*Score];
+	chainSeqments = tSeqments[*Score];
+	
+	HIT = exhaustive;
+	j = 0;
+	++*(qseq->N);
+	qseq->N[*(qseq->N)] = qseq->seqlen;
+	for(i = 1; i <= *(qseq->N) && !HIT; ++i) {
+		end = qseq->N[i] - kmersize + 1;
+		while(j < end && hashMap_get(templates, getKmer(qseq->seq, j, shifter)) == 0) {
+			j += kmersize;
+		}
+		if(j < end) {
+			HIT = 1;
+		} else {
+			j = qseq->N[i] + 1;
+		}
+	}
+	
+	if(HIT) {
+		V_score = VF_scores;
+		V_score->start = (j = 0);
+		V_score->values = (last = 0);
+		V_score->next = 0;
+		Ms = 0;
+		MMs = 0;
+		Us = 0;
+		W1s = 0;
+		gaps = 0;
+		for(i = 1; i <= *(qseq->N); ++i) {
+			end = qseq->N[i] - kmersize + 1;
+			while(j < end) {
+				if((values = hashMap_get(templates, getKmer(qseq->seq, j, shifter)))) {
+					if(values == last) {
+						if(kmersize < gaps) {
+							Ms += kmersize;
+							gaps -= kmersize;
+							if(gaps) {
+								/* go for best scenario */
+								if(gaps == 1) {
+									MMs += 2;
+								} else {
+									gaps -= 2;
+									if((MM << 1) + gaps * M < 0) {
+										Ms += gaps;
+										MMs += 2;
+									}
+								}
+							} else {
+								++MMs;
+							}
+						} else if(gaps) {
+							--gaps;
+							++W1s;
+							Us += gaps;
+						} else {
+							++Ms;
+						}
+					} else {
+						if(last) {
+							/* update and link between ankers */
+							V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
+							V_score->end = j - gaps + kmersize;
+							V_score->descend = V_score + 1;
+							++V_score;
+						}
+						V_score->start = j;
+						V_score->values = (last = values);
+						V_score->descend = 0;
+						Ms = 0;
+						MMs = 0;
+						Us = 0;
+						W1s = 0;
+						++hitCounter;
+					}
+					gaps = 0;
+				} else {
+					++gaps;
+				}
+				j += kmersize;
+			}
+			j = qseq->N[i] + 1;
+		}
+		if(last) {
+			/* update anker */
+			V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
+		}
+	}
+	--*(qseq->N);
+	
+	/* no matches */
+	if(!hitCounter) {
+		return 1;
+	}
+	
+	/* make chains */
+	V_score = VF_scores;
+	best_score = V_score;
+	HIT = hitCounter + 1;
+	bests = bestTemplates;
+	*bests = (ties = 0);
+	while(--HIT) {
+		/*
+		Save pos of best score, and chain it (0 if local).
+		Score is always current / w.r.t. the anker you are on.
+		extendScore contains endpos of last hit anker.
+		*/
+		start = V_score->start;
+		end = V_score->end;
+		
+		/* chain anker */
+		V_score->score = 0;
+		if(SU) {
+			values_s = (short unsigned *) V_score->values;
+			i = *values_s + 1;
+			values_s += i;
+		} else {
+			values = V_score->values;
+			i = *values + 1;
+			values += i;
+		}
+		while(--i) {
+			template = SU ? *--values_s : *--values;
+			if(!include[template]) {
+				include[template] = 1;
+				bests[++*bests] = template;
+			}
+			score = Score[template];
+			gaps = start - (pos = extendScore[template]);
+			if(gaps == 0) {
+				/* continued match */
+				score += M;
+			} else if(gaps < 0) {
+				/* deletion */
+				score += (W1 + abs(gaps + 1) * U);
+			} else if(gaps == 1) {
+				/* one unmatched between */
+				score += MM;
+			} else {
+				/* unmatched bases between */
+				if((gaps = (gaps - 2) * M) < 0) {
+					score += gaps;
+				}
+				score += (MM << 1);
+			}
+			
+			/* check local chain is needed */
+			if(score < Wl) {
+				score = Wl + V_score->weight;
+				/* mark as terminating */
+				tmp_score = 0;
+				extendScore[template] = 0;
+			} else {
+				score += V_score->weight;
+				/* mark descendant */
+				tmp_score = V_score;
+				extendScore[template] = end;
+			}
+			
+			/* update Scores */
+			if(V_score->score < score) {
+				V_score->score = score;
+				/* find link chain */
+				if(tmp_score) {
+					while((--tmp_score)->end != pos);
+				}
+				V_score->next = tmp_score;	
+			}
+			Score[template] = score;
+		}
+		
+		/* Mark (last) best hit */
+		if(best_score->score < V_score->score) {
+			best_score = V_score;
+			ties = 0;
+		} else if(best_score->score == V_score->score) {
+			if((V_score->end - V_score->start) < (best_score->end - best_score->start)) {
+				/* lower uncertainty in shorter chains */
+				best_score = V_score;
+				ties = 0;
+			} else if((V_score->end - V_score->start) == (best_score->end - best_score->start)) {
+				/* equals */
+				best_score = V_score;
+				++ties;
+			}
+		}
+		
+		V_score->flag = 0;
+		++V_score;
+	}
+	
+	/* clear Score arrays */
+	clearScore(bests, Score);
+	clearScore(bests, extendScore);
+	i = *bests + 1;
+	while(--i) {
+		include[*++bests] = 0;
+	}
+	
+	/* no good hits */
+	if((score = best_score->score) < kmersize) {
+		*include = 0;
+		return 1;
+	}
+	
+	/* get best chain, 
+	start/end, score, template(s)
+	and zero out ankers */
+	*include = SU;
+	*bestTemplates = 0;
+	tmp_score = getBestChainTemplates(best_score, rewards, bestTemplates, Score, extendScore, include);
+	start = tmp_score->start;
+	len = best_score->end - start;
+	if(score < mrs * len) {
+		*include = 0;
+		return 1;
+	}
+	
+	/* prune hits */
+	VF_scores = pruneAnkers(VF_scores, kmersize);
+	
+	/* get best chains */
+	while(best_score) {
+		/* get equal ankers inside chain,
+		that lies under the threshold */
+		if(ties && best_score != tmp_score) {
+			V_score = best_score;
+			while(V_score && (V_score = getTieAnker(tmp_score, V_score, best_score->score, len))) {
+				/*
+				1. tie anker -> tie_len == best_len
+				2. Best match is last on seq -> tie_start < best_start
+				1. && 2. -> cover = |tie_start - best_end| / len
+				*/
+				if((V_score->end - start) < coverT * len ) {
+					/* not a co-match / overlap is insufficient ->
+					no more equal matches */
+					V_score = 0;
+				} else { /* Anker is equal, update with templates */
+					/* Mark current templates to avoid double hitting */
+					i = *bestTemplates + 1;
+					bests = bestTemplates;
+					while(--i) {
+						include[*++bests] = 1;
+					}
+					/* update best template candidates */
+					template = *bests;
+					*bests = 0;
+					getBestChainTemplates(V_score, rewards, bests, Score, extendScore, include);
+					*bestTemplates += *bests;
+					*bests = template;
+					start = V_score->end - len;
+				}
+			}
+		}
+		
+		/* use segment trees to mark "used" regions of query.
+		Allow for quick check of intersection with chosen chains. */
+		growSeqmentTree(chainSeqments, start, best_score->end);
+		
+		/* insert anker-boundaries */
+		insertKmerBound((Qseqs *) header, start, best_score->end);
+		
+		/* print match */
+		lock(excludeOut);
+		i = deConPrintPtr(bestTemplates, qseq, best_score->score, header, 0, out);
+		unlock(excludeOut);
+		
+		/* get next match */
+		best_score->score = 0;
+		*bestTemplates = 0;
+		while(best_score->score == 0) {
+			/* find best anker */
+			if(!(best_score = getBestAnker(&VF_scores, &ties))) {
+				*include = 0;
+				return 0;	
+			}
+			
+			/* check chain */
+			start = getStartAnker(best_score);
+			cover = queSeqmentTree(chainSeqments->root, start, best_score->end);
+			
+			/* verify chain */
+			if(cover < coverT * (best_score->end - start)) {
+				/* get chain */
+				tmp_score = getBestChainTemplates(best_score, rewards, bestTemplates, Score, extendScore, include);
+				len = best_score->end - start;
+				if(best_score->score < mrs * len) {
+					/* silence anker */
+					best_score->score = 0;
+				}
+			} else {
+				/* silence anker */
+				best_score->score = 0;
+			}
+		}
+	}
+	*include = 0;
+	
+	return 1;
+}
+
+
+
+

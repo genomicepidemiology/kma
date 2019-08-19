@@ -37,3 +37,22 @@ void destroyQseqs(Qseqs *dest) {
 	free(dest->seq);
 	free(dest);
 }
+
+void insertKmerBound(Qseqs *header, int start, int end) {
+	
+	int *seq;
+	
+	if((header->len + 3 * sizeof(int)) < header->size) {
+		header->size = (header->len + 3 * sizeof(int)) << 1;
+		if(!(header->seq = realloc(header->seq, header->size))) {
+			ERROR();
+		}
+	}
+	
+	seq = (int *) (header->seq + header->len + 1);
+	*seq = start;
+	*++seq = end;
+	*++seq = 0;
+	header->len += (2 * sizeof(int) + 1);
+	
+}

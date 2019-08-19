@@ -16,19 +16,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
+#define _XOPEN_SOURCE 600
+#include "penalties.h"
 
-#ifndef QSEQS
-typedef struct qseqs Qseqs;
-struct qseqs {
-	int size;
-	int len;
-	unsigned char *seq;
+#ifndef KMERANKER
+#define KMERANKER 1;
+typedef struct kmerAnker KmerAnker;
+struct kmerAnker {
+	int score;
+	int weight;
+	unsigned start;
+	unsigned end;
+	unsigned flag;
+	unsigned *values;
+	struct kmerAnker *descend; /* descending anker */
+	struct kmerAnker *next; /* next anker in chain */
 };
-#define QSEQS 1
 #endif
 
-/* initialize Qseqs */
-Qseqs * setQseqs(int size);
-/* destroy Qseqs */
-void destroyQseqs(Qseqs *dest);
-void insertKmerBound(Qseqs *header, int start, int end);
+KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int *bests, int *Score, int *extendScore, char *include);
+KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize);
+unsigned getStartAnker(KmerAnker *src);
+KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties);
+KmerAnker * getTieAnker(KmerAnker *stop, KmerAnker *src, int score, int len);

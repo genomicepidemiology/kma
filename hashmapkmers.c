@@ -39,7 +39,7 @@ void reallocHashMap_kmers(HashMap_kmers *dest) {
 	
 	/* save buckets */
 	table = 0;
-	index = ++dest->size;
+	index = dest->size;
 	while(index--) {
 		for(node = dest->table[index]; node; node = node_next) {
 			node_next = node->next;
@@ -54,12 +54,11 @@ void reallocHashMap_kmers(HashMap_kmers *dest) {
 	if(!dest->table) {
 		ERROR();
 	}
-	--dest->size;
 	
 	/* refill table */
 	for(node = table; node; node = node_next) {
 		node_next = node->next;
-		index = node->key & dest->size;
+		index = node->key % dest->size;
 		node->next = dest->table[index];
 		dest->table[index] = node;
 	}
@@ -96,7 +95,7 @@ int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key) {
 	long unsigned index;
 	HashTable_kmers *node;
 	
-	index = key & dest->size;
+	index = key % dest->size;
 	for(node = dest->table[index]; node != 0; node = node->next) {
 		if(node->key == key) {
 			return 0;

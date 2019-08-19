@@ -25,7 +25,6 @@
 
 #ifndef SAVEKMERS
 typedef struct kmerScan_thread KmerScan_thread;
-typedef struct kmerAnker KmerAnker;
 
 struct kmerScan_thread {
 	pthread_t id;
@@ -41,15 +40,6 @@ struct kmerScan_thread {
 	HashMapKMA *templates;
 	Penalties *rewards;
 	struct kmerScan_thread *next;
-};
-
-struct kmerAnker {
-	int score;
-	int weight;
-	unsigned start;
-	unsigned end;
-	unsigned *values;
-	struct kmerAnker *next;
 };
 
 #define SAVEKMERS 1;
