@@ -32,8 +32,8 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	char op, pop, *s, *cigar;
 	unsigned char *t, *q;
 	
-	if(Cigar->size < aligned->len << 1) {
-		Cigar->size <<= 1;
+	if(Cigar->size < (aligned->len << 1)) {
+		Cigar->size = (aligned->len << 1);
 		free(Cigar->seq);
 		Cigar->seq = smalloc(Cigar->size);
 	} else if(aligned->len == 0) {

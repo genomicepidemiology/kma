@@ -816,7 +816,7 @@ int kma_main(int argc, char *argv[]) {
 		}
 		preseed(0, 0, exhaustive);
 		
-		if(sam) {
+		if(sam && kmaPipe != &kmaPipeThread) {
 			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");
 			kmaPipe = &kmaPipeThread;
 		}
