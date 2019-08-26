@@ -106,7 +106,7 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	
 	static volatile int lock[1] = {0}; 
 	static Qseqs *Cigar = 0;
-	int flag, pos, mapQ, pnext, tlen, size, et, score;
+	int flag, pos, mapQ, pnext, tlen, size, et, score, tab;
 	char *qname, *cigar, *rnext, *qual;
 	unsigned char *seq;
 	
@@ -174,9 +174,26 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	rnext = "*";
 	pnext = 0;
 	
+	tab = 0;
+	if(qname) {
+		while(*qname) {
+			if(*qname == '\t') {
+				*qname = 0;
+			} else {
+				++qname;
+				++tab;
+			}
+		}
+		qname = (char *) header->seq;
+	}
+	
 	lock(lock);
 	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);
 	unlock(lock);
+	
+	if(tab) {
+		qname[tab] = '\t';
+	}
 	
 	return size;
 }
