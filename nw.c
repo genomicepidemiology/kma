@@ -546,12 +546,13 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	
 	/* get start position of alignment */
 	if(k < 0) {
+		q_pos = pos[0];
 		pos[1] = en;
-		q_pos = 0;
 		if(k == -2) {
 			for(n = en; n < bq_len; ++n) {
 				if(D_prev[n] > Stat.score) {
 					Stat.score = D_prev[n];
+					q_pos = 0;
 					pos[0] = 0;
 					pos[1] = (aligned->start = n);
 				}
@@ -563,7 +564,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		pos[0] = 0;
 		pos[1] = en;
 	}
-	
+	aligned->start = q_pos;
 	
 	/* back tracking */
 	m = pos[0];

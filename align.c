@@ -210,7 +210,6 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	start = chainSeedsPtr(points, q_len, t_len, kmersize, &aligned->mapQ);
 	score = points->score[start];
 	
-	//fprintf(stderr, "%d\t%d\t%d\t%d\n", t_len, mem_count, aligned->mapQ, score);
 	if(aligned->mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
@@ -390,12 +389,12 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 				--bias;
 			}
 			++bias;
-			/*
+			
+			
 			if(bias != NWstat.len) {
-				NWstat.score -= (W1 + (NWstat.len - bias) * U);
+				//NWstat.score -= (W1 + (NWstat.len - bias) * U);
 				NWstat.len = bias;
 			}
-			*/
 		}
 		
 		memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);

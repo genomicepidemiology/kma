@@ -51,6 +51,7 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	} else {
 		cLen = 0;
 	}
+	
 	rep = 1;
 	if(*s == '|') {
 		pop = '=';
@@ -86,6 +87,7 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 		++q;
 	}
 	cLen += sprintf(cigar + cLen, "%d%c", rep, pop);
+	
 	if(aligned->end) {
 		cLen += sprintf(cigar + cLen, "%dS", aligned->end);
 	}
@@ -154,10 +156,6 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 		pos = stats[2] + 1;
 		tlen = stats[3] - pos;
 		flag = stats[4];
-		if(Cigar == 0) {
-			Cigar = setQseqs(256);
-		}
-		cigar = makeCigar(Cigar, aligned);
 	} else {
 		mapQ = 0;
 		et = 0;
@@ -188,6 +186,12 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	}
 	
 	lock(lock);
+	if(aligned) {
+		if(Cigar == 0) {
+			Cigar = setQseqs(256);
+		}
+		cigar = makeCigar(Cigar, aligned);
+	}
 	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);
 	unlock(lock);
 	
