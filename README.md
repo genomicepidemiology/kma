@@ -1,14 +1,14 @@
 # Getting Started #
 
 ```
-**Compile directly from source repository** 
+# Compile directly from source repository
 git clone https://bitbucket.org/genomicepidemiology/kma.git
 cd kma && make
 
-**Or install with [Conda](https://conda.io/en/latest/) and [Bioconda](https://bioconda.github.io/):**
+# Or install with [Conda](https://conda.io/en/latest/) and [Bioconda](https://bioconda.github.io/)
 conda install -c bioconda kma
 
-**Use KMA**
+# Use KMA
 ./kma index -i templates.fsa.gz -o templates
 ./kma -i reads_se.fq.gz -o output/name -t_db templates
 ./kma -ipe reads_1.fq.gz reads_2.fq.gz -o output/name -t_db templates
