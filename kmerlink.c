@@ -16,44 +16,58 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
+#define _XOPEN_SOURCE 600
 #include <stdlib.h>
+#include "kmerlink.h"
 #include "pherror.h"
-#include "qseqs.h"
 
-Qseqs * setQseqs(int size) {
+KmerLink * initKmerLink(unsigned size) {
 	
-	Qseqs *dest;
+	KmerLink *dest;
 	
-	dest = smalloc(sizeof(Qseqs));
-	dest->len = 0;
+	dest = smalloc(sizeof(KmerLink));
 	dest->size = size;
-	dest->seq = smalloc(size);
+	dest->n = 0;
+	dest->list = smalloc(size * sizeof(KmerAnker));
 	
 	return dest;
 }
 
-void destroyQseqs(Qseqs *dest) {
-	free(dest->seq);
-	free(dest);
+void reallocKmerLink(KmerLink *src, unsigned newSize) {
+	
+	src->size = newSize;
+	src->list = realloc(src->list, newSize * sizeof(KmerAnker));
+	if(!src->list) {
+		ERROR();
+	}
 }
 
-void insertKmerBound(Qseqs *header, int start, int end) {
+KmerAnker * pushKmerLink(KmerLink *src, KmerAnker *node) {
 	
-	int *seq;
+	KmerAnker *dest;
 	
-	if((header->len + 2 * sizeof(int)) < header->size) {
-		header->size = (header->len + 2 * sizeof(int)) << 1;
-		if(!(header->seq = realloc(header->seq, header->size))) {
-			ERROR();
-		}
+	if(src->size == ++src->n) {
+		reallocKmerLink(src, src->size << 1);
+	}
+	dest = src->list + (src->n - 1);
+	*dest = *node;
+	
+	return dest;
+}
+
+KmerAnker * popKmerLink(KmerLink *src, int n) {
+	
+	if(n < src->n) {
+		src->n -= n;
+	} else {
+		src->n = 0;
 	}
 	
-	seq = (int *) (header->seq + header->len + 1);
-	*seq = start;
-	*++seq = end;
-	/* here */
-	/* uncomment */
-	//header->len += (2 * sizeof(int));
+	return src->list + src->n;
+}
+
+void destroyKmerLink(KmerLink *src) {
 	
+	free(src->list);
+	free(src);
 }

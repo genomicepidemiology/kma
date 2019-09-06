@@ -274,7 +274,6 @@ void * assemble_KMA_threaded(void *arg) {
 	
 	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeMatrix[1] = {0}, mainTemplate = -2, thread_wait = 0;
 	static char *template_name;
-	static HashMap_index *template_index;
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, spin, sam;
 	int read_score, depthUpdate, bestBaseScore, bestScore, template, asm_len;
@@ -295,6 +294,7 @@ void * assemble_KMA_threaded(void *arg) {
 	AssemInfo *matrix;
 	AlnPoints *points;
 	NWmat *NWmatrices;
+	HashMap_index *template_index;
 	
 	/* get input */
 	template = thread->template;
@@ -317,6 +317,7 @@ void * assemble_KMA_threaded(void *arg) {
 	sam = thread->sam;
 	spin = thread->spin;
 	thread_num = thread->thread_num;
+	template_index = thread->template_index;
 	
 	if(template != -2) {
 		/* all assemblies done, 
@@ -331,7 +332,6 @@ void * assemble_KMA_threaded(void *arg) {
 		/* Allocate assembly arrays */
 		lock(excludeMatrix);
 		template_name = thread->template_name;
-		template_index = thread->template_index;
 		t_len = template_index->len;
 		matrix->len = t_len;
 		if(matrix->size < (t_len << 1)) {

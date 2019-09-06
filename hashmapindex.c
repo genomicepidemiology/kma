@@ -37,17 +37,26 @@ typedef int key_t;
 void (*destroyPtr)(HashMap_index *) = &alignClean;
 HashMap_index * (*alignLoadPtr)(HashMap_index *, int, int, int, int, long unsigned, long unsigned) = &alignLoad_fly;
 
-void hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex) {
+int hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex) {
 	
 	dest->len = len;
-	dest->size = len << 1;
 	dest->kmerindex = kmerindex;
-	
-	dest->index = calloc(dest->size, sizeof(int));
-	dest->seq = malloc(((len >> 5) + 1) * sizeof(long unsigned));
-	if(!dest->index || !dest->seq) {
-		ERROR();
+	if(dest->size < (len << 1)) {
+		if(dest->size) {
+			free(dest->index);
+			free(dest->seq);
+		}
+		dest->size = len << 1;
+		dest->index = calloc(dest->size, sizeof(int));
+		dest->seq = malloc(((len >> 5) + 1) * sizeof(long unsigned));
+		if(!dest->index || !dest->seq) {
+			ERROR();
+		}
+		
+		return 0;
 	}
+	
+	return 1;
 }
 
 void hashMap_index_set(HashMap_index *dest) {
@@ -248,8 +257,13 @@ HashMap_index * hashMap_index_load(HashMap_index *src, int seq, int index, int l
 	
 	if(src == 0) {
 		src = smalloc(sizeof(HashMap_index));
+		src->size = 0;
 	}
-	hashMap_index_initialize(src, len, kmersize);
+	if(hashMap_index_initialize(src, len, kmersize)) {
+		src->size = len << 1;
+		memset(src->index, 0, src->size * sizeof(int));
+	}
+	
 	read(seq, src->seq, ((src->len >> 5) + 1) * sizeof(long unsigned));
 	read(index, src->index, src->size * sizeof(int));
 	
@@ -267,8 +281,13 @@ HashMap_index * hashMap_index_build(HashMap_index *src, int seq, int len, int km
 	
 	if(src == 0) {
 		src = smalloc(sizeof(HashMap_index));
+		src->size = 0;
 	}
-	hashMap_index_initialize(src, len, kmersize);
+	
+	if(hashMap_index_initialize(src, len, kmersize)) {
+		memset(src->index, 0, src->size * sizeof(int));
+	}
+	
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (src->kmerindex << 1);
 	
 	read(seq, src->seq, ((src->len >> 5) + 1) * sizeof(long unsigned));
@@ -375,10 +394,12 @@ HashMap_index * alignLoad_shm_initial(char *templatefilename, int file_len, int 
 }
 
 void alignClean(HashMap_index *template_index) {
-	
+	/* Overwrite later */
+	/*
 	if(template_index) {
 		hashMap_index_destroy(template_index);
 	}
+	*/
 }
 
 void alignClean_shm(HashMap_index *template_index) {

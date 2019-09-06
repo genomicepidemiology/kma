@@ -16,5 +16,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
+#define _XOPEN_SOURCE 600
+#include "kmeranker.h"
 
-#define KMA_VERSION "1.2.11b"
+#ifndef KMERLINK
+#define KMERLINK 1;
+typedef struct kmerLink KmerLink;
+struct kmerLink {
+	unsigned size;
+	unsigned n;
+	KmerAnker *list;
+};
+#endif
+
+KmerLink * initKmerLink(unsigned size);
+void reallocKmerLink(KmerLink *src, unsigned newSize);
+KmerAnker * pushKmerLink(KmerLink *src, KmerAnker *node);
+KmerAnker * popKmerLink(KmerLink *src, int n);
+void destroyKmerLink(KmerLink *src);

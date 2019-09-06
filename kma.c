@@ -173,7 +173,7 @@ int kma_main(int argc, char *argv[]) {
 	static unsigned nc, nf, shm, exhaustive;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
-	static double ID_t, scoreT, evalue;
+	static double ID_t, scoreT, coverT, evalue;
 	static Penalties *rewards;
 	int i, j, args, exe_len, status, size, escape, tmp, step1, step2;
 	unsigned totFrags;
@@ -221,6 +221,7 @@ int kma_main(int argc, char *argv[]) {
 		mq = 0;
 		bcd = 1;
 		scoreT = 0.5;
+		coverT = 0.5;
 		ID_t = 1.0;
 		one2one = 0;
 		ss = 'q';
@@ -263,7 +264,6 @@ int kma_main(int argc, char *argv[]) {
 		chainSeedsPtr = &chainSeeds;
 		deConPrintPtr = printPtr;
 		*/
-		
 		
 		/* PARSE COMMAND LINE OPTIONS */
 		args = 1;
@@ -1137,7 +1137,7 @@ int kma_main(int argc, char *argv[]) {
 	} else if(step2) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status = save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam);
+		status = save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, scoreT, coverT);
 		free(myTemplatefilename);
 	} else if(sparse_run) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);

@@ -27,15 +27,15 @@ struct kmerAnker {
 	int weight;
 	unsigned start;
 	unsigned end;
-	unsigned flag;
+	unsigned cStart;
+	unsigned ties;
 	unsigned *values;
 	struct kmerAnker *descend; /* descending anker */
-	struct kmerAnker *next; /* next anker in chain */
+	struct kmerAnker *next; /* next ankers in chain */
 };
 #endif
 
-KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int *bests, int *Score, int *extendScore, char *include);
-KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize);
-unsigned getStartAnker(KmerAnker *src);
+KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include);
+KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize, double mrs);
 KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties);
-KmerAnker * getTieAnker(KmerAnker *stop, KmerAnker *src, int score, int len);
+KmerAnker * getTieAnker(int stop, KmerAnker *src, int score, int len);

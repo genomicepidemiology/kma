@@ -140,10 +140,13 @@ unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node) {
 void growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end) {
 	
 	SeqmentTrees *node;
-	
+		
 	/* make room for new anker */
 	if(src->size <= src->n + 2) {
 		reallocSeqmentTree(src);
+	} else if(src->n == 0) {
+		initSeqmentTree(src, start, end);
+		return;
 	}
 	
 	/* make new leaf */

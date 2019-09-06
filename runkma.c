@@ -215,6 +215,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		index_in_no = fileno(index_in);
 		read(index_in_no, &kmersize, sizeof(int));
 	}
+	
 	templatefilename[file_len] = 0;
 	
 	/* allocate stuff */
@@ -1311,6 +1312,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	AlnPoints *points;
 	NWmat *NWmatrices;
 	Assemble_thread *threads, *thread;
+	HashMap_index *template_index;
 	
 	/* get lengths and names */
 	file_len = strlen(templatefilename);
@@ -2095,6 +2097,16 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			matrix->size = template_lengths[i];
 		}
 	}
+	
+	template_index = smalloc(sizeof(HashMap_index));
+	template_index->size = 0;
+	if(alignLoadPtr != alignLoad_fly_shm) {
+		hashMap_index_initialize(template_index, matrix->size, kmersize);
+	} else {
+		template_index->seq = 0;
+		template_index->index = 0;
+	}
+	
 	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
 		matrix->size <<= 1;
 	} else {
@@ -2153,7 +2165,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		thread->points = seedPoint_init(delta, rewards);
 		thread->points->len = 0;
 		thread->spin = (sparse < 0) ? 10 : 100;
-		 
+		thread->template_index = template_index;
 		thread->next = threads;
 		threads = thread;
 		
@@ -2211,7 +2223,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	thread->header = header;
 	thread->points = points;
 	thread->points->len = 0;
-	thread->template_index = 0;
+	thread->template_index = template_index;
 	thread->next = 0;
 	thread->spin = (sparse < 0) ? 10 : 100;
 	
@@ -2228,7 +2240,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		fprintf(stderr, "# Progress:\t%3d%%\r", 0);
 		fflush(stderr);
 	}
-	
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
 			if(progress) {
@@ -2269,7 +2280,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
 				thread->template = template;
 				assembly_KMA_Ptr(thread);
-				
 				/* Depth, ID and coverage */
 				if(aligned_assem->cover > 0) {
 					coverScore = aligned_assem->cover;
@@ -2333,7 +2343,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			seq_seeker += ((template_lengths[template] >> 5) + 1);
 		}
 	}
-	
 	if(progress) {
 		fprintf(stderr, "\n");
 	}

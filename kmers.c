@@ -47,7 +47,7 @@ typedef int key_t;
 #define shmctl(shmid, cmd, buf) fprintf(stderr, "sysV not available on Windows.\n")
 #endif
 
-int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam) {
+int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, double mrs, double coverT) {
 	
 	int i, file_len, shmid, deCon, *bestTemplates, *template_lengths;
 	FILE *inputfile, *templatefile;
@@ -116,6 +116,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	if(printPtr == &print_ankers_spltDB || printPtr == &print_ankers_Sparse_spltDB) {
 		printPtr(0, 0, thread_num, 0, 0, 0);
 	}
+	template_lengths = 0;
 	if(kmerScan == &save_kmers_HMM) {
 		/* load lengths */
 		strcat(templatefilename, ".length.b");
@@ -138,8 +139,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		templatefilename[file_len] = 0;
 		fclose(templatefile);
 		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-	} else {
-		template_lengths = 0;
+	} else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
+		kmerScan(0, 0, &(int){thread_num}, (int *)(&mrs), (int *)(&coverT), 0, 0, 0, 0, 0, 0, 0, 0);
 	}
 	
 	t1 = clock();
@@ -234,6 +235,8 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	}
 	if(kmerScan == &save_kmers_HMM && (shm & 4) == 0) {
 		free(template_lengths);
+	} else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
+		kmerScan(0, 0, &(int){thread_num}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	}
 	for(thread = threads; thread; thread = threads) {
 		threads = thread->next;

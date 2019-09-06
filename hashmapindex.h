@@ -35,7 +35,7 @@ struct hashMap_index {
 extern void (*destroyPtr)(HashMap_index *);
 extern HashMap_index * (*alignLoadPtr)(HashMap_index *, int, int, int, int, long unsigned, long unsigned);
 
-void hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex);
+int hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex);
 void hashMap_index_set(HashMap_index *dest);
 void hashMap_index_destroy(HashMap_index *dest);
 int hashMap_index_get(const HashMap_index *dest, long unsigned key, unsigned shifter);

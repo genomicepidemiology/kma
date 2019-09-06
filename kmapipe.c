@@ -226,13 +226,14 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 		for (last = 0, src = pidlist; src->fp != ioStream; last = src, src = src->next) {
 			if(!src) {
 				*status = 1;
+				unlock(lock);
 				return 0;
 			}
 		}
 		unlock(lock);
 		
 		/* close stream and get exit status */
-		*status = 1;
+		*status = 0;
 		#ifndef _WIN32
 		while ((pid = waitpid(src->pid, status, 0)) == -1 && errno == EINTR) {
 			usleep(100);
@@ -240,7 +241,6 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 		#else
 		WaitForSingleObject(src->pid, INFINITE);
 		#endif
-		*status = 0;
 		fclose(ioStream);
 		
 		/* Remove the entry from the linked list. */

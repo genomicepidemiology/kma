@@ -20,6 +20,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/param.h>
 #include "compress.h"
 #include "hashmap.h"
 #include "hashmapkma.h"
@@ -44,6 +45,7 @@ static void mmapinit(HashMapKMA *finalDB, long unsigned size, FILE *out) {
 	if(finalDB->exist == MAP_FAILED) {
 		ERROR();
 	}
+	posix_madvise(finalDB->exist, size, POSIX_MADV_SEQUENTIAL);
 	*finalDB->exist++ = finalDB->DB_size;
 	*finalDB->exist++ = finalDB->kmersize;
 	*finalDB->exist++ = finalDB->prefix_len;
@@ -72,8 +74,8 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	void *data;
 	long unsigned i, j, check, size, v_size;
 	long unsigned index, t_index, v_index, new_index, null_index;
-	unsigned swap, *values;
-	short unsigned *values_s;
+	unsigned swap, *values, *finalV;
+	short unsigned *values_s, *finalV_s;
 	HashMapKMA *finalDB;
 	ValuesHash *shmValues;
 	ValuesTable *node, *next, *table;
@@ -227,6 +229,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 						if(finalDB->exist == MAP_FAILED) {
 							ERROR();
 						}
+						posix_madvise(finalDB->exist, size, POSIX_MADV_SEQUENTIAL);
 						finalDB->exist_l = (long unsigned *) (finalDB->exist + 3);
 						finalDB->exist_l += 5;
 						
@@ -472,14 +475,37 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 		for(node = table; node != 0; node = next) {
 			next = node->next;
 			values_s = (short unsigned *)(node->values);
+			finalV_s = finalDB->values_s + node->v_index - 1;
+			i = 2 + *values_s--;
+			while(--i) {
+				*++finalV_s = *++values_s;
+			}
+			free(node->values);
+			free(node);
+			
+			/*
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
 			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
 				finalDB->values_s[i] = values_s[j];
 			}
 			free(values_s);
 			free(node);
+			*/
 		}
 	} else {
 		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			finalV = finalDB->values + node->v_index - 1;
+			i = 2 + *values--;
+			while(--i) {
+				*++finalV = *++values;
+			}
+			free(node->values);
+			free(node);
+			
+			/*
 			next = node->next;
 			values = node->values;
 			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
@@ -487,6 +513,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 			}
 			free(values);
 			free(node);
+			*/
 		}
 	}
 	
@@ -537,8 +564,8 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 	
 	long unsigned i, j, v_index, new_index, null_index, size, v_size;
-	unsigned check, swap, *values;
-	short unsigned *values_s;
+	unsigned check, swap, *values, *finalV;
+	short unsigned *values_s, *finalV_s;
 	HashMapKMA *finalDB;
 	ValuesHash *shmValues;
 	ValuesTable *node, *next, *table;
@@ -653,6 +680,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 			if(finalDB->exist == MAP_FAILED) {
 				ERROR();
 			}
+			posix_madvise(finalDB->exist, size, POSIX_MADV_SEQUENTIAL);
 			finalDB->exist_l = (long unsigned *) (finalDB->exist + 3);
 			finalDB->exist_l += 5;
 		} else {
@@ -810,6 +838,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 		if(finalDB->values == MAP_FAILED) {
 			ERROR();
 		}
+		posix_madvise(finalDB->values, size, POSIX_MADV_SEQUENTIAL);
 		finalDB->values = ((void *) finalDB->values) + v_size;
 		if(finalDB->DB_size < USHRT_MAX) {
 			finalDB->values_s = (short unsigned *) finalDB->values;
@@ -821,14 +850,37 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 		for(node = table; node != 0; node = next) {
 			next = node->next;
 			values_s = (short unsigned *)(node->values);
+			finalV_s = finalDB->values_s + node->v_index - 1;
+			i = 2 + *values_s--;
+			while(--i) {
+				*++finalV_s = *++values_s;
+			}
+			free(node->values);
+			free(node);
+			
+			/*
+			next = node->next;
+			values_s = (short unsigned *)(node->values);
 			for(i = node->v_index, j = 0; j <= *values_s; ++i, ++j) {
 				finalDB->values_s[i] = values_s[j];
 			}
 			free(values_s);
 			free(node);
+			*/
 		}
 	} else {
 		for(node = table; node != 0; node = next) {
+			next = node->next;
+			values = node->values;
+			finalV = finalDB->values + node->v_index - 1;
+			i = 2 + *values--;
+			while(--i) {
+				*++finalV = *++values;
+			}
+			free(node->values);
+			free(node);
+			
+			/*
 			next = node->next;
 			values = node->values;
 			for(i = node->v_index, j = 0; j <= *values; ++i, ++j) {
@@ -836,6 +888,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 			}
 			free(values);
 			free(node);
+			*/
 		}
 	}
 	/* dump final DB */
