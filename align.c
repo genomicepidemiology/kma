@@ -249,6 +249,8 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
 			} else {
 				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
+				/* here */
+				//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
 			}
 			
 			/* trim leading gaps */
@@ -342,7 +344,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
 				} else {
 					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band, matrices);
-					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align);
+					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
 				}
 				
 				memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
@@ -376,7 +378,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices);
 		} else {
 			NWstat = NW_band(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
-			//NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align);
+			//NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices);
 		}
 		/* trim trailing gaps */
 		if(t_e == t_len) {

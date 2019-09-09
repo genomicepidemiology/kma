@@ -552,6 +552,7 @@ void * assemble_KMA_threaded(void *arg) {
 								header->seq[header->len - 1] = 0;
 								samwrite(qseq, header, 0, template_name, aligned, stats);
 							}
+							
 						} else if(sam) {
 							stats[1] = read_score;
 							stats[2] = start;
@@ -617,7 +618,6 @@ void * assemble_KMA_threaded(void *arg) {
 		
 		return NULL;
 	}
-	
 	/* diff */
 	/* pre on dense */
 	/* Pepare and make alignment on consensus */
@@ -697,6 +697,7 @@ void * assemble_KMA_threaded(void *arg) {
 		pos = assembly[pos].next;
 	}
 	
+
 	/* Trim alignment on consensus */
 	coverScore = 0;
 	bias = 0;

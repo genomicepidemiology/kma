@@ -414,6 +414,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	
 	/* Perform banded NW */
 	pos[0] = 0;
+	pos[1] = 0;
 	en = 0;
 	c_pos = (t_len + q_len) >> 1;
 	for(m = t_len - 1, nuc_pos = t_e - 1; m >= 0; --m, --nuc_pos, --c_pos) {
@@ -532,6 +533,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		if(k < 0 && Stat.score <= D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
+			pos[1] = n;
 		}
 		
 		tmp = D_ptr;
@@ -547,7 +549,9 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	/* get start position of alignment */
 	if(k < 0) {
 		q_pos = pos[0];
-		pos[1] = en;
+		if(pos[0] == 0) {
+			pos[1] = en;
+		}
 		if(k == -2) {
 			for(n = en; n < bq_len; ++n) {
 				if(D_prev[n] > Stat.score) {
@@ -961,6 +965,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	
 	/* Perform banded NW */
 	pos[0] = 0;
+	pos[1] = 0;
 	en = 0;
 	c_pos = (t_len + q_len) >> 1;
 	for(m = t_len - 1, nuc_pos = t_e - 1; m >= 0; --m, --nuc_pos, --c_pos) {
@@ -1079,6 +1084,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 		if(k < 0 && Stat.score <= D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
+			pos[1] = n;
 		}
 		
 		tmp = D_ptr;
@@ -1093,12 +1099,15 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	
 	/* get start position of alignment */
 	if(k < 0) {
-		pos[1] = en;
-		q_pos = 0;
+		q_pos = pos[0];
+		if(pos[0] == 0) {
+			pos[1] = en;
+		}
 		if(k == -2) {
 			for(n = en; n < bq_len; ++n) {
 				if(D_prev[n] > Stat.score) {
 					Stat.score = D_prev[n];
+					q_pos = 0;
 					pos[0] = 0;
 					pos[1] = n;
 				}
