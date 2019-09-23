@@ -1,4 +1,5 @@
-CFLAGS = -Wall -O3 -std=c99
+CFLAGS ?= -Wall -O3
+CFLAGS += -std=c99
 LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmerlink.o kmers.o kmmap.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o
 PROGS = kma kma_index kma_shm kma_update
 
