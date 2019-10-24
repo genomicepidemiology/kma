@@ -20,9 +20,6 @@
 #include "filebuff.h"
 #include "qseqs.h"
 
-/* pointer to load buffer from a regular or gz file stream */
-int (*buffFileBuff)(FileBuff *);
-
 /* determine format */
 int openAndDetermine(FileBuff *inputfile, char *filename);
 /* get entry from fastafile */

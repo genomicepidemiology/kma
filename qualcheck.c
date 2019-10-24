@@ -159,13 +159,13 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 	bestQ = 0;
 	for(i = 1; i <= *bestTemplates; ++i) {
 		thisQ = 1.0 * Scores_tot[bestTemplates[i]] / thisKlen;
-		if(thisQ > bestQ) {
+		if(bestQ < thisQ) {
 			bestQ = thisQ;
 		}
 		Scores_tot[bestTemplates[i]] = 0;
 	}
 	
-	if(bestQ < homQ && thisKlen >= MinKlen) {
+	if(bestQ < homQ) {
 		return 1;
 	} else {
 		return 0;

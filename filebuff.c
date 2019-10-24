@@ -24,6 +24,8 @@
 #include "pherror.h"
 #include "qseqs.h"
 
+int (*buffFileBuff)(FileBuff *) = &BuffgzFileBuff;
+
 int BuffgzFileBuff(FileBuff *dest) {
 	
 	int status;
@@ -65,6 +67,7 @@ int BuffgzFileBuff(FileBuff *dest) {
 		dest->bytes = 0;
 		dest->next = dest->buffer;
 		fprintf(stderr, "Gzip error %d\n", status);
+		errno |= status;
 	}
 	
 	return dest->bytes;
@@ -139,10 +142,13 @@ void gzcloseFileBuff(FileBuff *dest) {
 	int status;
 	if((status = inflateEnd(dest->strm)) != Z_OK) {
 		fprintf(stderr, "Gzip error %d\n", status);
+		errno |= status;
 	}
 	if(dest->z_err != Z_STREAM_END) {
 		fprintf(stderr, "Unexpected end of file\n");
+		errno |= status;
 	}
+	fclose(dest->file);
 	dest->file = 0;
 	dest->strm->avail_out = 0;
 }

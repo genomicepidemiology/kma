@@ -553,7 +553,7 @@ void * assemble_KMA_threaded(void *arg) {
 								samwrite(qseq, header, 0, template_name, aligned, stats);
 							}
 							
-						} else if(sam) {
+						} else if(sam && !(sam & 2096)) {
 							stats[1] = read_score;
 							stats[2] = start;
 							stats[3] = end;
@@ -567,7 +567,7 @@ void * assemble_KMA_threaded(void *arg) {
 								samwrite(qseq, header, 0, template_name, 0, stats);
 							}
 						}
-					} else if(sam) {
+					} else if(sam && !(sam & 2096)) {
 						stats[4] |= 4;
 						stats[1] = stats[4];
 						header->seq[header->len - 1] = 0;
@@ -971,7 +971,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 								header->seq[header->len - 1] = 0;
 								samwrite(qseq, header, 0, template_name, aligned, stats);
 							}
-						} else if(sam) {
+						} else if(sam && !(sam & 2096)) {
 							/* here */
 							stats[1] = read_score;
 							stats[2] = start;
@@ -987,7 +987,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 								samwrite(qseq, header, 0, template_name, 0, stats);
 							}
 						}
-					} else if(sam) {
+					} else if(sam && !(sam & 2096)) {
 						stats[4] |= 4;
 						stats[1] = stats[4];
 						header->seq[header->len - 1] = 0;
@@ -1115,10 +1115,29 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	return NULL;
 }
 
-void skip_assemble_KMA(int template, int sam, int t_len, char *template_name, int file_count, FILE **files, Assem *aligned_assem, Qseqs *qseq, Qseqs *header) {
+void * skip_assemble_KMA(void *arg) {
 	
-	int nextTemplate, file_i, status, stats[5], buffer[8];
-	FILE *file;
+	Assemble_thread *thread = arg;
+	int template, t_len, sam, nextTemplate, file_count, file_i, status;
+	int stats[5], buffer[8];
+	char *template_name;
+	FILE *file, **files;
+	Assem *aligned_assem;
+	Qseqs *qseq, *header;
+	
+	if((template = thread->template) < 0) {
+		return NULL;
+	}
+	
+	/* get input */
+	sam = thread->sam;
+	t_len = thread->template_index->len;
+	template_name = thread->template_name;
+	file_count = thread->file_count;
+	files = thread->files;
+	aligned_assem = thread->aligned_assem;
+	qseq = thread->qseq;
+	header = thread->header;
 	
 	aligned_assem->cover = 0;
 	aligned_assem->depth = 0;
@@ -1188,4 +1207,8 @@ void skip_assemble_KMA(int template, int sam, int t_len, char *template_name, in
 			++file_i;
 		}
 	}
+	
+	aligned_assem->cover = 0; 
+	aligned_assem->aln_len = (1 - exp((-1.0) * aligned_assem->depth / t_len)) * t_len; // expected coverage from depth
+	return NULL;
 }

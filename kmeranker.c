@@ -25,8 +25,8 @@
 KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include) {
 	
 	/* get set of best templates and silences the chain, except for the initial anker */
-	int i, j, template, score, bestScore, Wl, W1, U, M, MM, gaps;
-	int start, end, pos, SU;
+	int i, j, template, score, tmpScore, bestScore, Wl, W1, U, M, MM, gaps;
+	int start, end, pos, SU, nextAnker;
 	unsigned *values;
 	short unsigned *values_s;
 	KmerAnker *node, *prev;
@@ -64,9 +64,11 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 	bestScore = src->score;
 	values_s = 0;
 	values = 0;
+	nextAnker = 1;
+	prev = src;
 	
 	/* get chaining scores */
-	for(node = src; node; node = node->next) {
+	for(node = src; nextAnker; --node) {
 		if(SU) {
 			values_s = (short unsigned *) node->values;
 			i = *values_s + 1;
@@ -88,12 +90,7 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 				
 				/* extend chain */
 				if(pos == 0) {
-					if(node->cStart) {
-						score = W1 + (node->cStart - 1) * U;
-						score = node->weight + (Wl < score ? score : Wl);
-					} else {
-						score = node->weight;
-					}
+					score = node->weight;
 				} else {
 					if(gaps < 0) {
 						if(gaps == -kmersize) {
@@ -108,24 +105,33 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 					} else if((MM * 2 + (gaps - 2) * M) < 0) {
 						score += node->weight + (MM * 2 + (gaps - 2) * M);
 					} else {
-						score += node->weight - log(gaps * M);
+						score += node->weight - gaps * M;
 					}
-					
-					/* verify extension */
-					if(score < 0 || score == bestScore) {
-						include[template] = 0;
+					/* mark as used */
+					node->score = 0;
+				}
+				/* verify extension */
+				if(score < 0) {
+					include[template] = 0;
+				} else if(bestScore <= score) {
+					/* test if anker is finalising the chain */
+					if(node->start) {
+						tmpScore = W1 + (node->start - 1) * U;
+						tmpScore = score + (Wl < tmpScore ? tmpScore : Wl);
+					} else {
+						tmpScore = score;
+					}
+					if(tmpScore == bestScore) {
+						score = bestScore;
+						nextAnker = 0;
+						prev = node;
 					}
 				}
 				extendScore[template] = start;
 				Score[template] = score;
 			}
 		}
-		
-		/* mark as used */
-		node->score = 0;
-		prev = node;
 	}
-	src->score = bestScore;
 	
 	/* get best templates */
 	j = 0;
@@ -144,14 +150,14 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 	return prev;
 }
 
-KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize, double mrs) {
+KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize) {
 	
 	KmerAnker *node, *prev;
 	
 	if(!V_score || !V_score->score) {
 		return 0;
 	}
-	while((V_score->score < kmersize || V_score->score < mrs * (V_score->end - V_score->cStart)) && (V_score = V_score->descend));
+	while(V_score->score < kmersize && (V_score = V_score->descend));
 	
 	if(!V_score) {
 		return 0;
@@ -159,7 +165,7 @@ KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize, double mrs) {
 	prev = V_score;
 	node = V_score->descend;
 	while(node) {
-		if(kmersize <= node->score && mrs * (node->end - node->cStart) <= node->score) {
+		if(kmersize <= node->score) {
 			prev->descend = node;
 			prev = node;
 		}
@@ -189,14 +195,10 @@ KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties) {
 			best = node;
 			*ties = 0;
 		} else if(best->score == node->score) {
-			if((node->end - node->start) < (best->end - best->cStart)) {
-				best = node;
-				*ties = 0;
-			} else if((node->end - node->start) == (best->end - best->cStart)) {
-				best = node;
-				++*ties;
-			}
-		} else if(node->score != 0) {
+			best = node;
+			++*ties;
+		}
+		if(node->score != 0) {
 			prev->descend = node;
 			prev = node;
 		}
@@ -207,15 +209,15 @@ KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties) {
 	return best;
 }
 
-KmerAnker * getTieAnker(int stop, KmerAnker *src, int score, int len) {
+KmerAnker * getTieAnker(int stop, KmerAnker *src, int score) {
 	
 	if(!src || src->start == stop) {
 		return 0;
 	}
 	
 	/* search downwards */
-	while((--src)->start != stop) {
-		if(src->score == score && (src->end - src->cStart) == len) {
+	while(stop < (--src)->start) {
+		if(src->score == score) {
 			return src;
 		}
 	}

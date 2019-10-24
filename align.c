@@ -237,9 +237,11 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		q_s = 0;
 		q_e = i;
 		if((q_e << 1) < t_e || (q_e + 64) < t_e) { // big leading template gap, cut down
-			t_s = t_e - MIN(64, (q_e << 1));
+			//t_s = t_e - MIN(64, (q_e << 1));
+			t_s = t_e - (q_e + (q_e < 64 ? q_e : 64));
 		} else if((t_e << 1) < q_e || (t_e + 64) < q_e) { // big leading query gap, cut down
-			q_s = q_e - MIN(64, (t_e << 1));
+			//q_s = q_e - MIN(64, (t_e << 1));
+			q_s = q_e - (t_e + (t_e < 64 ? t_e : 64));
 		}
 		
 		/* align */
@@ -366,9 +368,13 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	q_e = q_len;
 	t_e = t_len;
 	if(((q_len - q_s) << 1) < (t_len - t_s) || (q_len - q_s + 64) < (t_len - t_s)) { // big trailing template gap, cut down
-		t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+		//t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+		t_e = q_len - q_s;
+		t_e = t_s + (t_e + (t_e < 64 ? t_e : 64));
 	} else if(((t_len - t_s) << 1) < (q_len - q_s) || (t_len - t_s + 64) < (q_len - q_s)) { // big leading query gap, cut down
-		q_e = q_s + MIN(64, ((t_len - t_s) << 1));
+		//q_e = q_s + MIN(64, ((t_len - t_s) << 1));
+		q_e = t_len - t_s;
+		q_e = q_s + (q_e + (q_e < 64 ? q_e : 64));
 	}
 	
 	/* align trailing gap */

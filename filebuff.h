@@ -38,6 +38,8 @@ struct fileBuff {
 #define ENABLE_ZLIB_GZIP 32
 #endif
 
+/* pointer to load buffer from a regular or gz file stream */
+extern int (*buffFileBuff)(FileBuff *);
 int BuffgzFileBuff(FileBuff *dest);
 void init_gzFile(FileBuff *inputfile);
 FileBuff * setFileBuff(int buffSize);

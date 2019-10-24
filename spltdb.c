@@ -1528,6 +1528,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	if(extendedFeatures == 2) {
 		getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
 	}
+	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
+		alignLoadPtr = &alignLoad_skip;
+	}
+	
 	for(template = 1; template < DB_size; ++template) {
 		if(template == *dbBiases) {
 			/* swap indexes */
@@ -1649,9 +1653,18 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				/* destroy this DB index */
 				destroyPtr(thread->template_index);
 			} else {
-				if(sam || ID_t == 0.0) {
+					if(sam || ID_t == 0.0) {
+						if(index_in) {
+						index_seeker *= sizeof(int);
+						lseek(index_in_no, index_seeker, SEEK_CUR);
+						index_seeker = 0;
+					}
+					seq_seeker *= sizeof(long unsigned);
+					lseek(seq_in_no, seq_seeker, SEEK_CUR);
+					seq_seeker = 0;
+					thread->template_index = alignLoadPtr(thread->template_index, seq_in_no, index_in_no, template_lengths[template], kmersize, 0, 0);
 					thread->template_name = nameLoad(template_name, name_file);
-					skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
+					skip_assemble_KMA(thread);
 					if(ID_t == 0.0) {
 						depth = aligned_assem->depth;
 						depth /= t_len;

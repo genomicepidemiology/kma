@@ -119,11 +119,12 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
 	fprintf(helpOut, "#\t-ef\t\tPrint additional features\tFalse\n");
 	fprintf(helpOut, "#\t-vcf\t\tMake vcf file, 2 to apply FT\tFalse/0\n");
-	fprintf(helpOut, "#\t-sam\t\tOutput sam to stdout, 4 to \n#\t\t\tonly outputmapped reads\t\tFalse/0\n");
+	fprintf(helpOut, "#\t-sam\t\tOutput sam to stdout, 4 to \n#\t\t\tonly output mapped reads, \n#\t\t\t2096 for aligned\t\tFalse/0\n");
 	fprintf(helpOut, "#\t-nc\t\tNo consensus file\t\tFalse\n");
 	fprintf(helpOut, "#\t-nf\t\tNo frag file\t\tFalse\n");
 	fprintf(helpOut, "#\t-deCon\t\tRemove contamination\t\tFalse\n");
 	fprintf(helpOut, "#\t-dense\t\tDo not allow insertions\n#\t\t\tin assembly\t\t\tFalse\n");
+	fprintf(helpOut, "#\t-sasm\t\tSkip assembly\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-ref_fsa\tConsensus sequnce will\n#\t\t\thave \"n\" instead of gaps\tFalse\n");
 	fprintf(helpOut, "#\t-matrix\t\tPrint assembly matrix\t\tFalse\n");
 	fprintf(helpOut, "#\t-a\t\tPrint all best mappings\t\tFalse\n");
@@ -245,25 +246,6 @@ int kma_main(int argc, char *argv[]) {
 		Mt1 = 0;
 		inputfiles = 0;
 		deConPrintPtr = printPtr;
-		/*
-		assembly_KMA_Ptr = &assemble_KMA_threaded;
-		cmp = &cmp_or;
-		kmerScan = &save_kmers_HMM;
-		get_kmers_for_pair_ptr = &get_kmers_for_pair;
-		save_kmers_pair = &save_kmers_unionPair;
-		alnFragsPE = &alnFragsUnionPE;
-		printPairPtr = &printPair;
-		printPtr = &print_ankers;
-		printFsa_pair_ptr = &printFsa_pair;
-		ankerPtr = &ankerAndClean;
-		alignLoadPtr = &alignLoad_fly;
-		destroyPtr = &alignClean;
-		printFsa_ptr = &printFsa;
-		significantBase = &significantNuc; //-bc
-		baseCall = &baseCaller;
-		chainSeedsPtr = &chainSeeds;
-		deConPrintPtr = printPtr;
-		*/
 		
 		/* PARSE COMMAND LINE OPTIONS */
 		args = 1;
@@ -511,6 +493,8 @@ int kma_main(int argc, char *argv[]) {
 				}
 			} else if(strcmp(argv[args], "-dense") == 0) {
 				assembly_KMA_Ptr = &assemble_KMA_dense_threaded;
+			} else if(strcmp(argv[args], "-sasm") == 0) {
+				assembly_KMA_Ptr = &skip_assemble_KMA;
 			} else if(strcmp(argv[args], "-matrix") == 0) {
 				print_matrix = 1;
 			} else if(strcmp(argv[args], "-a") == 0) {

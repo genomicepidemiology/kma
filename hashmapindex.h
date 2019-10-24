@@ -51,6 +51,7 @@ HashMap_index * alignLoad_fly(HashMap_index *dest, int seq_in, int index_in, int
 HashMap_index * alignLoad_fly_mem(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index);
 HashMap_index * alignLoad_fly_build(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index);
 HashMap_index * alignLoad_fly_build_mem(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index);
+HashMap_index * alignLoad_skip(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index);
 HashMap_index * alignLoad_fly_shm(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index);
 HashMap_index * alignLoad_shm_initial(char *templatefilename, int file_len, int seq_in, int index_in, int kmersize);
 void alignClean(HashMap_index *template_index);

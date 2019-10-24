@@ -1157,6 +1157,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	thread->points->len = 0;
 	thread->next = 0;
 	thread->spin = (sparse < 0) ? 10 : 100;
+	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
+		alignLoadPtr = &alignLoad_skip;
+	}
 	
 	/* Do local assemblies of fragments mapping to the same template */
 	depth = 0;
@@ -1222,12 +1225,17 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			} else {
 				if(sam || ID_t == 0.0) {
 					thread->template_name = nameLoad(template_name, name_file);
-					skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
+					thread->template = template;
+					assembly_KMA_Ptr(thread);
+					//skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
 					if(ID_t == 0.0) {
 						depth = aligned_assem->depth;
 						depth /= t_len;
+						aln_len = aligned_assem->aln_len;
+						cover = 100.0 * aln_len / t_len;
+						q_cover = 100.0 * t_len / aln_len;
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
-							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
+							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
 							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
@@ -2240,6 +2248,10 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		fprintf(stderr, "# Progress:\t%3d%%\r", 0);
 		fflush(stderr);
 	}
+	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
+		alignLoadPtr = &alignLoad_skip;
+	}
+	
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
 			if(progress) {
@@ -2316,13 +2328,29 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				destroyPtr(thread->template_index);
 			} else {
 				if(sam || ID_t == 0.0) {
+					/* load DB */
+					if(index_in) {
+						index_seeker *= sizeof(int);
+						lseek(index_in_no, index_seeker, SEEK_CUR);
+						index_seeker = 0;
+					}
+					seq_seeker *= sizeof(long unsigned);
+					lseek(seq_in_no, seq_seeker, SEEK_CUR);
+					seq_seeker = 0;
+					thread->template_index = alignLoad_skip(thread->template_index, seq_in_no, index_in_no, template_lengths[template], kmersize, 0, 0);
 					thread->template_name = nameLoad(template_name, name_file);
-					skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
+					thread->template = template;
+					skip_assemble_KMA(thread);
+					//skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
+					
 					if(ID_t == 0.0) {
 						depth = aligned_assem->depth;
 						depth /= t_len;
+						aln_len = aligned_assem->aln_len;
+						cover = 100.0 * aln_len / t_len;
+						q_cover = 100.0 * t_len / aln_len;
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
-							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
+							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
 							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}

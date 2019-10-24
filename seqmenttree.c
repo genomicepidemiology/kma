@@ -91,23 +91,11 @@ unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node) {
 			node->covered = node->end - node->start;
 			covered = addSeqmentTrees(root->branch[1], node);
 			
-			/* here */
-			if(node->covered) {
-				fprintf(stderr, "I was wrong about split seqmenttrees.\n");
-				exit(1);
-			}
-			
 			/* calculate left side */
 			node->start = pos;
 			node->end = root->branch[0]->end;
 			node->covered = node->end - node->start;
 			root->covered = covered + addSeqmentTrees(root->branch[0], node);
-			
-			/* here */
-			if(node->covered) {
-				fprintf(stderr, "I was wrong about split seqmenttrees.\n");
-				exit(1);
-			}
 		}
 	} else if((pos = node->end < root->start) || (pos = root->end < node->start)) { /* new leaf */
 		/* create and grow bud */
@@ -166,10 +154,16 @@ void growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end)
 unsigned queSeqmentTree(SeqmentTrees *src, const unsigned start, const unsigned end) {
 	
 	if(end < src->start || src->end < start) {
+		/* miss */
 		return 0;
-	} else if(src->start <= start && end <= src->end) {
+	} else if(start <= src->start && src->end <= end) {
+		/* leaf covered by query */
 		return src->covered;
-	} else {
+	} else if(*(src->branch)) {
+		/* check next */
 		return queSeqmentTree(src->branch[0], start, end) + queSeqmentTree(src->branch[1], start, end);
+	} else {
+		/* query covered by leaf */
+		return end - start;
 	}
 }

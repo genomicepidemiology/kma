@@ -327,6 +327,14 @@ HashMap_index * alignLoad_fly_build_mem(HashMap_index *dest, int seq_in, int ind
 	return hashMap_index_build(dest, seq_in, len, kmersize);
 }
 
+HashMap_index * alignLoad_skip(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index) {
+	
+	dest->len = len;
+	dest->kmerindex = kmersize;
+	
+	return dest;
+}
+
 HashMap_index * alignLoad_fly_shm(HashMap_index *dest, int seq_in, int index_in, int len, int kmersize, long unsigned seq_index, long unsigned index_index) {
 	
 	static HashMap_index *src = 0;

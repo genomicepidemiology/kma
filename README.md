@@ -10,7 +10,7 @@ cd kma && make
 ```
 
 # Introduction #
-KMA is mapping a method designed to map raw reads directly against redundant databases, in an 
+KMA is a mapping method designed to map raw reads directly against redundant databases, in an 
 ultra-fast manner using seed and extend. KMA is particulary good at aligning 
 high quality reads against highly redundant databases, where unique matches often does 
 not exist. It works for long low quality reads as well, such as those from Nanopore. 
