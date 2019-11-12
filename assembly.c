@@ -599,6 +599,7 @@ void * assemble_KMA_threaded(void *arg) {
 				++file_i;
 			}
 		}
+		
 		lock(excludeIn);
 		--thread_wait;
 		unlock(excludeIn);
@@ -618,6 +619,7 @@ void * assemble_KMA_threaded(void *arg) {
 		
 		return NULL;
 	}
+	
 	/* diff */
 	/* pre on dense */
 	/* Pepare and make alignment on consensus */
@@ -697,7 +699,6 @@ void * assemble_KMA_threaded(void *arg) {
 		pos = assembly[pos].next;
 	}
 	
-
 	/* Trim alignment on consensus */
 	coverScore = 0;
 	bias = 0;
@@ -724,7 +725,6 @@ void * assemble_KMA_threaded(void *arg) {
 	aligned_assem->depthVar = depthVar;
 	aligned_assem->len = asm_len;
 	aligned_assem->aln_len = aln_len;
-	
 	return NULL;
 }
 

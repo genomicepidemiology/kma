@@ -117,7 +117,7 @@ int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char 
 	return n;
 }
 
-char ** load_DBs_Sparse(char *templatefilename, int **template_lengths, int **template_ulengths, unsigned shm) {
+char ** load_DBs_Sparse(char *templatefilename, unsigned **template_lengths, unsigned **template_ulengths, unsigned shm) {
 	
 	/* load DBs needed for KMA */
 	int file_len, shmid, DB_size;
@@ -314,9 +314,10 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *exePrev, int ID_t, double evalue, char ss, unsigned shm) {
 	
 	int i, file_len, stop, template, score, tmp_score, status, contamination;
-	int score_add, score_tot_add, deCon, *SearchList, *Scores, *Scores_tot;
-	int *w_Scores, *w_Scores_tot, *template_lengths, *template_ulengths;
-	unsigned Ntot;
+	int score_add, score_tot_add, deCon;
+	unsigned *Scores, *Scores_tot, *w_Scores, *w_Scores_tot, *SearchList;
+	unsigned *template_lengths, *template_ulengths;
+	long unsigned Ntot;
 	char **template_names;
 	double expected, q_value, p_value, etta, depth, cover, query_cover;
 	double tot_depth, tot_cover, tot_query_cover, tmp_depth, tmp_cover;
@@ -436,7 +437,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 		deConTable = Collecter[1];
 		free(Collecter);
 		
-		fprintf(stderr, "# Total number of matches: %d of %d kmers\n", Nhits.tot, Ntot);
+		fprintf(stderr, "# Total number of matches: %lu of %lu kmers\n", Nhits.tot, Ntot);
 		/* copy scores */
 		w_Scores = smalloc(templates->DB_size * sizeof(int));
 		w_Scores_tot = smalloc(templates->DB_size * sizeof(int));
@@ -618,7 +619,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 		/* collect scores */
 		kmerList = collect_Kmers(templates, Scores, Scores_tot, foundKmers, &Nhits);
 		
-		fprintf(stderr, "# Total number of matches: %d of %d kmers\n", Nhits.tot, Ntot);
+		fprintf(stderr, "# Total number of matches: %lu of %lu kmers\n", Nhits.tot, Ntot);
 		/* copy scores */
 		w_Scores = smalloc(templates->DB_size * sizeof(int));
 		w_Scores_tot = smalloc(templates->DB_size * sizeof(int));

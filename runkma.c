@@ -1248,6 +1248,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			nameSkip(name_file, end);
 		}
 	}
+	
 	/* join threads */
 	thread->template = -1;
 	assembly_KMA_Ptr(thread);

@@ -250,9 +250,16 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
 			} else {
-				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 				/* here */
+				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 				//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
+				/*
+				if(t_s == 0) {
+					NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
+				} else {
+					NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
+				}
+				*/
 			}
 			
 			/* trim leading gaps */
@@ -588,9 +595,11 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 		q_s = 0;
 		q_e = i;
 		if((q_e << 1) < t_e || (q_e + 64) < t_e) { // big leading template gap, cut down
-			t_s = t_e - MIN(64, (q_e << 1));
+			//t_s = t_e - MIN(64, (q_e << 1));
+			t_s = t_e - (q_e + (q_e < 64 ? q_e : 64));
 		} else if((t_e << 1) < q_e || (t_e + 64) < q_e) { // big leading query gap, cut down
-			q_s = q_e - MIN(64, (t_e << 1));
+			//q_s = q_e - MIN(64, (t_e << 1));
+			q_s = q_e - (t_e + (t_e < 64 ? t_e : 64));
 		}
 		
 		/* align */
@@ -681,9 +690,13 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	q_e = q_len;
 	t_e = t_len;
 	if((t_len - t_s) > (q_len - q_s + 64) || (t_len - t_s) > ((q_len - q_s) << 1)) { // big trailing template gap, cut down
-		t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+		//t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+		t_e = q_len - q_s;
+		t_e = t_s + (t_e + (t_e < 64 ? t_e : 64));
 	} else if ((q_len - q_s) > (t_len - t_s + 64) || (q_len - q_s) > ((t_len - t_s) << 1)) { // big leading query gap, cut down
-		q_e = q_s + MIN(64, ((t_len - t_s) << 1));
+		//q_e = q_s + MIN(64, ((t_len - t_s) << 1));
+		q_e = t_len - t_s;
+		q_e = q_s + (q_e + (q_e < 64 ? q_e : 64));
 	}
 	
 	/* align trailing gap */

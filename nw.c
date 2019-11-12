@@ -245,8 +245,8 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	
 	/* make back tracking */
 	m = pos[0];
-	E_ptr = E + (m * (q_len + 1));
 	n = pos[1];
+	E_ptr = E + (m * (q_len + 1));
 	nuc_pos = m + t_s;
 	Stat.len = 0;
 	Stat.gaps = 0;
@@ -318,7 +318,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	aligned->end = 0;
 	template_length = aligned->pos;
 	if(t_len < 0) {
-		t_len += aligned->pos;
+		t_len += template_length;
 	}
 	query = (unsigned char*)(queryOrg + q_s);
 	
@@ -390,7 +390,6 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	E_ptr = E + (t_len * (bq_len + 1));
 	c_pos = (t_len + q_len) >> 1;
 	
-	
 	sn = q_len - 1 - (c_pos - halfBand);
 	if(k != 2) {
 		for(n = sn - 1; n >= 0; --n) {
@@ -410,7 +409,6 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		}
 	}
 	E_ptr -= (bq_len + 1);
-	
 	
 	/* Perform banded NW */
 	pos[0] = 0;
@@ -530,7 +528,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		/* continue as usual */
 		E_ptr -= (bq_len + 1);
 		
-		if(k < 0 && Stat.score <= D_ptr[n]) {
+		if(eq == 0 && k < 0 && Stat.score <= D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
 			pos[1] = n;
@@ -547,26 +545,20 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	E_ptr = E;
 	
 	/* get start position of alignment */
-	if(k < 0) {
-		q_pos = pos[0];
-		if(pos[0] == 0) {
-			pos[1] = en;
-		}
-		if(k == -2) {
-			for(n = en; n < bq_len; ++n) {
-				if(D_prev[n] > Stat.score) {
-					Stat.score = D_prev[n];
-					q_pos = 0;
-					pos[0] = 0;
-					pos[1] = (aligned->start = n);
-				}
+	q_pos = 0;
+	if(pos[0] == 0) {
+		pos[1] = en;
+		Stat.score = D_prev[en];
+	}
+	if(k == -2) {
+		for(n = en; n < bq_len; ++n) {
+			if(D_prev[n] > Stat.score) {
+				Stat.score = D_prev[n];
+				pos[0] = 0;
+				pos[1] = n;
+				q_pos = n;
 			}
 		}
-	} else {
-		Stat.score = D_prev[en];
-		q_pos = 0;
-		pos[0] = 0;
-		pos[1] = en;
 	}
 	aligned->start = q_pos;
 	
@@ -941,7 +933,6 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	E_ptr = E + (t_len * (bq_len + 1));
 	c_pos = (t_len + q_len) >> 1;
 	
-	
 	sn = q_len - 1 - (c_pos - halfBand);
 	if(k != 2) {
 		for(n = sn - 1; n >= 0; --n) {
@@ -1081,7 +1072,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 		/* continue as usual */
 		E_ptr -= (bq_len + 1);
 		
-		if(k < 0 && Stat.score <= D_ptr[n]) {
+		if(eq == 0 && k < 0 && Stat.score <= D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
 			pos[1] = n;
@@ -1098,28 +1089,21 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	E_ptr = E;
 	
 	/* get start position of alignment */
-	if(k < 0) {
-		q_pos = pos[0];
-		if(pos[0] == 0) {
-			pos[1] = en;
-		}
-		if(k == -2) {
-			for(n = en; n < bq_len; ++n) {
-				if(D_prev[n] > Stat.score) {
-					Stat.score = D_prev[n];
-					q_pos = 0;
-					pos[0] = 0;
-					pos[1] = n;
-				}
+	q_pos = 0;
+	if(pos[0] == 0) {
+		pos[1] = en;
+		Stat.score = D_prev[en];
+	}
+	if(k == -2) {
+		for(n = en; n < bq_len; ++n) {
+			if(D_prev[n] > Stat.score) {
+				Stat.score = D_prev[n];
+				pos[0] = 0;
+				pos[1] = n;
+				q_pos = n;
 			}
 		}
-	} else {
-		Stat.score = D_prev[en];
-		q_pos = 0;
-		pos[0] = 0;
-		pos[1] = en;
 	}
-	
 	
 	/* back tracking */
 	m = pos[0];
