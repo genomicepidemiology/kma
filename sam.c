@@ -16,7 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
+#define _XOPEN_SOURCE 600
 #include <stdio.h>
 #include <stdlib.h>
 #include "nw.h"

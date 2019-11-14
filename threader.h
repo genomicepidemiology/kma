@@ -18,12 +18,17 @@
 */
 
 #define _XOPEN_SOURCE 600
-#include <pthread.h>
+#if _POSIX_C_SOURCE >= 199309L
+#include <time.h>
+#define sleepSpec(time)((struct timespec[]){{0, time}})
+#define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(sleepSpec(100000),NULL);}}
+#define lockTime(exclude, time) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(sleepSpec(1000 * time),NULL);}}
+#define unlock(exclude) (__sync_lock_release(exclude))
+#define wait_atomic(src) while(src) {nanosleep(sleepSpec(100000),NULL);}
+#else
 #include <unistd.h>
-
-int usleep(unsigned usec);
-
 #define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {usleep(100);}}
 #define lockTime(exclude, spin) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {usleep(spin);}}
 #define unlock(exclude) (__sync_lock_release(exclude))
 #define wait_atomic(src) while(src) {usleep(100);}
+#endif
