@@ -972,7 +972,6 @@ void * assemble_KMA_dense_threaded(void *arg) {
 								samwrite(qseq, header, 0, template_name, aligned, stats);
 							}
 						} else if(sam && !(sam & 2096)) {
-							/* here */
 							stats[1] = read_score;
 							stats[2] = start;
 							stats[3] = end;

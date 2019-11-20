@@ -250,16 +250,8 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
 			} else {
-				/* here */
 				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
 				//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
-				/*
-				if(t_s == 0) {
-					NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
-				} else {
-					NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
-				}
-				*/
 			}
 			
 			/* trim leading gaps */

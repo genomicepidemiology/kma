@@ -584,7 +584,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				start = 0;
 				end = 0;
 				/* iterate hits */
-				for(i = 0; i < bestHits; ++i) {
+				for(i = 0; i != bestHits; ++i) {
 					tmp_tmp_template = bestTemplates[i];
 					tmp_start = best_start_pos[i];
 					tmp_end = best_end_pos[i];
@@ -727,7 +727,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				best_read_score = 0;
 				bestNum = 0;
 				/* iterate hits */
-				for(i = 0; i < bestHits; ++i) {
+				for(i = 0; i != bestHits; ++i) {
 					tmp_tmp_template = bestTemplates[i];
 					if(tmp_tmp_template < 0) {
 						tmp_template = -tmp_tmp_template;
@@ -893,7 +893,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i < bestHits; ++i) {
+					for(i = 0; i != bestHits; ++i) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
@@ -916,7 +916,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					bestNum = 0;
 					
 					/* iterate hits */
-					for(i = 0; i < bestHits; ++i) {
+					for(i = 0; i != bestHits; ++i) {
 						tmp_tmp_template = bestTemplates[i];
 						tmp_start = best_start_pos[i];
 						tmp_end = best_end_pos[i];
@@ -1611,7 +1611,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				start = 0;
 				end = 0;
 				/* iterate hits */
-				for(i = 0; i < bestHits; ++i) {
+				for(i = 0; i != bestHits; ++i) {
 					tmp_tmp_template = bestTemplates[i];
 					tmp_start = best_start_pos[i];
 					tmp_end = best_end_pos[i];
@@ -1754,7 +1754,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				best_read_score = 0;
 				bestNum = 0;
 				/* iterate hits */
-				for(i = 0; i < bestHits; ++i) {
+				for(i = 0; i != bestHits; ++i) {
 					tmp_tmp_template = bestTemplates[i];
 					if(tmp_tmp_template < 0) {
 						tmp_template = -tmp_tmp_template;
@@ -1920,7 +1920,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i < bestHits; ++i) {
+					for(i = 0; i != bestHits; ++i) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
@@ -1943,7 +1943,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					bestNum = 0;
 					
 					/* iterate hits */
-					for(i = 0; i < bestHits; ++i) {
+					for(i = 0; i != bestHits; ++i) {
 						tmp_tmp_template = bestTemplates[i];
 						tmp_start = best_start_pos[i];
 						tmp_end = best_end_pos[i];

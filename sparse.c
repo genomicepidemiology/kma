@@ -331,7 +331,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	CompKmers *Kmers;
 	
 	/* here */
-	// split input up
+	/* split input up */
 	
 	/* open pipe */
 	//inputfile = popen(exePrev, "r");

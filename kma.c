@@ -157,6 +157,11 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-gapopen\tPenalty for gap opening\t\t-3\n");
 	fprintf(helpOut, "#\t-gapextend\tPenalty for gap extension\t-1\n");
 	fprintf(helpOut, "#\t-per\t\tReward for pairing reads\t7\n");
+	/* here */
+	//fprintf(helpOut, "#\t-localopen\t\tPenalty for openning a local alignment\t-6\n");
+	fprintf(helpOut, "#\t-Npenalty\tPenalty matching N\t\t-1\n");
+	fprintf(helpOut, "#\t-transition\tPenalty for transition\t\t-2\n");
+	fprintf(helpOut, "#\t-transversion\tPenalty for transversion\t-2\n");
 	fprintf(helpOut, "#\t-cge\t\tSet CGE penalties and rewards\tFalse\n");
 	fprintf(helpOut, "#\t-t\t\tNumber of threads\t\t1\n");
 	fprintf(helpOut, "#\t-v\t\tVersion\n");
@@ -509,7 +514,6 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-ck") == 0) {
 				get_kmers_for_pair_ptr = &get_kmers_for_pair_count;
 			} else if(strcmp(argv[args], "-proxi") == 0) {
-				/* here */
 				if(++args < argc) {
 					support = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0 || support < 0 || 1 < support) {
@@ -648,7 +652,6 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 			} else if(strcmp(argv[args], "-localopen") == 0) {
-				/* here */
 				/* add to help */
 				++args;
 				if(args < argc) {
@@ -660,7 +663,6 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 			} else if(strcmp(argv[args], "-Npenalty") == 0) {
-				/* here */
 				/* add to help */
 				++args;
 				if(args < argc) {
@@ -682,7 +684,6 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 			} else if(strcmp(argv[args], "-transition") == 0) {
-				/* here */
 				/* add to help */
 				++args;
 				if(args < argc) {
@@ -694,7 +695,6 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 			} else if(strcmp(argv[args], "-transversion") == 0) {
-				/* here */
 				/* add to help */
 				++args;
 				if(args < argc) {

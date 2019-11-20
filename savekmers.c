@@ -4228,8 +4228,7 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, char *include
 		}
 	}
 	
-	/* here */
-	// make sure cuts isn't random seeds
+	/* make sure cuts isn't random seeds */
 	if(minFrac) {
 		proxiScore = minFrac * bestScore;
 		bestCov = 1.0 * proxiScore / bestHitsCov;

@@ -358,9 +358,6 @@ HashMap_index * alignLoad_fly_shm(HashMap_index *dest, int seq_in, int index_in,
 
 HashMap_index * alignLoad_shm_initial(char *templatefilename, int file_len, int seq_in, int index_in, int kmersize) {
 	
-	/* here */
-	/* join all of them as one */
-	
 	key_t key;
 	int shmid;
 	HashMap_index *dest;

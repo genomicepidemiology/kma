@@ -106,12 +106,12 @@ int compDNAref(CompDNA *compressor, unsigned char *qseq, int seqlen) {
 		++bias;
 	}
 	seqlen -= bias;
+	
 	/* trim trailing N's */
-	--seqlen;
-	while(seq[seqlen] == 4) {
-		--seqlen;
+	if(seqlen) {
+		while(seq[--seqlen] == 4);
+		++seqlen;
 	}
-	++seqlen;
 	
 	compressor->seqlen = seqlen;
 	if(seqlen & 31) {

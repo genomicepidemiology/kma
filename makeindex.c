@@ -92,7 +92,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 		/* open file */
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
-		if((FASTQ = openAndDetermine(inputfile, filename)) & 3) {
+		if((FASTQ = openAndDetermine(inputfile, filename)) & 2) {
 			fprintf(stderr, "%s\t%s\n", "# Reading inputfile: ", filename);
 			
 			/* parse the file */
@@ -102,7 +102,8 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 					allocComp(compressor, qseq->len << 1);
 				}
 				bias = compDNAref(compressor, qseq->seq, qseq->len);
-				if(qseq->len > MinLen && update_DB(templates, compressor, templates->DB_size, MinKlen, homQ, homT, *template_ulengths, *template_slengths)) {
+				
+				if(compressor->seqlen > MinLen && update_DB(templates, compressor, templates->DB_size, MinKlen, homQ, homT, *template_ulengths, *template_slengths)) {
 					/* Update annots */
 					seq = header->seq + header->len;
 					while(isspace(*--seq)) {
@@ -114,7 +115,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 						fprintf(name_out, "%s\n", header->seq + 1);
 					}
 					updateAnnotsPtr(compressor, templates->DB_size, kmerindex, seq_out, index_out, template_lengths, template_ulengths, template_slengths);
-					/* here */
+					
 					fprintf(stderr, "# Added:\t%s\n", header->seq + 1);
 					
 					if(++(templates->DB_size) == USHRT_MAX) {
@@ -125,13 +126,16 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 					fprintf(stderr, "# Skipped:\t%s\n", header->seq + 1);
 				}
 			}
-			
-			/* close file buffer */
-			if(FASTQ & 4) {
-				gzcloseFileBuff(inputfile);
-			} else {
-				closeFileBuff(inputfile);
-			}
+		} else {
+			fprintf(stderr, "Unsupported format for file:\t%s\n", filename);
+			exit(1);
+		}
+		
+		/* close file buffer */
+		if(FASTQ & 4) {
+			gzcloseFileBuff(inputfile);
+		} else {
+			closeFileBuff(inputfile);
 		}
 	}
 	

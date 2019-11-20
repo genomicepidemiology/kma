@@ -860,7 +860,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				start = 0;
 				end = 0;
 				/* iterate hits */
-				for(i = 0; i < bestHits; ++i) {
+				for(i = 0; i != bestHits; ++i) {
 					tmp_tmp_template = bestTemplates[i];
 					tmp_start = best_start_pos[i];
 					tmp_end = best_end_pos[i];
@@ -1003,7 +1003,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				best_read_score = 0;
 				bestNum = 0;
 				/* iterate hits */
-				for(i = 0; i < bestHits; ++i) {
+				for(i = 0; i != bestHits; ++i) {
 					tmp_tmp_template = bestTemplates[i];
 					if(tmp_tmp_template < 0) {
 						tmp_template = -tmp_tmp_template;
@@ -1169,7 +1169,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i < bestHits; ++i) {
+					for(i = 0; i != bestHits; ++i) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
@@ -1192,7 +1192,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					bestNum = 0;
 					
 					/* iterate hits */
-					for(i = 0; i < bestHits; ++i) {
+					for(i = 0; i != bestHits; ++i) {
 						tmp_tmp_template = bestTemplates[i];
 						tmp_start = best_start_pos[i];
 						tmp_end = best_end_pos[i];
@@ -1341,8 +1341,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
 	if(vcf) {
-		/* here */
-		/* might be done more elegant */
 		templatefilename = 0;
 		initialiseVcf(vcf_out, templatefilename);
 	}
