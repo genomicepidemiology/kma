@@ -18,6 +18,7 @@
 */
 #define _XOPEN_SOURCE 600
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -167,7 +168,7 @@ unsigned char baseCaller(unsigned char bestNuc, unsigned char tNuc, int bestScor
 	} else {
 		/* Use MnNemars test to test significance of the base call */
 		if(significantBase(bestScore, depthUpdate - bestScore, evalue) == 0) {
-			if(bestNuc == '-' && tNuc != '-') {
+			if(bestNuc == '-' && tNuc != '-' && bestScore != depthUpdate) {
 				bestNuc = 'n';
 			} else {
 				bestNuc = tolower(bestNuc);
@@ -213,7 +214,7 @@ unsigned char nanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestScor
 	} else {
 		/* Use MC Neymars test to test significance of the base call */
 		if(significantBase(bestScore, depthUpdate - bestScore, evalue) == 0) {
-			if(bestNuc == '-' && tNuc != '-') {
+			if(bestNuc == '-' && tNuc != '-' && bestScore != depthUpdate) {
 				bestBaseScore = 0;
 				for(j = 0; j < 5; ++j) {
 					if(bestBaseScore < calls->counts[j]) {
@@ -473,7 +474,9 @@ void * assemble_KMA_threaded(void *arg) {
 							while(i < aln_len) {
 								if(aligned->t[i] == 5) { // Template gap, insertion
 									if(t_len <= pos) {
-										assembly[pos].counts[aligned->q[i]]++;
+										if(!++assembly[pos].counts[aligned->q[i]]) {
+											assembly[pos].counts[aligned->q[i]] = USHRT_MAX;
+										}
 										++i;
 										pos = assembly[pos].next;
 									} else {
@@ -517,8 +520,8 @@ void * assemble_KMA_threaded(void *arg) {
 											assembly[pos].counts[2] = 0;
 											assembly[pos].counts[3] = 0;
 											assembly[pos].counts[4] = 0;
-											assembly[pos].counts[5] = myBias;
-											assembly[pos].counts[aligned->q[i]]++;
+											assembly[pos].counts[5] = myBias < USHRT_MAX ? myBias : USHRT_MAX;
+											assembly[pos].counts[aligned->q[i]] = 1;
 											
 											++i;
 										}
@@ -528,7 +531,9 @@ void * assemble_KMA_threaded(void *arg) {
 									assembly[pos].counts[5]++;
 									pos = assembly[pos].next;
 								} else {
-									assembly[pos].counts[aligned->q[i]]++;
+									if(!++assembly[pos].counts[aligned->q[i]]) {
+										assembly[pos].counts[aligned->q[i]] = USHRT_MAX;
+									}
 									++i;
 									pos = assembly[pos].next;
 								}
@@ -651,10 +656,10 @@ void * assemble_KMA_threaded(void *arg) {
 		}
 		
 		/* call query */
-		bestNuc = 5;
-		bestScore = 0;
-		depthUpdate = 0;
-		for(j = 0; j < 6; ++j) {
+		bestNuc = 0;
+		bestScore = assembly[pos].counts[0];
+		depthUpdate = bestScore;
+		for(j = 1; j < 6; ++j) {
 			if(bestScore < assembly[pos].counts[j]) {
 				bestScore = assembly[pos].counts[j];
 				bestNuc = j;
@@ -666,9 +671,9 @@ void * assemble_KMA_threaded(void *arg) {
 		/* check for minor base call */
 		if((bestScore << 1) < depthUpdate) {
 			if(bestNuc == '-') {
-				bestBaseScore = 0;
+				bestBaseScore = assembly[pos].counts[4];
 				bestNuc = 4;
-				for(j = 0; j < 5; ++j) {
+				for(j = 0; j < 4; ++j) {
 					if(bestBaseScore < assembly[pos].counts[j]) {
 						bestBaseScore = assembly[pos].counts[j];
 						bestNuc = j;
@@ -948,7 +953,9 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							/* diff */
 							for(i = 0, pos = start; i < aln_len; ++i) {
 								if(aligned->t[i] == aligned_assem->t[pos]) {
-									assembly[pos].counts[aligned->q[i]]++;
+									if(!++assembly[pos].counts[aligned->q[i]]) {
+										assembly[pos].counts[aligned->q[i]] = USHRT_MAX;	
+									}
 									pos = assembly[pos].next;
 								}
 							}

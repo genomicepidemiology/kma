@@ -24,14 +24,18 @@
 #include "seq2fasta.h"
 #include "update.h"
 
-static int helpmessage() {
+static int helpmessage(FILE *out) {
 	
-	fprintf(stderr, "# For help please use:\n");
-	fprintf(stderr, "#\tkma -h\n");
-	fprintf(stderr, "#\tkma index -h\n");
-	fprintf(stderr, "#\tkma shm -h\n");
-	fprintf(stderr, "#\tkma seq2fasta -h\n");
-	fprintf(stderr, "#\tkma update -h\n");
+	fprintf(out, "# KMA enables alignment towards databases, using two k-mer mapping steps and one alignment step.\n");
+	fprintf(out, "# %16s\t%-32s\n", "Options are:", "Desc:");
+	fprintf(out, "# %16s\t%-32s\n", "", "Alignment and mapping");
+	fprintf(out, "# %16s\t%-32s\n", "index", "Indexing of databases");
+	fprintf(out, "# %16s\t%-32s\n", "shm", "Shared memory");
+	fprintf(out, "# %16s\t%-32s\n", "seq2fasta", "Conversion of database to fasta");
+	fprintf(out, "# %16s\t%-32s\n", "update", "Update database to current version");
+	fprintf(out, "# %16s\t%-32s\n", "-c", "Citation");
+	fprintf(out, "# %16s\t%-32s\n", "-v", "Version");
+	fprintf(out, "# %16s\t%-32s\n", "-h", "Help on alignment and mapping");
 	return 1;
 }
 
@@ -52,11 +56,10 @@ int main(int argc, char *argv[]) {
 			status = update_main(argc, argv);
 		} else {
 			fprintf(stderr, "Invalid option:\t%s\n", *argv);
-			status = helpmessage();
+			status = helpmessage(stderr);
 		}
 	} else {
-		fprintf(stderr, "Too few arguments handed\n");
-		status = helpmessage();
+		status = helpmessage(stdout);
 	}
 	
 	return status;

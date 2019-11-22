@@ -164,6 +164,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-transversion\tPenalty for transversion\t-2\n");
 	fprintf(helpOut, "#\t-cge\t\tSet CGE penalties and rewards\tFalse\n");
 	fprintf(helpOut, "#\t-t\t\tNumber of threads\t\t1\n");
+	fprintf(helpOut, "#\t-c\t\tCitation\n");
 	fprintf(helpOut, "#\t-v\t\tVersion\n");
 	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
 	fprintf(helpOut, "#\n");
@@ -788,6 +789,9 @@ int kma_main(int argc, char *argv[]) {
 				kmaPipe = &kmaPipeFork;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
+				exit(0);
+			} else if(strcmp(argv[args], "-c") == 0) {
+				fprintf(stdout, "Philip T.L.C. Clausen, Frank M. Aarestrup & Ole Lund, \"Rapid and precise alignment of raw reads against redundant databases with KMA\", BMC Bioinformatics, 2018;19:307.\n");
 				exit(0);
 			} else if(strcmp(argv[args], "-h") == 0) {
 				helpMessage(0);
