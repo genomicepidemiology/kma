@@ -338,10 +338,7 @@ void * assemble_KMA_threaded(void *arg) {
 		if(matrix->size < (t_len << 1)) {
 			matrix->size = (t_len << 1);
 			free(matrix->assmb);
-			matrix->assmb = malloc(matrix->size * sizeof(Assembly));
-			if(!matrix->assmb) {
-				ERROR();
-			}
+			matrix->assmb = smalloc(matrix->size * sizeof(Assembly));
 		}
 		
 		/* cpy template seq */

@@ -601,6 +601,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
 			} else {
 				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band, matrices, t_len);
+				//NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
 			}
 			Stat.pos -= (NWstat.len - NWstat.gaps);
 			Stat.score = NWstat.score;

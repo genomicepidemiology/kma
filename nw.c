@@ -556,7 +556,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 				Stat.score = D_prev[n];
 				pos[0] = 0;
 				pos[1] = n;
-				q_pos = n;
+				q_pos = n - en;
 			}
 		}
 	}
