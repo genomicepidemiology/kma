@@ -21,4 +21,4 @@
 #include "assembly.h"
 
 void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, char *cmd);
-void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, FILE *outfile);
+void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, unsigned fragmentCountAln, unsigned readCountAln, FILE *outfile);

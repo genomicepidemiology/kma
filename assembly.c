@@ -357,6 +357,8 @@ void * assemble_KMA_threaded(void *arg) {
 		
 		/* start threads */
 		aligned_assem->score = 0;
+		aligned_assem->fragmentCountAln = 0;
+		aligned_assem->readCountAln = 0;
 		mainTemplate = template;
 		thread_wait = thread_num;
 		unlock(excludeMatrix);
@@ -463,6 +465,10 @@ void * assemble_KMA_threaded(void *arg) {
 							//lock(excludeMatrix);
 							lockTime(excludeMatrix, 10)
 							aligned_assem->score += read_score;
+							if(!(stats[4] & 1) || (stats[4] & 66)) {
+								++aligned_assem->fragmentCountAln;
+							}
+							++aligned_assem->readCountAln;
 							
 							/* diff */
 							i = 0;
@@ -834,6 +840,8 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		
 		/* start threads */
 		aligned_assem->score = 0;
+		aligned_assem->fragmentCountAln = 0;
+		aligned_assem->readCountAln = 0;
 		mainTemplate = template;
 		thread_wait = thread_num;
 		unlock(excludeOut);
@@ -946,6 +954,10 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							//lock(excludeMatrix);
 							lockTime(excludeMatrix, 10)
 							aligned_assem->score += read_score;
+							if(!(stats[4] & 1) || (stats[4] & 66)) {
+								++aligned_assem->fragmentCountAln;
+							}
+							++aligned_assem->readCountAln;
 							
 							/* diff */
 							for(i = 0, pos = start; i < aln_len; ++i) {
@@ -1150,6 +1162,8 @@ void * skip_assemble_KMA(void *arg) {
 	aligned_assem->q[0] = 0;
 	aligned_assem->len = t_len;
 	aligned_assem->aln_len = t_len;
+	aligned_assem->fragmentCountAln = 0;
+	aligned_assem->readCountAln = 0;
 	
 	/* load reads of this template */
 	file_i = 0;
@@ -1213,5 +1227,6 @@ void * skip_assemble_KMA(void *arg) {
 	
 	aligned_assem->cover = 0; 
 	aligned_assem->aln_len = (1 - exp((-1.0) * aligned_assem->depth / t_len)) * t_len; // expected coverage from depth
+	
 	return NULL;
 }

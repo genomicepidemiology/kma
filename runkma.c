@@ -1216,7 +1216,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						updateMatrix(matrix_out, thread->template_name, templates_index[template]->seq, matrix, t_len);
 					}
 					if(extendedFeatures) {
-						getExtendedFeatures(thread->template_name, matrix, templates_index[template]->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+						getExtendedFeatures(thread->template_name, matrix, templates_index[template]->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], aligned_assem->fragmentCountAln, aligned_assem->readCountAln, extendedFeatures_out);
 					}
 					if(vcf) {
 						updateVcf(thread->template_name, templates_index[template]->seq, evalue, t_len, matrix, vcf, vcf_out);
@@ -1237,7 +1237,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
-							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], 0, 0, extendedFeatures_out);
 						}
 					}
 				} else {
@@ -2319,7 +2319,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						updateMatrix(matrix_out, thread->template_name, thread->template_index->seq, matrix, t_len);
 					}
 					if(extendedFeatures) {
-						getExtendedFeatures(thread->template_name, matrix, thread->template_index->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+						getExtendedFeatures(thread->template_name, matrix, thread->template_index->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], aligned_assem->fragmentCountAln, aligned_assem->readCountAln, extendedFeatures_out);
 					}
 					if(vcf) {
 						updateVcf(thread->template_name, thread->template_index->seq, evalue, t_len, matrix, vcf, vcf_out);
@@ -2353,7 +2353,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
-							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], 0, 0, extendedFeatures_out);
 						}
 					}
 				} else {

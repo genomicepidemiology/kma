@@ -42,6 +42,8 @@ struct assem {
 	unsigned len;
 	unsigned aln_len;
 	unsigned size;
+	unsigned fragmentCountAln;
+	unsigned readCountAln;
 };
 
 struct assembly {

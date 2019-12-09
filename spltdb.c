@@ -1524,7 +1524,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	}
 	templatefilename[file_len] = 0;
 	if(extendedFeatures == 2) {
-		getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
+		getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
 	}
 	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
 		alignLoadPtr = &alignLoad_skip;
@@ -1573,7 +1573,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			seq_seeker = 0;
 			index_seeker = 0;
 			if(extendedFeatures == 2) {
-				getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
+				getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
 			}
 		} else if(w_scores[template] > 0) {
 			
@@ -1642,7 +1642,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 						updateMatrix(matrix_out, thread->template_name, thread->template_index->seq, matrix, t_len);
 					}
 					if(extendedFeatures) {
-						getExtendedFeatures(thread->template_name, matrix, thread->template_index->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+						getExtendedFeatures(thread->template_name, matrix, thread->template_index->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], aligned_assem->fragmentCountAln, aligned_assem->readCountAln, extendedFeatures_out);
 					}
 					if(vcf) {
 						updateVcf(thread->template_name, thread->template_index->seq, evalue, t_len, matrix, vcf, vcf_out);
@@ -1669,7 +1669,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
-							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
+							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], 0, 0, extendedFeatures_out);
 						}
 					}
 				} else {

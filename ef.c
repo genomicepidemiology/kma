@@ -41,10 +41,10 @@ void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, 
 	strftime(Date, sizeof(Date), "%Y-%m-%d", tm);
 	fprintf(out, "## date\t%s\n", Date);
 	fprintf(out, "## command\t%s\n", cmd);
-	fprintf(out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\n");
+	fprintf(out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\treadCountAln\tfragmentCountAln\n");
 }
 
-void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, FILE *outfile) {
+void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, unsigned fragmentCountAln, unsigned readCountAln, FILE *outfile) {
 	
 	unsigned pos, depthUpdate, maxDepth, nucHighVarSum;
 	long unsigned snpSum, insertSum, deletionSum;
@@ -94,10 +94,10 @@ void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *
 			}
 		} while((pos = assembly[pos].next) != 0);
 		
-		fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum, insertSum, deletionSum);
+		fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\t%u\t%u\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum, insertSum, deletionSum, readCountAln, fragmentCountAln);
 	} else if(aligned_assem) {
-		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%lu\t%f\t%u\t%u\t%u\t%u\t%u\n", template_name, readCount, fragmentCount, 0, 0, 0, aligned_assem->depth, 0.0, 0, 0, 0, 0, 0);
+		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%lu\t%f\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n", template_name, readCount, fragmentCount, 0, 0, 0, aligned_assem->depth, 0.0, 0, 0, 0, 0, 0, readCountAln, fragmentCountAln);
 	} else {
-		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%u\t%f\t%u\t%u\t%u\t%u\t%u\n", template_name, 0, 0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0);
+		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%u\t%f\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n", template_name, 0, 0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0);
 	}
 }
