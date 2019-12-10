@@ -465,7 +465,7 @@ void * assemble_KMA_threaded(void *arg) {
 							//lock(excludeMatrix);
 							lockTime(excludeMatrix, 10)
 							aligned_assem->score += read_score;
-							if(!(stats[4] & 1) || (stats[4] & 66)) {
+							if(!(stats[4] & 2) || (stats[4] & 64)) {
 								++aligned_assem->fragmentCountAln;
 							}
 							++aligned_assem->readCountAln;
@@ -954,7 +954,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							//lock(excludeMatrix);
 							lockTime(excludeMatrix, 10)
 							aligned_assem->score += read_score;
-							if(!(stats[4] & 1) || (stats[4] & 66)) {
+							if(!(stats[4] & 2) || (stats[4] & 64)) {
 								++aligned_assem->fragmentCountAln;
 							}
 							++aligned_assem->readCountAln;
