@@ -142,6 +142,18 @@ double p_chisqr(long double q) {
 	return 1 - 1.772453850 * erf(sqrt(0.5 * q)) / tgamma(0.5);
 }
 
+double power(double x, unsigned n) {
+	
+	double y;
+	
+	if(n) {
+		y = power(x, n >> 1);
+		return (n & 1) ? y * y * x : y * y;
+	}
+	
+	return 1.0;
+}
+
 double binP(int n, int k, double p) {
 	
 	int i, j, nk;
@@ -153,9 +165,11 @@ double binP(int n, int k, double p) {
 	
 	q = 1 - p;
 	if(k == 0) {
-		return pow(q, n);
+		P = power(q, n);
+		return P != 0.0 ? P : 1.0e-308;
 	} else if(n == k) {
-		return pow(p, n);
+		P = power(p, n);
+		return P != 0.0 ? P : 1.0e-308;
 	} else if(p == 0 || q == 0) {
 		return 0.0;
 	}
@@ -175,9 +189,9 @@ double binP(int n, int k, double p) {
 	}
 	
 	if(nk < k) {
-		P *= pow(p, k - nk);
+		P *= power(p, k - nk);
 	} else if(k < nk) {
-		P *= pow(q, nk - k);
+		P *= power(q, nk - k);
 	}
 	
 	return P != 0.0 ? P : 1.0e-308;

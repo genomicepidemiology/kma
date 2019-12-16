@@ -91,6 +91,7 @@ void initialiseVcf(FileBuff *fileP, char *templateFilename) {
 	
 	fileP->next = (unsigned char *) update;
 	fileP->bytes = avail;
+	
 }
 
 void updateVcf(char *template_name, long unsigned *template_seq, double evalue, int t_len, AssemInfo *matrix, int filter, FileBuff *fileP) {
@@ -165,6 +166,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 		if(bestScore) {
 			/* determine base at current position */
 			bestNuc = baseCall(bestNuc, nuc, bestScore, depthUpdate, evalue, &assembly[pos]);
+			
 			/* discard unimportant changes */
 			if(nuc != toupper(bestNuc)) {
 				/* INFO */
@@ -173,6 +175,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				AF = (double) AD / DP;
 				RAF = (double) bestScore / DP;
 				DEL = assembly[pos].counts[5];
+				
 				/* FORMAT */
 				Q = pow(depthUpdate - (bestScore << 1), 2) / depthUpdate;
 				P = p_chisqr(Q);
@@ -232,6 +235,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 					*update++ = bestNuc;
 					--avail;
 				}
+				
 				check = sprintf(update, "\t%d\t%s\tDP=%d;AD=%d;AF=%.2f;RAF=%.2f;DEL=%d;", QUAL, *FILTER_ptr, DP, AD, AF, RAF, DEL);
 				update += check; avail -= check;
 				check = sprintf(update, "AD6=%d,%d,%d,%d,%d,%d\t", assembly[pos].counts[0], assembly[pos].counts[1], assembly[pos].counts[2], assembly[pos].counts[3], assembly[pos].counts[4], assembly[pos].counts[5]);
@@ -253,6 +257,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 			update += check; avail -= check;
 			check = sprintf(update, "Q:P:FT\t%.2f:%4.1e:%s\n", 0.0, 1.0, FILTER);
 			update += check; avail -= check;
+		
 		}
 	} while((pos = assembly[pos].next) != 0);
 	

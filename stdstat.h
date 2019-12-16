@@ -25,5 +25,6 @@ int cmp_or(int t, int q);
 int cmp_and(int t, int q);
 double fastp(long double q);
 double p_chisqr(long double q);
+double power(double x, unsigned n);
 double binP(int n, int k, double p);
 unsigned minimum(unsigned *src, unsigned n);
