@@ -3663,13 +3663,17 @@ int save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *b
 			}
 			
 			/* set minLen */
-			minLen = template_lengths[1] / 2;
-			for(i = 1; i < templates->DB_size; ++i) {
-				if(minLen > (template_lengths[i] / 2)) {
-					minLen = template_lengths[i] / 2;
+			/*
+			minLen = *template_lengths >> 1;
+			i = templates->DB_size;
+			while(--i) {
+				if(minLen > ++*template_lengths >> 1)) {
+					minLen = *template_lengths >> 1;
 				}
 			}
-			minLen = MIN(minLen, templates->kmersize);
+			minLen = exhaustive < minLen ? minLen : exhaustive;
+			*/
+			minLen = exhaustive;
 		}
 		return 1;
 	} else if((DB_size = templates->DB_size) < USHRT_MAX) {
@@ -4771,7 +4775,7 @@ void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, char *inc
 int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	/* return 0 for match, 1 otherwise */
-	static int *Sizes = 0;
+	static int *Sizes = 0, minlen = 0;
 	static double coverT = 0.5, mrs = 0.5;
 	static KmerAnker **tVF_scores, **tVR_scores;
 	static SeqmentTree **tSeqments;
@@ -4798,6 +4802,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			/* set coverT */
 			coverT = *((double *)(bestTemplates_r));
 			mrs = *((double *)(Score));
+			minlen = exhaustive;
 			i = *bestTemplates;
 			Sizes = smalloc(i * sizeof(int));
 			tVF_scores = smalloc(2 * i * sizeof(KmerAnker *));
@@ -5322,7 +5327,8 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				cStart = tmp_score->start;
 				cover = queSeqmentTree(chainSeqments->root, cStart, best_score->end);
 				/* verify chain */
-				if(cover < coverT * (best_score->end - cStart) && mrs * (best_score->end - cStart) <= best_score->score) {
+				len = best_score->end - cStart;
+				if(minlen <= len && cover < coverT * len && mrs * len <= best_score->score) {
 					/* get chain */
 					rc = 1;
 				} else {
@@ -5340,7 +5346,8 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 						cover = queSeqmentTree(chainSeqments->root, cStart, best_score->end);
 						
 						/* verify chain */
-						if(cover < coverT * (best_score->end - cStart) && mrs * (best_score->end - cStart) <= best_score->score) {
+						len = best_score->end - cStart;
+						if(minlen <= len && cover < coverT * len && mrs * len <= best_score->score) {
 							/* get chain */
 							rc = 1;
 						} else {
@@ -5361,7 +5368,8 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				cStart_r = tmp_score->start;
 				cover = queSeqmentTree(chainSeqments->root, cStart_r, best_score_r->end);
 				/* verify chain */
-				if(cover < coverT * (best_score_r->end - cStart_r) && mrs * (best_score_r->end - cStart_r) <= best_score_r->score) {
+				len = best_score_r->end - cStart_r;
+				if(minlen <= len && cover < coverT * len && mrs * len <= best_score_r->score) {
 					/* get chain */
 					rc |= 2;
 				} else {
@@ -5379,7 +5387,8 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 						cover = queSeqmentTree(chainSeqments->root, cStart_r, best_score_r->end);
 						
 						/* verify chain */
-						if(cover < coverT * (best_score_r->end - cStart_r) && mrs * (best_score_r->end - cStart_r) <= best_score_r->score) {
+						len = best_score_r->end - cStart_r;
+						if(minlen <= best_score_r->end - cStart_r && cover < coverT * len && mrs * len <= best_score_r->score) {
 							/* get chain */
 							rc |= 2;
 						} else {
@@ -5438,7 +5447,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, const Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	/* return 0 for match, 1 otherwise */
-	static int *Sizes = 0;
+	static int *Sizes = 0, minlen = 0;
 	static double coverT = 0.5, mrs = 0.5;
 	static KmerAnker **tVF_scores;
 	static SeqmentTree **tSeqments;
@@ -5464,6 +5473,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 			/* set coverT */
 			coverT = *((double *)(bestTemplates_r));
 			mrs = *((double *)(Score));
+			minlen = exhaustive;
 			i = *bestTemplates;
 			Sizes = smalloc(i * sizeof(int));
 			tVF_scores = smalloc(i * sizeof(KmerAnker *));
@@ -5865,7 +5875,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 					len = best_score->end - start;
 					
 					/* verify chain */
-					if(coverT * len <= cover || best_score->score < mrs * len) {
+					if(len < minlen || coverT * len <= cover || best_score->score < mrs * len) {
 						/* silence anker */
 						best_score->score = 0;
 					}

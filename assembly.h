@@ -64,6 +64,7 @@ struct assemble_thread {
 	int file_count;
 	int spin;
 	int mq;
+	int minlen;
 	int bcd;
 	int sam;
 	int thread_num;

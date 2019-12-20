@@ -47,7 +47,7 @@ typedef int key_t;
 #define shmctl(shmid, cmd, buf) fprintf(stderr, "sysV not available on Windows.\n")
 #endif
 
-int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, double mrs, double coverT) {
+int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT) {
 	
 	int i, file_len, shmid, deCon, *bestTemplates, *template_lengths;
 	FILE *inputfile, *templatefile;
@@ -154,12 +154,12 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		}
 		templatefilename[file_len] = 0;
 		fclose(templatefile);
-		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, minlen, 0, 0);
 	}
 	/* here */
 	/*
 	else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
-		kmerScan(0, 0, &(int){thread_num}, (int *)(&coverT), (int *)(&mrs), 0, 0, 0, 0, 0, 0, 0, 0);
+		kmerScan(0, 0, &(int){thread_num}, (int *)(&coverT), (int *)(&mrs), 0, 0, 0, 0, 0, minlen, 0, 0);
 	}
 	*/
 	

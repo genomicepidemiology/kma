@@ -394,7 +394,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -1396,6 +1396,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		thread->num = i;
 		thread->thread_num = thread_num;
 		thread->mq = mq;
+		thread->minlen = minlen;
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
 		thread->bcd = bcd;
@@ -1455,6 +1456,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->num = 0;
 	thread->thread_num = thread_num;
 	thread->mq = mq;
+	thread->minlen = minlen;
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
 	thread->bcd = bcd;

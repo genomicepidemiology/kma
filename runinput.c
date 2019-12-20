@@ -28,7 +28,7 @@
 void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
 void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int minlen, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, end;
 	unsigned FASTQ;
@@ -84,7 +84,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 				*/
 				qseq->len = end - start;
 				/* print */
-				if(qseq->len > kmersize) {
+				if(qseq->len > minlen) {
 					/* dump seq */
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
@@ -106,7 +106,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 					++start;
 				}
 				qseq->len = end - start;
-				if(qseq->len > kmersize) {
+				if(qseq->len > minlen) {
 					/* dump seq */
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
@@ -133,7 +133,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 	return count;
 }
 
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int minlen, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
@@ -230,19 +230,19 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				qseq2->len = end - start2;
 				
 				/* print */
-				if(qseq->len > kmersize && qseq2->len > kmersize) {
+				if(qseq->len > minlen && qseq2->len > minlen) {
 					qseq->seq += start;
 					qseq2->seq += start2;
 					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
-				} else if(qseq->len > kmersize) {
+				} else if(qseq->len > minlen) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
-				} else if(qseq2->len > kmersize) {
+				} else if(qseq2->len > minlen) {
 					qseq2->seq += start2;
 					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
@@ -276,19 +276,19 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				qseq2->len = end - start2;
 				
 				/* print */
-				if(qseq->len > kmersize && qseq2->len > kmersize) {
+				if(qseq->len > minlen && qseq2->len > minlen) {
 					qseq->seq += start;
 					qseq2->seq += start2;
 					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
-				} else if(qseq->len > kmersize) {
+				} else if(qseq->len > minlen) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
-				} else if(qseq2->len > kmersize) {
+				} else if(qseq2->len > minlen) {
 					qseq2->seq += start2;
 					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
@@ -326,7 +326,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 	return count;
 }
 
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int minlen, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ;
@@ -410,19 +410,19 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				qseq2->len = end - start2;
 				
 				/* print */
-				if(qseq->len > kmersize && qseq2->len > kmersize) {
+				if(qseq->len > minlen && qseq2->len > minlen) {
 					qseq->seq += start;
 					qseq2->seq += start2;
 					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
-				} else if(qseq->len > kmersize) {
+				} else if(qseq->len > minlen) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
-				} else if(qseq2->len > kmersize) {
+				} else if(qseq2->len > minlen) {
 					qseq2->seq += start2;
 					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
@@ -457,19 +457,19 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				qseq2->len = end - start2;
 				
 				/* print */
-				if(qseq->len > kmersize && qseq2->len > kmersize) {
+				if(qseq->len > minlen && qseq2->len > minlen) {
 					qseq->seq += start;
 					qseq2->seq += start2;
 					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
-				} else if(qseq->len > kmersize) {
+				} else if(qseq->len > minlen) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
-				} else if(qseq2->len > kmersize) {
+				} else if(qseq2->len > minlen) {
 					qseq2->seq += start2;
 					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;

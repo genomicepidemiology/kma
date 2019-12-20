@@ -134,7 +134,7 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
 	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
@@ -343,6 +343,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->points = seedPoint_init(1024, rewards);
 		alnThread->NWmatrices = NWmatrices;
 		alnThread->kmersize = kmersize;
+		alnThread->minlen = minlen;
 		alnThread->template_lengths = template_lengths;
 		alnThread->templates_index = templates_index;
 		alnThread->mq = mq;
@@ -416,6 +417,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->points = points;
 	alnThread->NWmatrices = NWmatrices;
 	alnThread->kmersize = kmersize;
+	alnThread->minlen = minlen;
 	alnThread->mq = mq;
 	alnThread->sam = (sam == 1) ? 1 : 0;
 	alnThread->scoreT = scoreT;
@@ -483,6 +485,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		thread->thread_num = thread_num;
 		thread->template = -2;
 		thread->mq = mq;
+		thread->minlen = minlen;
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
 		thread->bcd = bcd;
@@ -1139,6 +1142,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	thread->thread_num = thread_num;
 	thread->template = 0;
 	thread->mq = mq;
+	thread->minlen = minlen;
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
 	thread->bcd = bcd;
@@ -1289,7 +1293,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -2156,6 +2160,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		thread->num = i;
 		thread->thread_num = thread_num;
 		thread->mq = mq;
+		thread->minlen = minlen;
 		thread->scoreT = scoreT;
 		thread->evalue = evalue;
 		thread->bcd = bcd;
@@ -2215,6 +2220,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	thread->num = 0;
 	thread->thread_num = thread_num;
 	thread->mq = mq;
+	thread->minlen = minlen;
 	thread->scoreT = scoreT;
 	thread->evalue = evalue;
 	thread->bcd = bcd;

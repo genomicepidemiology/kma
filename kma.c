@@ -112,6 +112,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ipe\t\tInput paired end file name(s)\n");
 	fprintf(helpOut, "#\t-int\t\tInput interleaved file name(s)\n");
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%s\n", "DB defined");
+	fprintf(helpOut, "#\t-ml\t\tMinimum alignment length\t%d\n", 16);
 	fprintf(helpOut, "#\t-p\t\tp-value\t\t\t\t0.05\n");
 	fprintf(helpOut, "#\t-ConClave\tConClave version\t\t1\n");
 	fprintf(helpOut, "#\t-mem_mode\tUse kmers to choose best\n#\t\t\ttemplate, and save memory\tFalse\n");
@@ -176,7 +177,7 @@ int kma_main(int argc, char *argv[]) {
 	static int minPhred, fiveClip, sparse_run, mem_mode, Mt1, ConClave, bcd;
 	static int fileCounter, fileCounter_PE, fileCounter_INT, targetNum, vcf;
 	static int extendedFeatures, spltDB, mq, thread_num, kmersize, one2one;
-	static int ref_fsa, print_matrix, print_all, sam, Ts, Tv, **d;
+	static int ref_fsa, print_matrix, print_all, sam, Ts, Tv, minlen, **d;
 	static unsigned nc, nf, shm, exhaustive;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
@@ -222,6 +223,7 @@ int kma_main(int argc, char *argv[]) {
 		print_all = 0;
 		ref_fsa = 0;
 		kmersize = 0;
+		minlen = 16;
 		evalue = 0.05;
 		exhaustive = 0;
 		shm = 0;
@@ -468,6 +470,15 @@ int kma_main(int argc, char *argv[]) {
 						kmersize = 16;
 					} else if(kmersize > 32) {
 						kmersize = 32;
+					}
+				}
+			} else if(strcmp(argv[args], "-ml") == 0) {
+				++args;
+				if(args < argc) {
+					minlen = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "# Invalid kmersize parsed\n");
+						exit(4);
 					}
 				}
 			} else if(strcmp(argv[args], "-mp") == 0) {
@@ -1090,17 +1101,17 @@ int kma_main(int argc, char *argv[]) {
 			
 			/* SE */
 			if(fileCounter > 0) {
-				totFrags += run_input(inputfiles, fileCounter, minPhred, fiveClip, kmersize, to2Bit, ioStream);
+				totFrags += run_input(inputfiles, fileCounter, minPhred, fiveClip, minlen, to2Bit, ioStream);
 			}
 			
 			/* PE */
 			if(fileCounter_PE > 0) {
-				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip, kmersize, to2Bit, ioStream);
+				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip, minlen, to2Bit, ioStream);
 			}
 			
 			/* INT */
 			if(fileCounter_INT > 0) {
-				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, kmersize, to2Bit, ioStream);
+				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, minlen, to2Bit, ioStream);
 			}
 			
 			if(Mt1) {
@@ -1119,13 +1130,13 @@ int kma_main(int argc, char *argv[]) {
 	} else if(Mt1) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, rewards, ID_t, mq, scoreT, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, sam, nc, nf, thread_num);
+		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, sam, nc, nf, thread_num);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else if(step2) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status = save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, scoreT, coverT);
+		status = save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT);
 		free(myTemplatefilename);
 	} else if(sparse_run) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
@@ -1138,11 +1149,11 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
+			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
 		} else if(mem_mode) {
-			status = runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
+			status = runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
 		} else {
-			status = runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
+			status = runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

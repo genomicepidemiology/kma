@@ -279,7 +279,7 @@ void * assemble_KMA_threaded(void *arg) {
 	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, spin, sam;
 	int read_score, depthUpdate, bestBaseScore, bestScore, template, asm_len;
 	int nextTemplate, file_i, file_count, delta, thread_num, mq, status, bcd;
-	int stats[5], buffer[8];
+	int minlen, stats[5], buffer[8];
 	unsigned coverScore;
 	long unsigned depth, depthVar;
 	const char bases[6] = "ACGTN-";
@@ -312,6 +312,7 @@ void * assemble_KMA_threaded(void *arg) {
 	NWmatrices = thread->NWmatrices;
 	delta = qseq->size;
 	mq = thread->mq;
+	minlen = thread->minlen;
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
@@ -448,9 +449,10 @@ void * assemble_KMA_threaded(void *arg) {
 						
 						/* Get normed score */
 						read_score = alnStat.score;
-						if(0 < aln_len) {
+						if(minlen <= aln_len) {
 							score = 1.0 * read_score / aln_len;
 						} else {
+							read_score = 0;
 							score = 0;
 						}
 						
@@ -744,7 +746,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, file_i, file_count, template, spin;
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
-	int sam, thread_num, mq, status, bcd, stats[5], buffer[8];
+	int sam, thread_num, mq, status, bcd, minlen, stats[5], buffer[8];
 	unsigned coverScore, delta;
 	long unsigned depth, depthVar;
 	const char bases[6] = "ACGTN-";
@@ -776,6 +778,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	NWmatrices = thread->NWmatrices;
 	delta = qseq->size;
 	mq = thread->mq;
+	minlen = thread->minlen;
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
@@ -935,11 +938,11 @@ void * assemble_KMA_dense_threaded(void *arg) {
 						
 						/* Get normed score */
 						read_score = alnStat.score;
-						if(0 < aln_len) {
+						if(minlen <= aln_len) {
 							score = 1.0 * read_score / aln_len;
 						} else {
-							score = 0;
 							read_score = 0;
+							score = 0;
 						}
 						
 						if(0 < read_score && scoreT <= score) {
