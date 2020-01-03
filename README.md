@@ -24,6 +24,7 @@ BMC Bioinformatics, 2018;19:307.
 
 
 # Usage #
+A more detailed guide on KMA and its options can be found in the pdf "KMAspecification.pdf".
 For practical reasons you might want to add kma to your path, this is usually done with:
 
 ```
