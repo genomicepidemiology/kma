@@ -3568,7 +3568,7 @@ int save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards, 
 		
 		if((qseq->seqlen + qseq_r->seqlen - bestScore) < bestScore * kmersize) {
 			flag = 67;
-			flag_r = 129;
+			flag_r = 131;
 			
 			if(regionTemplates[*regionTemplates] < 0) {
 				bestScore = -bestScore;
