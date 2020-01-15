@@ -896,7 +896,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i != bestHits; ++i) {
+					for(i = 0; i < bestHits; ++i) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
@@ -1893,7 +1893,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			
 			/* Several mapped templates, choose best according to sorting keys */
 			if(bestHits != 1) {
-				
 				bestTemplate = 0;
 				bestScore = 0;
 				start = 0;
@@ -1924,7 +1923,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i != bestHits; ++i) {
+					for(i = 0; i < bestHits; ++i) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
@@ -1996,8 +1995,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						}
 					}
 				}
-				
-				
 			} else {
 				bestTemplate = *bestTemplates;
 				start = *best_start_pos;
@@ -2070,7 +2067,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					}
 				}
 			}
-			
 		}
 		template_fragments[fileCount] = printFrags(alignFrags, DB_size);
 		++fileCount;

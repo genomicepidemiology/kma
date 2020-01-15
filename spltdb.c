@@ -1169,7 +1169,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i != bestHits; ++i) {
+					for(i = 0; i < bestHits; ++i) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
