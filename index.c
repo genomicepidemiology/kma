@@ -65,6 +65,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ht\t\tHomology template\t\t\t1.0\n");
 	fprintf(helpOut, "#\t-hq\t\tHomology query\t\t\t\t1.0\n");
 	fprintf(helpOut, "#\t-and\t\tBoth homolgy thresholds\n#\t\t\thas to be reached\t\t\tor\n");
+	fprintf(helpOut, "#\t-nbp\t\tNo bias print\t\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-v\t\tVersion\n");
 	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
 	fprintf(helpOut, "#\n");
@@ -452,6 +453,8 @@ int index_main(int argc, char *argv[]) {
 			megaDB = 1;
 		} else if(strcmp(argv[args], "-NI") == 0) {
 			dumpIndex = &dumpSeq;
+		} else if(strcmp(argv[args], "-nbp") == 0) {
+			biasPrintPtr = &biasPrint;
 		} else if(strcmp(argv[args], "-v") == 0) {
 			fprintf(stdout, "KMA_index-%s\n", KMA_VERSION);
 			exit(0);

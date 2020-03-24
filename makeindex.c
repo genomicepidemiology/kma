@@ -31,6 +31,16 @@
 #include "seqparse.h"
 #include "updateindex.h"
 
+int (*biasPrintPtr)(FILE*, char*, unsigned char*, int) = &biasPrint;
+
+int biasPrint(FILE *name_out, char *format, unsigned char *name, int bias) {
+	return fprintf(name_out, "%s B%d\n", name, bias);
+}
+
+int biasNoPrint(FILE *name_out, char *format, unsigned char *name, int bias) {
+	return fprintf(name_out, "%s\n", name);
+}
+
 void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount, char *outputfilename, int appender, char *trans, int MinLen, int MinKlen, double homQ, double homT, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
 	
 	int fileCounter, file_len, bias, FASTQ;
@@ -110,7 +120,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 						*seq = 0;
 					}
 					if(bias > 0) {
-						fprintf(name_out, "%s B%d\n", header->seq + 1, bias);
+						biasPrintPtr(name_out, "%s B%d\n", header->seq + 1, bias);
 					} else {
 						fprintf(name_out, "%s\n", header->seq + 1);
 					}
