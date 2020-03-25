@@ -454,7 +454,7 @@ int index_main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-NI") == 0) {
 			dumpIndex = &dumpSeq;
 		} else if(strcmp(argv[args], "-nbp") == 0) {
-			biasPrintPtr = &biasPrint;
+			biasPrintPtr = &biasNoPrint;
 		} else if(strcmp(argv[args], "-v") == 0) {
 			fprintf(stdout, "KMA_index-%s\n", KMA_VERSION);
 			exit(0);
