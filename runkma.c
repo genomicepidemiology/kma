@@ -134,14 +134,14 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
 	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
 	int fragCount, fileCount, maxFrag, coverScore, tmp_start, tmp_end, score;
-	int index_in_no, seq_in_no, DB_size, flag, stats[5], *matched_templates;
+	int index_in_no, seq_in_no, DB_size, flag, counter, stats[5];
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
-	int *template_lengths;
+	int *matched_templates, *template_lengths;
 	unsigned randScore, *fragmentCounts, *readCounts;
 	long read_score, best_read_score, *index_indexes, *seq_indexes;
 	long unsigned Nhits, template_tot_ulen, bestNum;
@@ -1164,14 +1164,22 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
 		alignLoadPtr = &alignLoad_skip;
 	}
+	if(verbose) {
+		fprintf(stderr, "# Template\tScore\tProgress\n");
+	}
 	
 	/* Do local assemblies of fragments mapping to the same template */
 	depth = 0;
 	q_id = 0;
 	cover = 0;
 	q_cover = 0;
+	counter = 0;
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
+			if(verbose) {
+				counter += w_scores[template];
+				fprintf(stderr, "# %d / %d\t%lu\t%3lu%%\n", template, DB_size, w_scores[template], 100 * counter / Nhits);
+			}
 			/* make p_value to see whether assembly is feasable */
 			read_score = w_scores[template];
 			t_len = template_lengths[template];
@@ -1293,7 +1301,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -1456,6 +1464,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	bestTemplates = (matched_templates + 1);
 	
 	/* consider printPair */
+	Nhits = 0;
 	t_len = 0;
 	read_score = 0;
 	while((rc_flag = get_ankers(matched_templates, qseq_comp, header, &flag, inputfile)) != 0) {
@@ -1510,7 +1519,20 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					updateAllFrag(qseq_r->seq, qseq_r->len, abs(bestHits), read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
 				}
 			}
+			
+			/* verbose */
+			if(verbose && verbose++ == 1024) {
+				Nhits += verbose - 1;
+				fprintf(stderr, "# Scored %ld query sequences.\n", Nhits);
+				verbose = 1;
+			}
 		}
+	}
+	/* verbose */
+	if(verbose) {
+		Nhits += verbose - 1;
+		fprintf(stderr, "# Scored %ld query sequences.\n", Nhits);
+		verbose = 1;
 	}
 	kmaPipe(0, 0, inputfile, &i);
 	status |= i;
@@ -2250,17 +2272,21 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	if(progress) {
 		fprintf(stderr, "# Progress:\t%3d%%\r", 0);
 		fflush(stderr);
+	} else if(verbose) {
+		fprintf(stderr, "# Template\tScore\tProgress\n");
 	}
 	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
 		alignLoadPtr = &alignLoad_skip;
 	}
-	
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
 			if(progress) {
 				counter += w_scores[template];
 				fprintf(stderr, "# Progress:\t%3lu%%\r", 100 * counter / Nhits);
 				fflush(stderr);
+			} else if(verbose) {
+				counter += w_scores[template];
+				fprintf(stderr, "# %d / %d\t%lu\t%3lu%%\n", template, DB_size, w_scores[template], 100 * counter / Nhits);
 			}
 			
 			/* make p_value to see whether assembly is feasable */

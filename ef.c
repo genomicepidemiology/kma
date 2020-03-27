@@ -51,6 +51,7 @@ void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *
 	long double var, nucHighVar;
 	Assembly *assembly;
 	
+	fragmentCountAln = (((readCountAln >> 1) + (readCountAln & 1)) <= fragmentCountAln) ? (fragmentCountAln) : ((readCountAln >> 1) + (readCountAln & 1));
 	if(matrix) {
 		/* iterate matrix to get:
 			Nuc_high_depth_variance

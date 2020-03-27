@@ -394,7 +394,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -605,6 +605,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		}
 	}
 	
+	Nhits = 0;
 	target = 0;
 	targetScore = 0;
 	rc_flag = 0;
@@ -674,6 +675,13 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				if(read_score) {
 					updateAllFrag(qseq_r->seq, qseq_r->len, abs(bestHits), read_score, best_start_pos, best_end_pos, bestTemplates, header_r, frag_out_all);
 				}
+			}
+			
+			/* verbose */
+			if(verbose && verbose++ == 1024) {
+				Nhits += verbose - 1;
+				fprintf(stderr, "# Scored %ld query sequences.\n", Nhits);
+				verbose = 1;
 			}
 		}
 		
@@ -759,6 +767,12 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			}
 			++uPtr;
 		}
+	}
+	/* verbose */
+	if(verbose) {
+		Nhits += verbose - 1;
+		fprintf(stderr, "# Scored %ld query sequences.\n", Nhits);
+		verbose = 1;
 	}
 	
 	/* get fragmentCount */
@@ -1490,6 +1504,8 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	if(progress) {
 		fprintf(stderr, "# Progress:\t%3d%%\r", 0);
 		fflush(stderr);
+	} else if(verbose) {
+		fprintf(stderr, "# Template\tScore\tProgress\n");
 	}
 	
 	/* get index, seq and names on the fly */
@@ -1583,6 +1599,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				counter += w_scores[template];
 				fprintf(stderr, "# Progress:\t%3lu%%\r", 100 * counter / Nhits);
 				fflush(stderr);
+			} else if(verbose) {
+				counter += w_scores[template];
+				fprintf(stderr, "# %d / %d\t%lu\t%3lu%%\n", template, DB_size, w_scores[template], 100 * counter / Nhits);
 			}
 			
 			/* make p_value to see whether assembly is feasable */

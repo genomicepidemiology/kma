@@ -178,7 +178,7 @@ int kma_main(int argc, char *argv[]) {
 	static int fileCounter, fileCounter_PE, fileCounter_INT, targetNum, vcf;
 	static int extendedFeatures, spltDB, mq, thread_num, kmersize, one2one;
 	static int ref_fsa, print_matrix, print_all, sam, Ts, Tv, minlen, **d;
-	static unsigned nc, nf, shm, exhaustive;
+	static unsigned nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
 	static double ID_t, scoreT, coverT, evalue;
@@ -203,6 +203,7 @@ int kma_main(int argc, char *argv[]) {
 		
 		/* SET DEFAULTS */
 		ConClave = 1;
+		verbose = 0;
 		vcf = 0;
 		sam = 0;
 		nc = 0;
@@ -798,6 +799,8 @@ int kma_main(int argc, char *argv[]) {
 				spltDB = 1;
 			} else if(strcmp(argv[args], "-status") == 0) {
 				kmaPipe = &kmaPipeFork;
+			} else if(strcmp(argv[args], "-verbose") == 0) {
+				verbose = 1;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
@@ -1149,11 +1152,11 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
+			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num, verbose);
 		} else if(mem_mode) {
-			status = runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
+			status = runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num, verbose);
 		} else {
-			status = runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num);
+			status = runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
