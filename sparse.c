@@ -313,11 +313,11 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 
 int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *exePrev, int ID_t, double evalue, char ss, unsigned shm) {
 	
-	int i, file_len, stop, template, score, tmp_score, status, contamination;
-	int score_add, score_tot_add, deCon;
-	unsigned *Scores, *Scores_tot, *w_Scores, *w_Scores_tot, *SearchList;
+	int i, file_len, stop, template, status, contamination, score_add, deCon;
+	unsigned *Scores, *w_Scores, *SearchList;
 	unsigned *template_lengths, *template_ulengths;
-	long unsigned Ntot;
+	long unsigned Ntot, score, tmp_score, score_tot_add;
+	long unsigned *Scores_tot, *w_Scores_tot;
 	char **template_names;
 	double expected, q_value, p_value, etta, depth, cover, query_cover;
 	double tot_depth, tot_cover, tot_query_cover, tmp_depth, tmp_cover;
@@ -359,7 +359,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	} else {
 		if(hashMapKMA_load(templates, templatefile, templatefilename)) {
 			fprintf(stderr, "Wrong format of DB.\n");
-			exit(2);
+			exit(1);
 		}
 	}
 	fclose(templatefile);
@@ -416,9 +416,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 	t0 = clock();
 	fprintf(stderr, "# Finding best matches and output results.\n");
 	
-	Scores = calloc(templates->DB_size, sizeof(int));
-	Scores_tot = calloc(templates->DB_size, sizeof(int));
-	SearchList = malloc(templates->DB_size * sizeof(int));
+	Scores = calloc(templates->DB_size, sizeof(unsigned));
+	Scores_tot = calloc(templates->DB_size, sizeof(long unsigned));
+	SearchList = malloc(templates->DB_size * sizeof(unsigned));
 	if(!Scores || !Scores_tot || !SearchList) {
 		ERROR();
 	}
@@ -439,8 +439,8 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 		
 		fprintf(stderr, "# Total number of matches: %lu of %lu kmers\n", Nhits.tot, Ntot);
 		/* copy scores */
-		w_Scores = smalloc(templates->DB_size * sizeof(int));
-		w_Scores_tot = smalloc(templates->DB_size * sizeof(int));
+		w_Scores = smalloc(templates->DB_size * sizeof(unsigned));
+		w_Scores_tot = smalloc(templates->DB_size * sizeof(long unsigned));
 		
 		for(i = 0; i < templates->DB_size; ++i) {
 			w_Scores[i] = Scores[i];
@@ -596,7 +596,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				tot_query_cover = 100.0 * (Scores_tot[template] + score_tot_add) / Ntot;
 				
 				/* output results */
-				fprintf(sparse_out, "%s\t%d\t%d\t%d\t%d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%f\t%e\n", 
+				fprintf(sparse_out, "%s\t%d\t%lu\t%d\t%d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%f\t%e\n", 
 					template_names[template], template, score, (int) expected, template_lengths[template], query_cover, cover, depth, tot_query_cover, tot_cover, tot_depth, q_value, p_value);
 				
 				/* update scores */
@@ -743,7 +743,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				tot_cover = 100.0 * Scores[template] / template_ulengths[template];
 				tot_depth = 1.0 * Scores_tot[template] / template_lengths[template];
 				tot_query_cover = 100.0 * Scores_tot[template] / Ntot;
-				fprintf(sparse_out, "%s\t%d\t%d\t%d\t%d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n", 
+				fprintf(sparse_out, "%s\t%d\t%lu\t%d\t%d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n", 
 					template_names[template], template, score, (int) expected, template_lengths[template], query_cover, cover, depth, tot_query_cover, tot_cover, tot_depth, q_value, p_value);
 				
 				/* update scores */

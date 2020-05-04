@@ -38,7 +38,7 @@ struct hit {
 #endif
 
 int intpos_bin(const unsigned *str1, const int str2);
-HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits);
-HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits, int contamination);
-HashTable * withDraw_Kmers(unsigned *Scores, unsigned *Scores_tot, HashTable *kmerList, int template, Hit *hits);
-Hit withDraw_Contamination(unsigned *Scores, unsigned *Scores_tot, HashTable *kmerList, HashTable *deConTable, int template, Hit hits);
+HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, long unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits);
+HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, long unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits, int contamination);
+HashTable * withDraw_Kmers(unsigned *Scores, long unsigned *Scores_tot, HashTable *kmerList, int template, Hit *hits);
+Hit withDraw_Contamination(unsigned *Scores, long unsigned *Scores_tot, HashTable *kmerList, HashTable *deConTable, int template, Hit hits);

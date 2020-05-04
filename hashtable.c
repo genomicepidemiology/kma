@@ -34,7 +34,7 @@ int intpos_bin(const unsigned *str1, const int str2) {
 	}
 	
 	downLim = 1;
-	pos = (upLim + downLim) / 2;
+	pos = (upLim + downLim) >> 1;
 	while(0 < (upLim - downLim)) {
 		if(str1[pos] == str2) {
 			return pos;
@@ -43,7 +43,7 @@ int intpos_bin(const unsigned *str1, const int str2) {
 		} else {
 			upLim = pos - 1;
 		}
-		pos = (upLim + downLim) / 2;
+		pos = (upLim + downLim) >> 1;
 	}
 	if(str1[pos] == str2) {
 		return pos;
@@ -51,7 +51,7 @@ int intpos_bin(const unsigned *str1, const int str2) {
 	return -1;
 }
 
-HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits) {
+HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, long unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits) {
 	
 	int template, SU;
 	unsigned i, j, *value;
@@ -118,7 +118,7 @@ HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, unsigne
 	return kmerList;
 }
 
-HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits, int contamination) {
+HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, long unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits, int contamination) {
 	
 	int template, SU;
 	unsigned i, j, n, *value;
@@ -219,7 +219,7 @@ HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, 
 	return Returner;
 }
 
-HashTable * withDraw_Kmers(unsigned *Scores, unsigned *Scores_tot, HashTable *kmerList, int template, Hit *hits) {
+HashTable * withDraw_Kmers(unsigned *Scores, long unsigned *Scores_tot, HashTable *kmerList, int template, Hit *hits) {
 	
 	unsigned i;
 	HashTable *node, *prev;
@@ -267,7 +267,7 @@ HashTable * withDraw_Kmers(unsigned *Scores, unsigned *Scores_tot, HashTable *km
 	return kmerList;
 }
 
-Hit withDraw_Contamination(unsigned *Scores, unsigned *Scores_tot, HashTable *kmerList, HashTable *deConTable, int template, Hit hits) {
+Hit withDraw_Contamination(unsigned *Scores, long unsigned *Scores_tot, HashTable *kmerList, HashTable *deConTable, int template, Hit hits) {
 	
 	unsigned i, belong;
 	HashTable *node, *prev;
