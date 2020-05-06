@@ -33,7 +33,7 @@ mv kma ~/bin/
 
 ## Indexing ##
 In order to use KMA for mapping, the databases need to indexed. 
-This is done with “kma index”, the most important options are described below:
+This is done with kma index, the most important options are described below:
 
 ```
 -i Input fasta file(s), space separated. By default kma index reads from stdin.
@@ -62,12 +62,12 @@ Some of the most important options:
 -t_db Database from indexing.
 -mem_mode *.index and *.seq are not loaded into memory, which enables one to map against larger databases. Templates are chosen using k-mer counting.
 -dense Skip insertions when making the consensus sequence.
--ref_fsa “-” will be substituted with “n” in the consensus sequence.
+-ref_fsa - will be substituted with n in the consensus sequence.
 -matrix Gives the counts all all called bases at each position in each mapped template. Columns are: reference base, A count, C count, G count, T count, N count, - count.
 -mp Minimum phred-score.
 -Mt1 Match to only one template in the database.
 -ID Minimum identity to output template match.
--apm Paired end method, “p”: Reward if pairing the reads, “u”: unite best template matches in each read if possible, “f” force paired reads to pair.
+-apm Paired end method, p: Reward if pairing the reads, u: unite best template matches in each read if possible, f force paired reads to pair.
 -1t1 One read to one template, no splicing performed. Well suited for short reads and whole genome mapping.
 -bc90 Basecalls should be significantly overrepresented, and have at least 90% agreement.
 -bcNano Basecalls optimized for nanopore sequencing.
@@ -78,23 +78,23 @@ Examples of running KMA:
 
 Short read mapping, one read maps only to one template:
 ```
-kma –i singleEndReads.fq.gz –ipe pairedEnd_*.fq.gz –o output/name –t_db database/name -1t1
+kma -i singleEndReads.fq.gz -ipe pairedEnd_*.fq.gz -o output/name -t_db database/name -1t1
 ```
 
 Long read mapping against a database of genes:
 ```
-kma –i someLongReads.fq.gz –o output/name –t_db database/name
+kma -i someLongReads.fq.gz -o output/name -t_db database/name -bcNano -bc 0.7
 ```
 
 Whole genome mapping with nanopore reads:
 ```
-kma –i nanoporeReads.fq.gz –o output/name –t_db database/name –mem_mode –mp 20 –mrs 0.0 –bcNano
+kma -i nanoporeReads.fq.gz -o output/name -t_db database/name -mem_mode -mp 20 -mrs 0.0 -bcNano -bc 0.7
 ```
 
-Whole genome mapping against a single genome in the database (still nanopore), specified by template number (here “2”).
+Whole genome mapping against a single genome in the database (still nanopore), specified by template number (here 2).
 This is the same as the line number of the wanted sequences in the \*.name file from the indexing.
 ```
-kma –i nanoporeReads.fq.gz –o output/name –t_db database/name –mp 20 –mrs 0.0 –bcNano –Mt1 2
+kma -i nanoporeReads.fq.gz -o output/name -t_db database/name -mp 20 -bcNano -bc 0.7 -Mt1 2
 ```
 
 
@@ -105,7 +105,7 @@ When the mapping is done KMA will produce the following files:
 2. \*.fsa The consensus sequences drawn from the alignments.
 3. \*.aln The consensus alignment of the reads against their template.
 4. \*.frag.gz Mapping information on each mapped read, columns are: read, number of equally well mapping templates, mapping score, start position, end position (w.r.t. template), the choosen template.
-5. \*.mat.gz Base counts on each position in each template, (only if “-matrix” is enabled)
+5. \*.mat.gz Base counts on each position in each template, (only if -matrix is enabled)
 
 # Shared memory #
 The databases of KMA can be put into shared memory, this enables you to align several 
@@ -117,15 +117,15 @@ the computer is restarted or computer breaks down.
 
 Example of setting up a database in shared memory.
 ```
-kma shm –t_db templates –shmLvl 1
+kma shm -t_db database/name -shmLvl 1
 ```
 
-“-shmLvl” specifies how much of the database there should be stored in shared memory, use.
-“-shm-h” to get an overview of the different levels.
+-shmLvl specifies how much of the database there should be stored in shared memory, use.
+-shm-h to get an overview of the different levels.
 
 Example of taking it down again, always remember to do this then it is no longer needed:
 ```
-kma shm –t_db database/name –shmLvl 1 –destroy
+kma shm -t_db database/name -shmLvl 1 -destroy
 ```
 
 # Installation Requirements #
