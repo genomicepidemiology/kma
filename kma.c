@@ -131,6 +131,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-a\t\tPrint all best mappings\t\tFalse\n");
 	fprintf(helpOut, "#\t-mp\t\tMinimum phred score\t\t20\n");
 	fprintf(helpOut, "#\t-5p\t\tCut a constant number of\n#\t\t\tnucleotides from the 5 prime.\t0\n");
+	fprintf(helpOut, "#\t-3p\t\tCut a constant number of\n#\t\t\tnucleotides from the 3 prime.\t0\n");
 	fprintf(helpOut, "#\t-Sparse\t\tOnly count kmers\t\tFalse\n");
 	fprintf(helpOut, "#\t-Mt1\t\tMap only to \"num\" template.\t0 / False\n");
 	fprintf(helpOut, "#\t-ID\t\tMinimum ID\t\t\t1.0%%\n");
@@ -174,10 +175,11 @@ static void helpMessage(int exeStatus) {
 
 int kma_main(int argc, char *argv[]) {
 	
-	static int minPhred, fiveClip, sparse_run, mem_mode, Mt1, ConClave, bcd;
-	static int fileCounter, fileCounter_PE, fileCounter_INT, targetNum, vcf;
-	static int extendedFeatures, spltDB, mq, thread_num, kmersize, one2one;
-	static int ref_fsa, print_matrix, print_all, sam, Ts, Tv, minlen, **d;
+	static int minPhred, fiveClip, threeClip, ConClave, mem_mode, sparse_run;
+	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, minlen;
+	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
+	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
+	static int **d;
 	static unsigned nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
@@ -214,6 +216,7 @@ int kma_main(int argc, char *argv[]) {
 		status = 0;
 		minPhred = 20;
 		fiveClip = 0;
+		threeClip = 0;
 		sparse_run = 0;
 		fileCounter = 0;
 		fileCounter_PE = 0;
@@ -506,6 +509,15 @@ int kma_main(int argc, char *argv[]) {
 					fiveClip = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-5p\".\n");
+						exit(4);
+					}
+				}
+			} else if(strcmp(argv[args], "-3p") == 0) {
+				++args;
+				if(args < argc) {
+					threeClip = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-3p\".\n");
 						exit(4);
 					}
 				}
@@ -1082,7 +1094,7 @@ int kma_main(int argc, char *argv[]) {
 				fprintf(stderr, "Interleaved information is not considered in Sparse mode.\n");
 			}
 			
-			run_input_sparse(templates, inputfiles, fileCounter, minPhred, fiveClip, kmersize, to2Bit, ioStream);
+			run_input_sparse(templates, inputfiles, fileCounter, minPhred, fiveClip, threeClip, kmersize, to2Bit, ioStream);
 			hashMapKMA_destroy(templates);
 			free(myTemplatefilename);
 		} else {
@@ -1104,17 +1116,17 @@ int kma_main(int argc, char *argv[]) {
 			
 			/* SE */
 			if(fileCounter > 0) {
-				totFrags += run_input(inputfiles, fileCounter, minPhred, fiveClip, minlen, to2Bit, ioStream);
+				totFrags += run_input(inputfiles, fileCounter, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
 			}
 			
 			/* PE */
 			if(fileCounter_PE > 0) {
-				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip, minlen, to2Bit, ioStream);
+				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
 			}
 			
 			/* INT */
 			if(fileCounter_INT > 0) {
-				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, minlen, to2Bit, ioStream);
+				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
 			}
 			
 			if(Mt1) {

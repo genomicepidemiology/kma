@@ -226,7 +226,7 @@ void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, C
 	}
 }
 
-void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out) {
+void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int kmersize, char *trans, FILE *out) {
 	
 	int FASTQ, fileCounter, phredCut, start, end;
 	char *filename;
@@ -263,7 +263,8 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 				/* trim */
 				seq = qual->seq;
 				start = fiveClip;
-				end = qseq->len - 1;
+				end = qseq->len - 1 - threeClip;
+				end = end < 0 ? 0 : end;
 				while(end >= 0 && seq[end] < phredCut) {
 					--end;
 				}

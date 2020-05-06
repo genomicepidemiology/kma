@@ -28,7 +28,7 @@
 void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
 void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int minlen, char *trans, FILE *out) {
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int minlen, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, end;
 	unsigned FASTQ;
@@ -67,7 +67,8 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 				/* trim */
 				seq = qual->seq;
 				start = fiveClip;
-				end = qseq->len - 1;
+				end = qseq->len - 1 - threeClip;
+				end = end < 0 ? 0 : end;
 				while(end >= 0 && seq[end] < phredCut) {
 					--end;
 				}
@@ -133,7 +134,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 	return count;
 }
 
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int minlen, char *trans, FILE *out) {
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int minlen, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
@@ -192,7 +193,8 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				/* trim forward */
 				seq = qual->seq;
 				start = fiveClip;
-				end = qseq->len - 1;
+				end = qseq->len - 1 - threeClip;
+				end = end < 0 ? 0 : end;
 				while(end >= 0 && seq[end] < phredCut) {
 					--end;
 				}
@@ -326,7 +328,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 	return count;
 }
 
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int minlen, char *trans, FILE *out) {
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int minlen, char *trans, FILE *out) {
 	
 	int fileCounter, phredCut, start, start2, end;
 	unsigned FASTQ;
@@ -372,7 +374,8 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				/* trim forward */
 				seq = qual->seq;
 				start = fiveClip;
-				end = qseq->len - 1;
+				end = qseq->len - 1 - threeClip;
+				end = end < 0 ? 0 : end;
 				while(end >= 0 && seq[end] < phredCut) {
 					--end;
 				}

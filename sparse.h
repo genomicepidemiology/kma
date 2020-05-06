@@ -24,5 +24,5 @@
 int translateToKmersAndDump(long unsigned *Kmers, int n, int max, unsigned char *qseq, int seqlen, int kmersize, long unsigned mask, long unsigned prefix, int prefix_len, FILE *out);
 char ** load_DBs_Sparse(char *templatefilename, unsigned **template_lengths, unsigned **template_ulengths, unsigned shm);
 void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, CompKmers *compressor);
-void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int kmersize, char *trans, FILE *out);
+void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int kmersize, char *trans, FILE *out);
 int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *exePrev, int ID_t, double evalue, char ss, unsigned shm);
