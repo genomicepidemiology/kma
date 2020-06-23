@@ -34,6 +34,16 @@ typedef int key_t;
 #endif
 
 void (*hashMapKMA_destroy)(HashMapKMA *) = &hashMapKMA_free;
+long unsigned (*getExistPtr)(const unsigned *, const long unsigned);
+long unsigned (*getKeyPtr)(const unsigned *, const long unsigned);
+long unsigned (*getValueIndexPtr)(const unsigned *, const long unsigned);
+unsigned * (*getValuePtr)(const HashMapKMA *, const long unsigned);
+unsigned * (*hashMap_get)(const HashMapKMA *, const long unsigned);
+int (*intpos_bin_contaminationPtr)(const unsigned *, const int);
+int (*getSizePtr)(const unsigned *);
+void (*hashMapKMA_addKey_ptr)(HashMapKMA *, long unsigned, long unsigned);
+void (*hashMapKMA_addValue_ptr)(HashMapKMA *, long unsigned, long unsigned);
+void (*hashMapKMA_addExist_ptr)(HashMapKMA *, long unsigned, long unsigned);
 
 long unsigned getExist(const unsigned *exist, const long unsigned pos) {
 	return exist[pos];

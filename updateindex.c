@@ -27,6 +27,10 @@
 #include "stdnuc.h"
 #include "updateindex.h"
 
+int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *);
+void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, FILE *, unsigned **, unsigned **, unsigned **);
+void (*dumpIndex)(CompDNA *, int, FILE *, FILE *);
+
 int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths) {
 	
 	int i, j, end, shifter;

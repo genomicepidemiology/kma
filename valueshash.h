@@ -37,8 +37,8 @@ struct valuesHash {
 #define VALUESHASH 1
 #endif
 
-long unsigned (*valuesKeyPtr)(unsigned *, int);
-int (*cmpValuesPtr)(unsigned *, unsigned *, unsigned);
+extern long unsigned (*valuesKeyPtr)(unsigned *, int);
+extern int (*cmpValuesPtr)(unsigned *, unsigned *, unsigned);
 ValuesHash * initialize_hashValues(long unsigned size, int DB_size);
 void valuesHash_destroy(ValuesHash *src);
 long unsigned valuesKey(unsigned *values, int DB_size);

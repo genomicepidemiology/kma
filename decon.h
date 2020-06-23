@@ -20,8 +20,8 @@
 #include "compdna.h"
 #include "hashmapkma.h"
 
-int (*deConNode_ptr)(CompDNA *, HashMapKMA *, unsigned **);
-int (*addCont)(HashMapKMA *, long unsigned, int, unsigned **);
+extern int (*deConNode_ptr)(CompDNA *, HashMapKMA *, unsigned **);
+extern int (*addCont)(HashMapKMA *, long unsigned, int, unsigned **);
 int hashMap_addCont(HashMapKMA *dest, long unsigned key, int value, unsigned **Values);
 int megaMap_addCont(HashMapKMA *dest, long unsigned index, int value, unsigned **Values);
 int deConNode(CompDNA *qseq, HashMapKMA *finalDB, unsigned **Values);

@@ -22,6 +22,11 @@
 #include "hashtable.h"
 #include "pherror.h"
 
+int (*hashMap_add)(HashMap *, long unsigned, unsigned);
+unsigned * (*hashMapGet)(HashMap *, long unsigned);
+void (*addUniqueValues)(HashMap *, long unsigned, unsigned *);
+unsigned * (*updateValuePtr)(unsigned *, unsigned);
+
 HashMap * hashMap_initialize(long unsigned size, unsigned kmersize) {
 	
 	HashMap *src;

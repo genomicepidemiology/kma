@@ -49,16 +49,16 @@ struct hashMapKMA {
 
 /* DB size dependent pointers */
 extern void (*hashMapKMA_destroy)(HashMapKMA *);
-long unsigned (*getExistPtr)(const unsigned *, const long unsigned);
-long unsigned (*getKeyPtr)(const unsigned *, const long unsigned);
-long unsigned (*getValueIndexPtr)(const unsigned *, const long unsigned);
-unsigned * (*getValuePtr)(const HashMapKMA *, const long unsigned);
-unsigned * (*hashMap_get)(const HashMapKMA *, const long unsigned);
-int (*intpos_bin_contaminationPtr)(const unsigned *, const int);
-int (*getSizePtr)(const unsigned *);
-void (*hashMapKMA_addKey_ptr)(HashMapKMA *, long unsigned, long unsigned);
-void (*hashMapKMA_addValue_ptr)(HashMapKMA *, long unsigned, long unsigned);
-void (*hashMapKMA_addExist_ptr)(HashMapKMA *, long unsigned, long unsigned);
+extern long unsigned (*getExistPtr)(const unsigned *, const long unsigned);
+extern long unsigned (*getKeyPtr)(const unsigned *, const long unsigned);
+extern long unsigned (*getValueIndexPtr)(const unsigned *, const long unsigned);
+extern unsigned * (*getValuePtr)(const HashMapKMA *, const long unsigned);
+extern unsigned * (*hashMap_get)(const HashMapKMA *, const long unsigned);
+extern int (*intpos_bin_contaminationPtr)(const unsigned *, const int);
+extern int (*getSizePtr)(const unsigned *);
+extern void (*hashMapKMA_addKey_ptr)(HashMapKMA *, long unsigned, long unsigned);
+extern void (*hashMapKMA_addValue_ptr)(HashMapKMA *, long unsigned, long unsigned);
+extern void (*hashMapKMA_addExist_ptr)(HashMapKMA *, long unsigned, long unsigned);
 
 /* HASHMAP FUNCTIONS */
 long unsigned getExist(const unsigned *exist, const long unsigned pos);

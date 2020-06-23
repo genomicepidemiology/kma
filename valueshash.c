@@ -21,6 +21,9 @@
 #include "pherror.h"
 #include "valueshash.h"
 
+long unsigned (*valuesKeyPtr)(unsigned *, int);
+int (*cmpValuesPtr)(unsigned *, unsigned *, unsigned);
+
 ValuesHash * initialize_hashValues(long unsigned size, int DB_size) {
 	
 	ValuesHash *dest;

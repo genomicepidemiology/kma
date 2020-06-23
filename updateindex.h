@@ -21,9 +21,9 @@
 #include "compdna.h"
 #include "hashmap.h"
 
-int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *);
-void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, FILE *, unsigned **, unsigned **, unsigned **);
-void (*dumpIndex)(CompDNA *, int, FILE *, FILE *);
+extern int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *);
+extern void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, FILE *, unsigned **, unsigned **, unsigned **);
+extern void (*dumpIndex)(CompDNA *, int, FILE *, FILE *);
 int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths);
 int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths);
 void updateAnnots(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, FILE *index_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths);

@@ -36,10 +36,10 @@ struct hashMap {
 #define STRUCTHASHMAP 1
 #endif
 
-int (*hashMap_add)(HashMap *, long unsigned, unsigned);
-unsigned * (*hashMapGet)(HashMap *, long unsigned);
-void (*addUniqueValues)(HashMap *, long unsigned, unsigned *);
-unsigned * (*updateValuePtr)(unsigned *, unsigned);
+extern int (*hashMap_add)(HashMap *, long unsigned, unsigned);
+extern unsigned * (*hashMapGet)(HashMap *, long unsigned);
+extern void (*addUniqueValues)(HashMap *, long unsigned, unsigned *);
+extern unsigned * (*updateValuePtr)(unsigned *, unsigned);
 HashMap * hashMap_initialize(long unsigned size, unsigned kmersize);
 int megaMap_addKMA(HashMap *templates, long unsigned key, unsigned value);
 unsigned * megaMap_getValue(HashMap *templates, long unsigned key);

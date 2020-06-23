@@ -26,6 +26,8 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 
+int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *);
+
 int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths) {
 	
 	int i, j, end, rc, thisKlen, prefix_len, prefix_shifter;

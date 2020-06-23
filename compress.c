@@ -33,6 +33,8 @@
 #include <sys/mman.h>
 #endif
 
+unsigned (*valuesSize)(unsigned *);
+
 static void mmapinit(HashMapKMA *finalDB, long unsigned size, FILE *out) {
 	
 	/* allocate file */

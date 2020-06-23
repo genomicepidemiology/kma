@@ -21,7 +21,7 @@
 #include "hashmap.h"
 #include "hashmapkma.h"
 
-unsigned (*valuesSize)(unsigned *);
+extern unsigned (*valuesSize)(unsigned *);
 HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out);
 HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out);
 void compressKMA_deconDB(HashMapKMA *finalDB, unsigned **Values);

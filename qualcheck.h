@@ -20,7 +20,7 @@
 #include "compdna.h"
 #include "hashmap.h"
 
-int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *);
+extern int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *);
 int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths);
 int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths);
 int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths);
