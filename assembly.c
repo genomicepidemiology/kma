@@ -533,7 +533,9 @@ void * assemble_KMA_threaded(void *arg) {
 										pos = assembly[pos].next;
 									}
 								} else if(t_len <= pos) { // Old template gap, not present in this read
-									assembly[pos].counts[5]++;
+									if(!++assembly[pos].counts[5]) {
+										assembly[pos].counts[5] = USHRT_MAX;
+									}
 									pos = assembly[pos].next;
 								} else {
 									if(!++assembly[pos].counts[aligned->q[i]]) {
