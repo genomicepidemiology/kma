@@ -34,7 +34,7 @@ void * smalloc(const size_t size) {
 	return dest;
 }
 
-FILE * sfopen(char *filename, char *mode) {
+FILE * sfopen(const char *filename, char *mode) {
 	
 	FILE *file = fopen(filename, mode);
 	if(!file) {

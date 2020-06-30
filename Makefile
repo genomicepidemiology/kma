@@ -1,6 +1,6 @@
 CFLAGS ?= -Wall -O3
 CFLAGS += -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapindex.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -35,6 +35,7 @@ compdna.o: compdna.h pherror.h stdnuc.h
 compkmers.o: compkmers.h pherror.h
 compress.o: compress.h hashmap.h hashmapkma.h pherror.h valueshash.h
 decon.o: decon.h compdna.h filebuff.h hashmapkma.h seqparse.h stdnuc.h qseqs.h updateindex.h
+dist.o: dist.h hashmapkma.h matrix.h pherror.h
 ef.o: ef.h assembly.h stdnuc.h vcf.h version.h
 filebuff.o: filebuff.h pherror.h qseqs.h
 frags.o: frags.h filebuff.h pherror.h qseqs.h
@@ -51,6 +52,7 @@ kmers.o: kmers.h ankers.h compdna.h hashmapkma.h kmapipe.h pherror.h qseqs.h sav
 kmmap.o: kmmap.h hashmapkma.h
 loadupdate.o: loadupdate.h pherror.h hashmap.h hashmapkma.h updateindex.h
 makeindex.o: makeindex.h compdna.h filebuff.h hashmap.h pherror.h qseqs.h seqparse.h updateindex.h
+matrix.o: matrix.h pherror.h
 mt1.o: mt1.h assembly.h chain.h filebuff.h hashmapindex.h kmapipe.h nw.h penalties.h pherror.h printconsensus.h qseqs.h runkma.h stdstat.h vcf.h
 nw.o: nw.h pherror.h stdnuc.h penalties.h
 pherror.o: pherror.h
