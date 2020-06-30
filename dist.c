@@ -277,7 +277,7 @@ void kmerQuery(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *temp
 	D = Dist->mat;
 	
 	if(format & 4) {
-		fprintf(outfile, "#%s\n", "Avg. k-mer coverage");
+		fprintf(outfile, "#%s\n", "Query k-mer coverage");
 	}
 	fprintf(outfile, "%10d\n", Dist->n);
 	for(i = 0; i < Dist->n; ++i) {
@@ -288,9 +288,13 @@ void kmerQuery(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *temp
 			fprintf(outfile, "%-10.10s", name);
 		}
 		
-		for(j = 0; j < Dist->n - 1; ++j) {
-			d = i < j ? D[j][i] : D[i][j];
-			fprintf(outfile, "\t%.2f", 100.0 * d / N[i]);
+		for(j = 0; j < Dist->n; ++j) {
+			if(i == j) {
+				fprintf(outfile, "\t%.2f", 100.0);
+			} else {
+				d = i < j ? D[j][i] : D[i][j];
+				fprintf(outfile, "\t%.2f", 100.0 * d / N[i]);
+			}
 		}
 		fprintf(outfile, "\n");
 	}
@@ -307,7 +311,7 @@ void kmerTemplate(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *t
 	D = Dist->mat;
 	
 	if(format & 4) {
-		fprintf(outfile, "#%s\n", "Avg. k-mer coverage");
+		fprintf(outfile, "#%s\n", "Template k-mer coverage");
 	}
 	fprintf(outfile, "%10d\n", Dist->n);
 	for(i = 0; i < Dist->n; ++i) {
@@ -318,9 +322,13 @@ void kmerTemplate(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *t
 			fprintf(outfile, "%-10.10s", name);
 		}
 		
-		for(j = 0; j < Dist->n - 1; ++j) {
-			d = i < j ? D[j][i] : D[i][j];
-			fprintf(outfile, "\t%.2f", 100.0 * d / N[j]);
+		for(j = 0; j < Dist->n; ++j) {
+			if(i == j) {
+				fprintf(outfile, "\t%.2f", 100.0);
+			} else {
+				d = i < j ? D[j][i] : D[i][j];
+				fprintf(outfile, "\t%.2f", 100.0 * d / N[j]);
+			}
 		}
 		fprintf(outfile, "\n");
 	}
