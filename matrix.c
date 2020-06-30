@@ -54,7 +54,10 @@ Matrix * ltdMatrix_init(unsigned size) {
 	dest->n = 0;
 	dest->size = size;
 	dest->mat = smalloc(size * sizeof(int *));
-	*(dest->mat) = smalloc(size * size * sizeof(int) / 2);
+	*(dest->mat) = calloc(size * size / 2, sizeof(int));
+	if(!*(dest->mat)) {
+		ERROR();
+	}
 	
 	/* set matrix rows */
 	ptr = dest->mat;
