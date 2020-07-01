@@ -31,7 +31,7 @@
 #include "ef.h"
 #include "filebuff.h"
 #include "frags.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "kmapipe.h"
 #include "nw.h"
 #include "pherror.h"
@@ -46,6 +46,7 @@
 #include "updatescores.h"
 #include "version.h"
 #include "vcf.h"
+#include "xml.h"
 
 int print_ankers_spltDB(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *header, const int flag, FILE *out) {
 	
@@ -394,27 +395,27 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
 	int i, j, k, tmp_template, tmp_tmp_template, t_len, file_len, score, tot;
 	int template, bestHits, start, end, aln_len, fragCount, maxFrag, DB_size;
 	int rc_flag, coverScore, tmp_start, tmp_end, bestTemplate, status, delta;
-	int seq_in_no, index_in_no, progress, sparse, fileCount, rand, stats[5];
+	int seq_in_no, progress, sparse, fileCount, rand, stats[5];
 	int flag, flag_r;
 	int *template_lengths, *bestTargets, *matched_templates, *bestTemplates;
 	int *best_start_pos, *best_end_pos, (*targetInfo)[7], (*ptrInfo)[7];
 	unsigned randScore, num, target, targetScore, bias;
 	unsigned *fragmentCounts, *readCounts, *nums, *uPtr, *dbBiases;
-	long best_read_score, read_score, seq_seeker, index_seeker;
-	long unsigned Nhits, template_tot_ulen, bestNum, counter;
+	long best_read_score, read_score, seq_seeker;
+	long unsigned Nhits, template_tot_ulen, bestNum, counter, seqin_size;
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
 	char *templatefilename, Date[11];
-	FILE **inputfiles, *inputfile, *frag_in_raw, *index_in, *seq_in;
-	FILE *res_out, *alignment_out, *consensus_out, *frag_out_raw;
+	FILE **inputfiles, *inputfile, *frag_in_raw, *seq_in;
+	FILE *res_out, *alignment_out, *consensus_out, *frag_out_raw, *xml_out;
 	FILE *extendedFeatures_out, *name_file, **template_fragments;
 	time_t t0, t1;
 	struct tm *tm;
@@ -431,7 +432,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	
 	if(!outputfilename) {
 		fprintf(stderr, " No output file specified!\n");
-		exit(2);
+		exit(1);
 	}
 	
 	/* load databases */
@@ -575,6 +576,18 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		fprintf(extendedFeatures_out, "\n");
 	} else {
 		extendedFeatures_out = 0;
+	}
+	
+	if(xml) {
+		if(xml == 2) {
+			xml_out = openInitXML("--", noFolder(*templatefilenames), **targetInfo, argc, argv);
+		} else {
+			strcat(outputfilename, ".xml");
+			xml_out = openInitXML(outputfilename, noFolder(*templatefilenames), **targetInfo, argc, argv);
+			outputfilename[file_len] = 0;
+		}
+	} else {
+		xml_out = 0;
 	}
 	
 	/* open input streams */
@@ -774,7 +787,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		fprintf(stderr, "# Scored %ld query sequences.\n", Nhits);
 		verbose = 1;
 	}
-	
 	/* get fragmentCount */
 	if(extendedFeatures) {
 		fprintf(extendedFeatures_out, "## fragmentCount\t%u\n", **targetInfo);
@@ -831,7 +843,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	maxFrag = 1000000;
 	
 	/* Patricks features */
-	if(extendedFeatures) {
+	if(extendedFeatures || xml) {
 		fragmentCounts = calloc(DB_size, sizeof(unsigned));
 		readCounts = calloc(DB_size, sizeof(unsigned));
 		if(!fragmentCounts || !readCounts) {
@@ -934,7 +946,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
-			if(extendedFeatures) {
+			if(fragmentCounts) {
 				fragmentCounts[bestTemplate]++;
 				readCounts[bestTemplate]++;
 			}
@@ -1267,7 +1279,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
-			if(extendedFeatures) {
+			if(fragmentCounts) {
 				fragmentCounts[bestTemplate]++;
 				readCounts[bestTemplate]++;
 			}
@@ -1346,6 +1358,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	while(--i) {
 		Nhits += w_scores[i];
 	}
+	Nhits = Nhits ? Nhits : 1;
 	
 	t1 = clock();
 	fprintf(stderr, "# Total time for sorting and outputting KMA alignment\t%.2f s.\n", difftime(t1, t0) / 1000000);
@@ -1359,7 +1372,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		initialiseVcf(vcf_out, templatefilename);
 	}
 	seq_in = 0;
-	index_in = 0;
 	
 	/* preallocate assembly matrices */
 	matrix = smalloc(sizeof(AssemInfo));
@@ -1370,7 +1382,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			matrix->size = template_lengths[i];
 		}
 	}
-	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+	if(alnToMatPtr == &alnToMat) {
 		matrix->size <<= 1;
 	} else {
 		matrix->size++;
@@ -1415,10 +1427,14 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		thread->evalue = evalue;
 		thread->bcd = bcd;
 		thread->sam = sam;
+		thread->ef = extendedFeatures;
+		thread->seq_in = fileno(seq_in);
+		thread->kmersize = kmersize;
 		thread->template = -2;
 		thread->file_count = fileCount;
 		thread->files = template_fragments;
 		thread->frag_out = frag_out;
+		thread->xml_out = xml_out;
 		thread->aligned_assem = aligned_assem;
 		thread->aligned = aligned;
 		thread->gap_align = gap_align;
@@ -1475,10 +1491,14 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->evalue = evalue;
 	thread->bcd = bcd;
 	thread->sam = sam;
+	thread->ef = extendedFeatures;
+	thread->seq_in = fileno(seq_in);
+	thread->kmersize = kmersize;
 	thread->template = 0;
 	thread->file_count = fileCount;
 	thread->files = template_fragments;
 	thread->frag_out = frag_out;
+	thread->xml_out = xml_out;
 	thread->aligned_assem = aligned_assem;
 	thread->aligned = aligned;
 	thread->gap_align = gap_align;
@@ -1488,7 +1508,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->header = header;
 	thread->points = points;
 	thread->points->len = 0;
-	thread->template_index = 0;
 	thread->next = 0;
 	thread->spin = (sparse < 0) ? 10 : 100;
 	
@@ -1498,7 +1517,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	cover = 0;
 	q_cover = 0;
 	seq_seeker = 0;
-	index_seeker = 0;
 	progress = 0;
 	counter = 0;
 	if(progress) {
@@ -1514,35 +1532,21 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".seq.b");
 	seq_in = sfopen(templatefilename, "rb");
+	fseek(seq_in, 0, SEEK_END);
+	seqin_size = 4 * ftell(seq_in);
+	fseek(seq_in, 0, SEEK_SET);
 	seq_in_no = fileno(seq_in);
 	templatefilename[file_len] = 0;
 	strcat(templatefilename, ".name");
-	name_file = fopen(templatefilename, "rb");
+	name_file = sfopen(templatefilename, "rb");
 	templatefilename[file_len] = 0;
-	strcat(templatefilename, ".index.b");
-	index_in = fopen(templatefilename, "rb");
-	if(!index_in) {
-		alignLoadPtr = &alignLoad_fly_build_mem;
-		destroyPtr = &alignClean;
-		index_in = 0;
-		index_in_no = 0;
-		if(kmersize < 4 || 32 < kmersize) {
-			kmersize = 16;
-		}
-	} else if(shm & 8) {
-		index_in_no = fileno(index_in);
-		alignLoad_shm_initial(templatefilename, file_len, seq_in_no, index_in_no, kmersize);
-		alignLoadPtr = &alignLoad_fly_shm;
-		destroyPtr = &alignClean_shm;
-	} else {
-		alignLoadPtr = &alignLoad_fly_mem;
-		destroyPtr = &alignClean;
-		index_in_no = fileno(index_in);
-		read(index_in_no, &kmersize, sizeof(int));
+	alignLoadPtr = &alignLoad_fly_mem;
+	if(kmersize < 4 || 32 < kmersize) {
+		kmersize = 16;
 	}
-	templatefilename[file_len] = 0;
+	
 	if(extendedFeatures == 2) {
-		getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
+		printExtendedFeatures(templatefilename, 0, 0, 0, extendedFeatures_out);
 	}
 	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
 		alignLoadPtr = &alignLoad_skip;
@@ -1561,37 +1565,14 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			strcat(templatefilename, ".seq.b");
 			fclose(seq_in);
 			seq_in = sfopen(templatefilename, "rb");
+			fseek(seq_in, 0, SEEK_END);
+			seqin_size = 4 * ftell(seq_in);
+			fseek(seq_in, 0, SEEK_SET);
 			seq_in_no = fileno(seq_in);
 			templatefilename[file_len] = 0;
-			strcat(templatefilename, ".index.b");
-			if(index_in) {
-				fclose(index_in);
-			}
-			index_in = fopen(templatefilename, "rb");
-			templatefilename[file_len] = 0;
-			if(!index_in) {
-				alignLoadPtr = &alignLoad_fly_build_mem;
-				destroyPtr = &alignClean;
-				index_in = 0;
-				index_in_no = 0;
-				if(kmersize < 4 || 32 < kmersize) {
-					kmersize = 16;
-				}
-			} else if(shm & 8) {
-				index_in_no = fileno(index_in);
-				alignLoad_shm_initial(templatefilename, file_len, seq_in_no, index_in_no, kmersize);
-				alignLoadPtr = &alignLoad_fly_shm;
-				destroyPtr = &alignClean_shm;
-			} else {
-				alignLoadPtr = &alignLoad_fly_mem;
-				destroyPtr = &alignClean;
-				index_in_no = fileno(index_in);
-				read(index_in_no, &kmersize, sizeof(int));
-			}
 			seq_seeker = 0;
-			index_seeker = 0;
 			if(extendedFeatures == 2) {
-				getExtendedFeatures(templatefilename, 0, 0, 0, 0, 0, 0, 0, 0, extendedFeatures_out);
+				printExtendedFeatures(templatefilename, 0, 0, 0, extendedFeatures_out);
 			}
 		} else if(w_scores[template] > 0) {
 			
@@ -1622,19 +1603,17 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				/* load DB */
 				thread->template_name = nameLoad(template_name, name_file);
-				if(index_in) {
-					index_seeker *= sizeof(int);
-					lseek(index_in_no, index_seeker, SEEK_CUR);
-					index_seeker = 0;
-				}
 				seq_seeker *= sizeof(long unsigned);
 				lseek(seq_in_no, seq_seeker, SEEK_CUR);
 				seq_seeker = 0;
-				thread->template_index = alignLoadPtr(thread->template_index, seq_in_no, index_in_no, template_lengths[template], kmersize, 0, 0);
-				
+				thread->template_index->len = 0;
+				if(xml) {
+					newIterXML(xml_out, template, t_len, thread->template_name);
+				}
 				/* Do assembly */
 				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
 				thread->template = template;
+				thread->t_len = 0;
 				assembly_KMA_Ptr(thread);
 				
 				/* Depth, ID and coverage */
@@ -1649,6 +1628,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					q_cover = 100.0 * t_len / aln_len;
 				} else {
 					id = 0;
+					aln_len = 0;
+				}
+				
+				if(xml) {
+					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
 				}
 				
 				if(ID_t <= id && 0 < id) {
@@ -1663,25 +1647,18 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 						updateMatrix(matrix_out, thread->template_name, thread->template_index->seq, matrix, t_len);
 					}
 					if(extendedFeatures) {
-						getExtendedFeatures(thread->template_name, matrix, thread->template_index->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], aligned_assem->fragmentCountAln, aligned_assem->readCountAln, extendedFeatures_out);
+						printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 					}
 					if(vcf) {
 						updateVcf(thread->template_name, thread->template_index->seq, evalue, t_len, matrix, vcf, vcf_out);
 					}
 				}
-				/* destroy this DB index */
-				destroyPtr(thread->template_index);
 			} else {
-					if(sam || ID_t == 0.0) {
-						if(index_in) {
-						index_seeker *= sizeof(int);
-						lseek(index_in_no, index_seeker, SEEK_CUR);
-						index_seeker = 0;
-					}
+				if(sam || ID_t == 0.0) {
 					seq_seeker *= sizeof(long unsigned);
 					lseek(seq_in_no, seq_seeker, SEEK_CUR);
 					seq_seeker = 0;
-					thread->template_index = alignLoadPtr(thread->template_index, seq_in_no, index_in_no, template_lengths[template], kmersize, 0, 0);
+					thread->template_index = alignLoadPtr(thread->template_index, seq_in_no, template_lengths[template], kmersize, 0);
 					thread->template_name = nameLoad(template_name, name_file);
 					skip_assemble_KMA(thread);
 					if(ID_t == 0.0) {
@@ -1690,22 +1667,16 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
-							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], 0, 0, extendedFeatures_out);
+							printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
 					}
 				} else {
 					nameSkip(name_file, end);
 				}
-				if(index_in) {
-					index_seeker += (template_lengths[template] << 1);
-				}
 				seq_seeker += ((template_lengths[template] >> 5) + 1);
 			}
 		} else {
 			nameSkip(name_file, end);
-			if(index_in) {
-				index_seeker += (template_lengths[template] << 1);
-			}
 			seq_seeker += ((template_lengths[template] >> 5) + 1);
 		}
 	}
@@ -1724,10 +1695,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		}
 	}
 	
+	/* destroy index */
+	hashMapCCI_destroy(thread->template_index);
+	
 	/* Close files */
-	if(index_in) {
-		fclose(index_in);
-	}
 	fclose(seq_in);
 	fclose(res_out);
 	if(alignment_out) {
@@ -1746,6 +1717,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	}
 	if(vcf) {
 		destroyGzFileBuff(vcf_out);
+	}
+	if(xml) {
+		closeCapXML(xml_out);
 	}
 	
 	t1 = clock();

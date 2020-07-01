@@ -32,7 +32,7 @@
 #include "ef.h"
 #include "filebuff.h"
 #include "frags.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "kmapipe.h"
 #include "nw.h"
 #include "penalties.h"
@@ -46,6 +46,7 @@
 #include "tmp.h"
 #include "updatescores.h"
 #include "vcf.h"
+#include "xml.h"
 #ifndef _WIN32
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -88,7 +89,7 @@ int load_DBs_KMA(char *templatefilename, long unsigned **alignment_scores, long 
 		shmid = shmget(key, DB_size * sizeof(int), 0666);
 		if(shmid < 0) {
 			fprintf(stderr, "No shared length\n");
-			exit(2);
+			exit(1);
 		} else {
 			*template_lengths = shmat(shmid, NULL, 0);
 		}
@@ -134,23 +135,23 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
 	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
 	int fragCount, fileCount, maxFrag, coverScore, tmp_start, tmp_end, score;
-	int index_in_no, seq_in_no, DB_size, flag, counter, stats[5];
+	int seq_in_no, DB_size, flag, counter, stats[5];
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
 	int *matched_templates, *template_lengths;
 	unsigned randScore, *fragmentCounts, *readCounts;
-	long read_score, best_read_score, *index_indexes, *seq_indexes;
-	long unsigned Nhits, template_tot_ulen, bestNum;
+	long read_score, best_read_score, *seq_indexes;
+	long unsigned Nhits, template_tot_ulen, bestNum, seqin_size;
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, q_id, cover, q_cover, p_value;
 	long double depth, expected, q_value;
-	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out, *name_file;
+	FILE *inputfile, *frag_in_raw, *seq_in, *res_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
-	FILE *extendedFeatures_out;
+	FILE *extendedFeatures_out, *xml_out;
 	time_t t0, t1;
 	FileBuff *frag_out, *frag_out_all, *matrix_out, *vcf_out;
 	Aln *aligned, *gap_align;
@@ -163,7 +164,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	NWmat *NWmatrices;
 	Assemble_thread *threads, *thread;
 	Aln_thread *alnThreads, *alnThread;
-	HashMap_index **templates_index;
+	HashMapCCI **templates_index;
 	
 	/* get lengths and names */
 	file_len = strlen(templatefilename);
@@ -191,44 +192,27 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	/* load databases */
 	strcat(templatefilename, ".seq.b");
 	seq_in = sfopen(templatefilename, "rb");
+	fseek(seq_in, 0, SEEK_END);
+	seqin_size = 4 * ftell(seq_in);
+	fseek(seq_in, 0, SEEK_SET);
 	seq_in_no = fileno(seq_in);
 	templatefilename[file_len] = 0;
-	templates_index = calloc(DB_size, sizeof(HashMap_index*));
+	templates_index = calloc(DB_size, sizeof(HashMapCCI*));
 	if(!templates_index) {
 		ERROR();
 	}
-	strcat(templatefilename, ".index.b");
-	index_in = fopen(templatefilename, "rb");
-	if(!index_in) {
-		alignLoadPtr = &alignLoad_fly_build;
-		index_in = 0;
-		index_in_no = 0;
-		if(kmersize < 4 || 32 < kmersize) {
-			kmersize = 16;
-		}
-	} else if(shm & 8) {
-		index_in_no = fileno(index_in);
-		*templates_index = alignLoad_shm_initial(templatefilename, file_len, seq_in_no, index_in_no, kmersize);
-		alignLoadPtr = &alignLoad_fly_shm;
-		destroyPtr = &alignClean_shm;
-	} else {
-		index_in_no = fileno(index_in);
-		read(index_in_no, &kmersize, sizeof(int));
+	alignLoadPtr = &alignLoad_fly;
+	if(kmersize < 4 || 32 < kmersize) {
+		kmersize = 16;
 	}
-	
-	templatefilename[file_len] = 0;
 	
 	/* allocate stuff */
 	file_len = strlen(outputfilename);
-	index_indexes = smalloc((DB_size + 1) * sizeof(long));
 	seq_indexes = smalloc((DB_size + 1) * sizeof(long));
 	/* make file indexes of template indexing */
-	*index_indexes = 0;
 	*seq_indexes = 0;
-	index_indexes[1] = sizeof(int);
 	seq_indexes[1] = 0;
 	for(i = 2; i < DB_size; ++i) {
-		index_indexes[i] = index_indexes[i - 1] + (template_lengths[i - 1] << 1) * sizeof(int);
 		seq_indexes[i] = seq_indexes[i - 1] + ((template_lengths[i - 1] >> 5) + 1) * sizeof(long unsigned);
 	}
 	
@@ -286,7 +270,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		}
 	} else {
 		fprintf(stderr, " No output file specified!\n");
-		exit(2);
+		exit(1);
 	}
 	
 	fprintf(stderr, "# Running KMA.\n");
@@ -327,12 +311,10 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->best_end_pos = best_end_pos;
 		alnThread->alignment_scores = alignment_scores;
 		alnThread->uniq_alignment_scores = uniq_alignment_scores;
-		alnThread->index_indexes = index_indexes;
 		alnThread->seq_indexes = seq_indexes;
 		alnThread->inputfile = inputfile;
 		alnThread->frag_out_raw = frag_out_raw;
 		alnThread->frag_out_all = frag_out_all;
-		alnThread->index_in = index_in_no;
 		alnThread->seq_in = seq_in_no;
 		alnThread->qseq_comp = qseq_comp;
 		alnThread->qseq_r_comp = qseq_r_comp;
@@ -401,12 +383,10 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->best_end_pos = best_end_pos;
 	alnThread->alignment_scores = alignment_scores;
 	alnThread->uniq_alignment_scores = uniq_alignment_scores;
-	alnThread->index_indexes = index_indexes;
 	alnThread->seq_indexes = seq_indexes;
 	alnThread->inputfile = inputfile;
 	alnThread->frag_out_raw = frag_out_raw;
 	alnThread->frag_out_all = frag_out_all;
-	alnThread->index_in = index_in_no;
 	alnThread->seq_in = seq_in_no;
 	alnThread->qseq_comp = qseq_comp;
 	alnThread->qseq_r_comp = qseq_r_comp;
@@ -458,19 +438,35 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	
 	/* Patricks features */
 	if(extendedFeatures) {
-		fragmentCounts = calloc(DB_size, sizeof(unsigned));
-		readCounts = calloc(DB_size, sizeof(unsigned));
-		if(!fragmentCounts || !readCounts) {
-			ERROR();
-		}
 		strcat(outputfilename, ".mapstat");
 		extendedFeatures_out = sfopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		initExtendedFeatures(extendedFeatures_out, templatefilename, *matched_templates, exePrev);
 	} else {
+		extendedFeatures_out = 0;
+	}
+	
+	if(extendedFeatures || xml) {
+		fragmentCounts = calloc(DB_size, sizeof(unsigned));
+		readCounts = calloc(DB_size, sizeof(unsigned));
+		if(!fragmentCounts || !readCounts) {
+			ERROR();
+		}
+	} else {
 		fragmentCounts = 0;
 		readCounts = 0;
-		extendedFeatures_out = 0;
+	}
+	
+	if(xml) {
+		if(xml == 2) {
+			xml_out = openInitXML("--", templatefilename, *matched_templates, 1, &exePrev);
+		} else {
+			strcat(outputfilename, ".xml");
+			xml_out = openInitXML(outputfilename, templatefilename, *matched_templates, 1, &exePrev);
+			outputfilename[file_len] = 0;
+		}
+	} else {
+		xml_out = 0;
 	}
 	
 	/* clean threads */
@@ -490,7 +486,11 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		thread->evalue = evalue;
 		thread->bcd = bcd;
 		thread->sam = sam;
+		thread->ef = extendedFeatures;
+		thread->seq_in = 0;
+		thread->kmersize = kmersize;
 		thread->frag_out = frag_out;
+		thread->xml_out = xml_out;
 		thread->NWmatrices = alnThread->NWmatrices;
 		thread->qseq = alnThread->qseq;
 		thread->header = alnThread->header;
@@ -647,7 +647,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
-			if(extendedFeatures) {
+			if(fragmentCounts) {
 				fragmentCounts[bestTemplate]++;
 				readCounts[bestTemplate]++;
 			}
@@ -982,7 +982,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
-			if(extendedFeatures) {
+			if(fragmentCounts) {
 				fragmentCounts[bestTemplate]++;
 				readCounts[bestTemplate]++;
 			}
@@ -1065,6 +1065,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	while(--i) {
 		Nhits += w_scores[i];
 	}
+	Nhits = Nhits ? Nhits : 1;
 	
 	t1 = clock();
 	fprintf(stderr, "# Total time for sorting and outputting KMA alignment\t%.2f s.\n", difftime(t1, t0) / 1000000);
@@ -1089,7 +1090,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			matrix->size = template_lengths[i];
 		}
 	}
-	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+	if(alnToMatPtr == &alnToMat) {
 		matrix->size <<= 1;
 	} else {
 		matrix->size++;
@@ -1147,9 +1148,13 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	thread->evalue = evalue;
 	thread->bcd = bcd;
 	thread->sam = sam;
+	thread->ef = extendedFeatures;
+	thread->seq_in = 0;
+	thread->kmersize = kmersize;
 	thread->file_count = fileCount;
 	thread->files = template_fragments;
 	thread->frag_out = frag_out;
+	thread->xml_out = xml_out;
 	thread->aligned_assem = aligned_assem;
 	thread->aligned = aligned;
 	thread->gap_align = gap_align;
@@ -1197,9 +1202,13 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				thread->template_name = nameLoad(template_name, name_file);
 				thread->template_index = templates_index[template];
+				if(xml) {
+					newIterXML(xml_out, template, t_len, thread->template_name);
+				}
 				/* Do assembly */
 				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
 				thread->template = template;
+				thread->t_len = t_len;
 				assembly_KMA_Ptr(thread);
 				
 				/* Depth, ID and coverage */
@@ -1213,7 +1222,12 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					cover = 100.0 * aln_len / t_len;
 					q_cover = 100.0 * t_len / aln_len;
 				} else {
+					aln_len = 0;
 					id = 0;
+				}
+				
+				if(xml) {
+					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
 				}
 				
 				if(ID_t <= id && 0 < id) {
@@ -1228,7 +1242,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						updateMatrix(matrix_out, thread->template_name, templates_index[template]->seq, matrix, t_len);
 					}
 					if(extendedFeatures) {
-						getExtendedFeatures(thread->template_name, matrix, templates_index[template]->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], aligned_assem->fragmentCountAln, aligned_assem->readCountAln, extendedFeatures_out);
+						printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 					}
 					if(vcf) {
 						updateVcf(thread->template_name, templates_index[template]->seq, evalue, t_len, matrix, vcf, vcf_out);
@@ -1249,7 +1263,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
-							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], 0, 0, extendedFeatures_out);
+							printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
 					}
 				} else {
@@ -1259,6 +1273,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		} else {
 			nameSkip(name_file, end);
 		}
+		hashMapCCI_destroy(templates_index[template]);
 	}
 	
 	/* join threads */
@@ -1272,9 +1287,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	}
 	
 	/* Close files */
-	if(index_in) {
-		fclose(index_in);
-	}
 	fclose(seq_in);
 	fclose(res_out);
 	if(alignment_out) {
@@ -1294,6 +1306,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	if(vcf) {
 		destroyGzFileBuff(vcf_out);
 	}
+	if(xml) {
+		closeCapXML(xml_out);
+	}
 	
 	t1 = clock();
 	fprintf(stderr, "# Total time used for local assembly: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
@@ -1301,7 +1316,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double evalue, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -1310,18 +1325,18 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	int i, j, tmp_template, tmp_tmp_template, file_len, score, rand, rc_flag;
 	int template, bestHits, t_len, start, delta, aln_len, fragCount, maxFrag;
 	int fileCount, coverScore, tmp_start, tmp_end, bestTemplate, status, tot;
-	int sparse, progress, seq_in_no, index_in_no, DB_size, end, flag, flag_r;
+	int sparse, progress, seq_in_no, DB_size, end, flag, flag_r;
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
 	int *template_lengths, stats[5];
 	unsigned randScore, *fragmentCounts, *readCounts;
-	long best_read_score, read_score, seq_seeker, index_seeker;
-	long unsigned Nhits, template_tot_ulen, bestNum, counter;
+	long best_read_score, read_score, seq_seeker;
+	long unsigned Nhits, template_tot_ulen, bestNum, counter, seqin_size;
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
-	FILE *inputfile, *frag_in_raw, *index_in, *seq_in, *res_out, *name_file;
+	FILE *inputfile, *frag_in_raw, *seq_in, *res_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
-	FILE *extendedFeatures_out;
+	FILE *extendedFeatures_out, *xml_out;
 	time_t t0, t1;
 	FileBuff *frag_out, *frag_out_all, *matrix_out, *vcf_out;
 	Aln *aligned, *gap_align;
@@ -1333,7 +1348,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	AlnPoints *points;
 	NWmat *NWmatrices;
 	Assemble_thread *threads, *thread;
-	HashMap_index *template_index;
+	HashMapCCI *template_index;
 	
 	/* get lengths and names */
 	file_len = strlen(templatefilename);
@@ -1343,6 +1358,12 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	strcat(templatefilename, ".name");
 	name_file = sfopen(templatefilename, "rb");
 	templatefilename[file_len] = 0;
+	if((verbose & 2)) {
+		progress = 1;
+		verbose = 0;
+	} else {
+		progress = 0;
+	}
 	
 	/* print sam-header */
 	if(sam) {
@@ -1359,22 +1380,15 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	}
 	
 	/* load databases */
-	strcat(templatefilename, ".index.b");
-	index_in = fopen(templatefilename, "rb");
-	templatefilename[file_len] = 0;
-	if(index_in) {
-		index_in_no = fileno(index_in);
-		read(index_in_no, &kmersize, sizeof(int));
-	} else {
-		alignLoadPtr = &alignLoad_fly_build_mem;
-		index_in = 0;
-		index_in_no = 0;
-		if(kmersize < 4 || 32 < kmersize) {
-			kmersize = 16;
-		}
+	alignLoadPtr = &alignLoad_fly_mem;
+	if(kmersize < 4 || 32 < kmersize) {
+		kmersize = 16;
 	}
 	strcat(templatefilename, ".seq.b");
 	seq_in = sfopen(templatefilename, "rb");
+	fseek(seq_in, 0, SEEK_END);
+	seqin_size = 4 * ftell(seq_in);
+	fseek(seq_in, 0, SEEK_SET);
 	seq_in_no = fileno(seq_in);
 	templatefilename[file_len] = 0;
 	
@@ -1448,7 +1462,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		}
 	} else {
 		fprintf(stderr, " No output file specified!\n");
-		exit(2);
+		exit(1);
 	}
 	
 	fprintf(stderr, "# Collecting k-mer scores.\n");
@@ -1528,6 +1542,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			}
 		}
 	}
+	
 	/* verbose */
 	if(verbose) {
 		Nhits += verbose - 1;
@@ -1590,19 +1605,35 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* Patricks features */
 	if(extendedFeatures) {
-		fragmentCounts = calloc(DB_size, sizeof(unsigned));
-		readCounts = calloc(DB_size, sizeof(unsigned));
-		if(!fragmentCounts || !readCounts) {
-			ERROR();
-		}
 		strcat(outputfilename, ".mapstat");
 		extendedFeatures_out = sfopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 		initExtendedFeatures(extendedFeatures_out, templatefilename, *matched_templates, exePrev);
 	} else {
+		extendedFeatures_out = 0;
+	}
+	if(extendedFeatures || xml) {
+		fragmentCounts = calloc(DB_size, sizeof(unsigned));
+		readCounts = calloc(DB_size, sizeof(unsigned));
+		if(!fragmentCounts || !readCounts) {
+			ERROR();
+		}
+	} else {
 		fragmentCounts = 0;
 		readCounts = 0;
-		extendedFeatures_out = 0;
+	}
+	
+	
+	if(xml) {
+		if(xml == 2) {
+			xml_out = openInitXML("--", templatefilename, *matched_templates, 1, &exePrev);
+		} else {
+			strcat(outputfilename, ".xml");
+			xml_out = openInitXML(outputfilename, templatefilename, *matched_templates, 1, &exePrev);
+			outputfilename[file_len] = 0;
+		}
+	} else {
+		xml_out = 0;
 	}
 	
 	/* Get expected values */
@@ -1697,7 +1728,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
-			if(extendedFeatures) {
+			if(fragmentCounts) {
 				fragmentCounts[bestTemplate]++;
 				readCounts[bestTemplate]++;
 			}
@@ -2029,7 +2060,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				strrc(qseq->seq, qseq->len);
 			}
 			w_scores[bestTemplate] += read_score;
-			if(extendedFeatures) {
+			if(fragmentCounts) {
 				fragmentCounts[bestTemplate]++;
 				readCounts[bestTemplate]++;
 			}
@@ -2129,16 +2160,18 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		}
 	}
 	
-	template_index = smalloc(sizeof(HashMap_index));
+	template_index = smalloc(sizeof(HashMapCCI));
 	template_index->size = 0;
+	hashMapCCI_initialize(template_index, matrix->size, kmersize);
+	/*
 	if(alignLoadPtr != alignLoad_fly_shm) {
-		hashMap_index_initialize(template_index, matrix->size, kmersize);
+		hashMapCCI_initialize(template_index, matrix->size, kmersize);
 	} else {
 		template_index->seq = 0;
 		template_index->index = 0;
 	}
-	
-	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+	*/
+	if(alnToMatPtr == &alnToMat) {
 		matrix->size <<= 1;
 	} else {
 		matrix->size++;
@@ -2183,10 +2216,14 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		thread->evalue = evalue;
 		thread->bcd = bcd;
 		thread->sam = sam;
+		thread->ef = extendedFeatures;
+		thread->seq_in = fileno(seq_in);
+		thread->kmersize = kmersize;
 		thread->template = -2;
 		thread->file_count = fileCount;
 		thread->files = template_fragments;
 		thread->frag_out = frag_out;
+		thread->xml_out = xml_out;
 		thread->aligned_assem = aligned_assem;
 		thread->aligned = aligned;
 		thread->gap_align = gap_align;
@@ -2243,10 +2280,14 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	thread->evalue = evalue;
 	thread->bcd = bcd;
 	thread->sam = sam;
+	thread->ef = extendedFeatures;
+	thread->seq_in = fileno(seq_in);
+	thread->kmersize = kmersize;
 	thread->template = 0;
 	thread->file_count = fileCount;
 	thread->files = template_fragments;
 	thread->frag_out = frag_out;
+	thread->xml_out = xml_out;
 	thread->aligned_assem = aligned_assem;
 	thread->aligned = aligned;
 	thread->gap_align = gap_align;
@@ -2266,18 +2307,18 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	cover = 0;
 	q_cover = 0;
 	seq_seeker = 0;
-	index_seeker = 0;
-	progress = 0;
 	counter = 0;
 	if(progress) {
 		fprintf(stderr, "# Progress:\t%3d%%\r", 0);
 		fflush(stderr);
-	} else if(verbose) {
-		fprintf(stderr, "# Template\tScore\tProgress\n");
 	}
 	if(assembly_KMA_Ptr == &skip_assemble_KMA) {
 		alignLoadPtr = &alignLoad_skip;
 	}
+	if(verbose) {
+		fprintf(stderr, "# Template\tScore\tProgress\n");
+	}
+	
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
 			if(progress) {
@@ -2306,21 +2347,22 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				/* load DB */
-				if(index_in) {
-					index_seeker *= sizeof(int);
-					lseek(index_in_no, index_seeker, SEEK_CUR);
-					index_seeker = 0;
-				}
 				seq_seeker *= sizeof(long unsigned);
 				lseek(seq_in_no, seq_seeker, SEEK_CUR);
 				seq_seeker = 0;
-				thread->template_index = alignLoadPtr(thread->template_index, seq_in_no, index_in_no, template_lengths[template], kmersize, 0, 0);
+				thread->template_index->len = 0;
 				thread->template_name = nameLoad(template_name, name_file);
+				
+				if(xml) {
+					newIterXML(xml_out, template, t_len, thread->template_name);
+				}
 				
 				/* Do assembly */
 				//status |= assemblyPtr(aligned_assem, template, template_fragments, fileCount, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
 				thread->template = template;
+				thread->t_len = t_len;
 				assembly_KMA_Ptr(thread);
+				
 				/* Depth, ID and coverage */
 				if(aligned_assem->cover > 0) {
 					coverScore = aligned_assem->cover;
@@ -2332,9 +2374,13 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					cover = 100.0 * aln_len / t_len;
 					q_cover = 100.0 * t_len / aln_len;
 				} else {
+					aln_len = 0;
 					id = 0;
 				}
 				
+				if(xml) {
+					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
+				}
 				if(ID_t <= id && 0 < id) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
@@ -2347,26 +2393,19 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						updateMatrix(matrix_out, thread->template_name, thread->template_index->seq, matrix, t_len);
 					}
 					if(extendedFeatures) {
-						getExtendedFeatures(thread->template_name, matrix, thread->template_index->seq, t_len, aligned_assem, fragmentCounts[template], readCounts[template], aligned_assem->fragmentCountAln, aligned_assem->readCountAln, extendedFeatures_out);
+						printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 					}
 					if(vcf) {
 						updateVcf(thread->template_name, thread->template_index->seq, evalue, t_len, matrix, vcf, vcf_out);
 					}
 				}
-				/* destroy this DB index */
-				destroyPtr(thread->template_index);
 			} else {
 				if(sam || ID_t == 0.0) {
 					/* load DB */
-					if(index_in) {
-						index_seeker *= sizeof(int);
-						lseek(index_in_no, index_seeker, SEEK_CUR);
-						index_seeker = 0;
-					}
 					seq_seeker *= sizeof(long unsigned);
 					lseek(seq_in_no, seq_seeker, SEEK_CUR);
 					seq_seeker = 0;
-					thread->template_index = alignLoad_skip(thread->template_index, seq_in_no, index_in_no, template_lengths[template], kmersize, 0, 0);
+					thread->template_index = alignLoad_skip(thread->template_index, seq_in_no, template_lengths[template], kmersize, 0);
 					thread->template_name = nameLoad(template_name, name_file);
 					thread->template = template;
 					skip_assemble_KMA(thread);
@@ -2381,28 +2420,25 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(extendedFeatures) {
-							getExtendedFeatures(thread->template_name, 0, 0, 0, aligned_assem, fragmentCounts[template], readCounts[template], 0, 0, extendedFeatures_out);
+							printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
 					}
 				} else {
 					nameSkip(name_file, end);
 				}
-				if(index_in) {
-					index_seeker += (template_lengths[template] << 1);
-				}
 				seq_seeker += ((template_lengths[template] >> 5) + 1);
 			}
 		} else {
 			nameSkip(name_file, end);
-			if(index_in) {
-				index_seeker += (template_lengths[template] << 1);
-			}
 			seq_seeker += ((template_lengths[template] >> 5) + 1);
 		}
 	}
 	if(progress) {
 		fprintf(stderr, "\n");
 	}
+	
+	/* clear index */
+	hashMapCCI_destroy(thread->template_index);
 	
 	/* join threads */
 	thread->template = -1;
@@ -2415,9 +2451,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	}
 	
 	/* Close files */
-	if(index_in) {
-		fclose(index_in);
-	}
 	fclose(seq_in);
 	fclose(res_out);
 	if(alignment_out) {
@@ -2436,6 +2469,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	}
 	if(vcf) {
 		destroyGzFileBuff(vcf_out);
+	}
+	if(xml) {
+		closeCapXML(xml_out);
 	}
 	
 	t1 = clock();

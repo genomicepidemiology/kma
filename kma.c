@@ -29,6 +29,7 @@
 #include "hashmapkma.h"
 #include "kma.h"
 #include "kmapipe.h"
+#include "kmeranker.h"
 #include "kmers.h"
 #include "kmmap.h"
 #include "mt1.h"
@@ -122,10 +123,10 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-vcf\t\tMake vcf file, 2 to apply FT\tFalse/0\n");
 	fprintf(helpOut, "#\t-sam\t\tOutput sam to stdout, 4 to \n#\t\t\tonly output mapped reads, \n#\t\t\t2096 for aligned\t\tFalse/0\n");
 	fprintf(helpOut, "#\t-nc\t\tNo consensus file\t\tFalse\n");
-	fprintf(helpOut, "#\t-nf\t\tNo frag file\t\tFalse\n");
+	fprintf(helpOut, "#\t-nf\t\tNo frag file\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-deCon\t\tRemove contamination\t\tFalse\n");
 	fprintf(helpOut, "#\t-dense\t\tDo not allow insertions\n#\t\t\tin assembly\t\t\tFalse\n");
-	fprintf(helpOut, "#\t-sasm\t\tSkip assembly\t\t\tFalse\n");
+	fprintf(helpOut, "#\t-sasm\t\tSkip alignment and assembly\tFalse\n");
 	fprintf(helpOut, "#\t-ref_fsa\tConsensus sequnce will\n#\t\t\thave \"n\" instead of gaps\tFalse\n");
 	fprintf(helpOut, "#\t-matrix\t\tPrint assembly matrix\t\tFalse\n");
 	fprintf(helpOut, "#\t-a\t\tPrint all best mappings\t\tFalse\n");
@@ -143,6 +144,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-mmap\t\tMemory map *.comp.by\n");
 	fprintf(helpOut, "#\t-tmp\t\tSet directory for temporary files.\n");
 	fprintf(helpOut, "#\t-1t1\t\tForce end to end mapping\tFalse\n");
+	fprintf(helpOut, "#\t-hmm\t\tUse a HMM to assign template(s)\n#\t\t\tto query sequences\t\tFalse\n");
 	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
 	fprintf(helpOut, "#\t-ca\t\tMake circular alignments\tFalse\n");
 	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
@@ -154,18 +156,20 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
 	fprintf(helpOut, "#\t-mq\t\tMinimum mapping quality\t\t0\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t0.50\n");
+	fprintf(helpOut, "#\t-mct\t\tMax overlap between templates\t0.50\n");
 	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t1\n");
 	fprintf(helpOut, "#\t-penalty\tPenalty for mismatch\t\t-2\n");
 	fprintf(helpOut, "#\t-gapopen\tPenalty for gap opening\t\t-3\n");
 	fprintf(helpOut, "#\t-gapextend\tPenalty for gap extension\t-1\n");
 	fprintf(helpOut, "#\t-per\t\tReward for pairing reads\t7\n");
-	/* here */
-	//fprintf(helpOut, "#\t-localopen\t\tPenalty for openning a local alignment\t-6\n");
-	fprintf(helpOut, "#\t-Npenalty\tPenalty matching N\t\t-1\n");
+	fprintf(helpOut, "#\t-localopen\t\tPenalty for openning a local chain\t-6\n");
+	fprintf(helpOut, "#\t-Npenalty\tPenalty matching N\t\t0\n");
 	fprintf(helpOut, "#\t-transition\tPenalty for transition\t\t-2\n");
 	fprintf(helpOut, "#\t-transversion\tPenalty for transversion\t-2\n");
 	fprintf(helpOut, "#\t-cge\t\tSet CGE penalties and rewards\tFalse\n");
 	fprintf(helpOut, "#\t-t\t\tNumber of threads\t\t1\n");
+	fprintf(helpOut, "#\t-status\t\tExtra status\n");
+	fprintf(helpOut, "#\t-verbose\tExtra verbose\n");
 	fprintf(helpOut, "#\t-c\t\tCitation\n");
 	fprintf(helpOut, "#\t-v\t\tVersion\n");
 	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
@@ -179,13 +183,13 @@ int kma_main(int argc, char *argv[]) {
 	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, minlen;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int **d;
-	static unsigned nc, nf, shm, exhaustive, verbose;
+	static int **d, status = 0;
+	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
 	static double ID_t, scoreT, coverT, evalue;
 	static Penalties *rewards;
-	int i, j, args, exe_len, status, size, escape, tmp, step1, step2;
+	int i, j, args, exe_len, fileCount, size, escape, tmp, step1, step2;
 	unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
 	double support;
@@ -200,20 +204,20 @@ int kma_main(int argc, char *argv[]) {
 	if(argc) {
 		if(sizeof(long unsigned) != 8) {
 			fprintf(stderr, "Need a 64-bit system.\n");
-			exit(3);
+			exit(1);
 		}
 		
 		/* SET DEFAULTS */
 		ConClave = 1;
 		verbose = 0;
 		vcf = 0;
+		xml = 0;
 		sam = 0;
 		nc = 0;
 		nf = 0;
 		targetNum = 0;
 		spltDB = 0;
 		extendedFeatures = 0;
-		status = 0;
 		minPhred = 20;
 		fiveClip = 0;
 		threeClip = 0;
@@ -245,7 +249,7 @@ int kma_main(int argc, char *argv[]) {
 		rewards->U = -1;
 		rewards->W1 = -3;
 		rewards->Wl = -6;
-		rewards->Mn = -1;
+		rewards->Mn = 0;
 		rewards->PE = 7;
 		Tv = -2;
 		Ts = -2;
@@ -286,13 +290,13 @@ int kma_main(int argc, char *argv[]) {
 				--args;
 			} else if(strcmp(argv[args], "-i") == 0) {
 				++args;
-				status = fileCounter;
+				fileCount = fileCounter;
 				for(i = args; i < argc && (strncmp(argv[i], "-", 1) != 0 || strcmp(argv[i], "--") == 0); ++i) {
 					++fileCounter;
 				}
 				if(fileCounter == 0) {
 					fprintf(stderr, "No files were specified.\n");
-					exit(3);
+					exit(1);
 				} else {
 					inputfiles = realloc(inputfiles, fileCounter * sizeof(char *));
 					if(!inputfiles) {
@@ -300,22 +304,22 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 				
-				for(i = status; i < fileCounter; ++i, ++args) {
+				for(i = fileCount; i < fileCounter; ++i, ++args) {
 					inputfiles[i] = argv[args];
 				}
 				--args;
 			} else if(strcmp(argv[args], "-ipe") == 0) {
 				++args;
-				status = fileCounter_PE;
+				fileCount = fileCounter_PE;
 				for(i = args; i < argc && strncmp(argv[i], "-", 1) != 0; ++i) {
 					++fileCounter_PE;
 				}
 				if(fileCounter_PE % 2) {
 					fprintf(stderr, "Uneven number of paired end files.\n");
-					exit(3);
+					exit(1);
 				} else if(fileCounter_PE == 0) {
 					fprintf(stderr, "No paired end files were specified.\n");
-					exit(3);
+					exit(1);
 				} else {
 					inputfiles_PE = realloc(inputfiles_PE, fileCounter_PE * sizeof(char *));
 					if(!inputfiles_PE) {
@@ -323,25 +327,25 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 				
-				for(i = status; i < fileCounter_PE; ++i, ++args) {
+				for(i = fileCount; i < fileCounter_PE; ++i, ++args) {
 					inputfiles_PE[i] = argv[args];
 				}
 				--args;
 			} else if(strcmp(argv[args], "-int") == 0) {
 				++args;
-				status = fileCounter_INT;
+				fileCount = fileCounter_INT;
 				for(i = args; i < argc && (strncmp(argv[i], "-", 1) != 0 || strcmp(argv[i], "--") == 0); ++i) {
 					++fileCounter_INT;
 				}
 				if(fileCounter_INT == 0) {
 					fprintf(stderr, "No interleaved files were specified.\n");
-					exit(3);
+					exit(1);
 				}
 				inputfiles_INT = realloc(inputfiles_INT, fileCounter_INT * sizeof(char *));
 				if(!inputfiles_INT) {
 					ERROR();
 				}
-				for(i = status; i < fileCounter_INT; ++i, ++args) {
+				for(i = fileCount; i < fileCounter_INT; ++i, ++args) {
 					inputfiles_INT[i] = argv[args];
 				}
 				--args;
@@ -408,7 +412,7 @@ int kma_main(int argc, char *argv[]) {
 					ConClave = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0 || ConClave < 0 || 2 < ConClave) {
 						fprintf(stderr, " Invalid ConClave version specified.\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-o") == 0) {
@@ -429,7 +433,7 @@ int kma_main(int argc, char *argv[]) {
 					shm = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid shm-lvl specified.\n");
-						exit(4);
+						exit(1);
 					}
 				} else {
 					--args;
@@ -444,7 +448,7 @@ int kma_main(int argc, char *argv[]) {
 					thread_num = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid number of threads specified.\n");
-						exit(4);
+						exit(1);
 					}
 				} else {
 					--args;
@@ -468,7 +472,7 @@ int kma_main(int argc, char *argv[]) {
 					kmersize = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid kmersize parsed\n");
-						exit(4);
+						exit(1);
 					} else if(kmersize == 0) {
 						fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 						kmersize = 16;
@@ -482,7 +486,7 @@ int kma_main(int argc, char *argv[]) {
 					minlen = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid kmersize parsed\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-mp") == 0) {
@@ -491,7 +495,7 @@ int kma_main(int argc, char *argv[]) {
 					minPhred = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid minimum phred score parsed\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-mq") == 0) {
@@ -500,7 +504,7 @@ int kma_main(int argc, char *argv[]) {
 					mq = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid minimum mapping quality parsed\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-5p") == 0) {
@@ -509,7 +513,7 @@ int kma_main(int argc, char *argv[]) {
 					fiveClip = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-5p\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-3p") == 0) {
@@ -522,7 +526,7 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 			} else if(strcmp(argv[args], "-dense") == 0) {
-				assembly_KMA_Ptr = &assemble_KMA_dense_threaded;
+				alnToMatPtr = alnToMatDense;
 			} else if(strcmp(argv[args], "-sasm") == 0) {
 				assembly_KMA_Ptr = &skip_assemble_KMA;
 			} else if(strcmp(argv[args], "-matrix") == 0) {
@@ -538,12 +542,15 @@ int kma_main(int argc, char *argv[]) {
 				one2one = 1;
 			} else if(strcmp(argv[args], "-ck") == 0) {
 				get_kmers_for_pair_ptr = &get_kmers_for_pair_count;
+			} else if(strcmp(argv[args], "-hmm") == 0) {
+				kmerScan = &save_kmers_HMM;
+				one2one = 0;
 			} else if(strcmp(argv[args], "-proxi") == 0) {
 				if(++args < argc) {
 					support = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0 || support < 0 || 1 < support) {
 						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
-						exit(4);
+						exit(1);
 					} if(support != 1) {
 						/* set proximity parameter */
 						getMatch = &getProxiMatch;
@@ -552,16 +559,18 @@ int kma_main(int argc, char *argv[]) {
 						getSecondPen = &getSecondProxiPen;
 						getF = &getF_Proxi;
 						getR = &getR_Proxi;
+						getChainTemplates = &getProxiChainTemplates;
 						getMatch((int *)(&support), 0);
 						getMatchSparse((int *)(&support), 0, 0, 0, 0, 0);
 						getSecondPen((int *)(&support), 0, 0, 0, 0, 0, 0, 0);
 						getF((int *)(&support), 0, 0, 0, 0);
 						ankerAndClean((int *)(&support), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 						ankerAndClean_MEM((int *)(&support), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+						getProxiChainTemplates(0, (const Penalties *)(&support), 0, 0, 0, 0, 0);
 					}
 				} else {
 					fprintf(stderr, "Need argument at: \"-proxi\".\n");
-					exit(4);
+					exit(1);
 				}
 				
 			} else if(strcmp(argv[args], "-ca") == 0) {
@@ -583,7 +592,7 @@ int kma_main(int argc, char *argv[]) {
 					evalue = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"%s\".\n", argv[--args]);
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-bc") == 0) {
@@ -592,7 +601,7 @@ int kma_main(int argc, char *argv[]) {
 					support = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0 || 1 < support) {
 						fprintf(stderr, "Invalid argument at \"-bc\".\n");
-						exit(4);
+						exit(1);
 					} else {
 						significantAndSupport(0, 0, support);
 					}
@@ -615,7 +624,7 @@ int kma_main(int argc, char *argv[]) {
 					bcd = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-ID\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-ID") == 0) {
@@ -624,7 +633,7 @@ int kma_main(int argc, char *argv[]) {
 					ID_t = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-ID\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-mrs") == 0) {
@@ -633,7 +642,16 @@ int kma_main(int argc, char *argv[]) {
 					scoreT = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-mrs\".\n");
-						exit(4);
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-mct") == 0) {
+				++args;
+				if(args < argc) {
+					coverT = strtod(argv[args], &exeBasic);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-mct\".\n");
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-reward") == 0) {
@@ -643,7 +661,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->M = abs(rewards->M);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-reward\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-penalty") == 0) {
@@ -653,7 +671,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->MM = MIN(-rewards->MM, rewards->MM);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-penalty\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-gapopen") == 0) {
@@ -663,7 +681,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->W1 = MIN(-rewards->W1, rewards->W1);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-gapopen\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-gapextend") == 0) {
@@ -673,7 +691,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->U = MIN(-rewards->U, rewards->U);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-gapextend\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-localopen") == 0) {
@@ -684,7 +702,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->Wl = MIN(-rewards->Wl, rewards->Wl);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-Npenalty") == 0) {
@@ -695,7 +713,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->Mn = MIN(-rewards->Mn, rewards->Mn);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-per") == 0) {
@@ -705,7 +723,7 @@ int kma_main(int argc, char *argv[]) {
 					rewards->PE = abs(rewards->PE);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-per\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-transition") == 0) {
@@ -716,7 +734,7 @@ int kma_main(int argc, char *argv[]) {
 					Ts = MIN(-Ts, Ts);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-transversion") == 0) {
@@ -727,7 +745,7 @@ int kma_main(int argc, char *argv[]) {
 					Tv = MIN(-Tv, Tv);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-localopen\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-and") == 0) {
@@ -740,12 +758,12 @@ int kma_main(int argc, char *argv[]) {
 					Mt1 = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
-						exit(4);
+						exit(1);
 					}
 				}
 				if(Mt1 < 1) {
 					fprintf(stderr, "Invalid template specified at \"-Mt1\"\n");
-					exit(3);
+					exit(1);
 				}
 				printFsa_ptr = &printFsaMt1;
 				printFsa_pair_ptr = &printFsa_pairMt1;
@@ -755,7 +773,7 @@ int kma_main(int argc, char *argv[]) {
 					extendedFeatures = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
-						exit(4);
+						exit(1);
 					}
 				} else {
 					extendedFeatures = 1;
@@ -767,8 +785,17 @@ int kma_main(int argc, char *argv[]) {
 						vcf = strtol(argv[args], &exeBasic, 10);
 						if(*exeBasic != 0) {
 							fprintf(stderr, "Invalid argument at \"-vcf\".\n");
-							exit(4);
+							exit(1);
 						}
+					} else {
+						--args;
+					}
+				}
+			} else if(strcmp(argv[args], "-xml") == 0) {
+				xml = 1;
+				if(++args < argc) {
+					if(argv[args][0] == '-' && argv[args][1] == '-' && argv[args][2] == 0) {
+						xml = 2;
 					} else {
 						--args;
 					}
@@ -780,7 +807,7 @@ int kma_main(int argc, char *argv[]) {
 						sam = strtol(argv[args], &exeBasic, 10);
 						if(*exeBasic != 0) {
 							fprintf(stderr, "Invalid argument at \"-sam\".\n");
-							exit(4);
+							exit(1);
 						}
 					} else {
 						--args;
@@ -812,7 +839,16 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-status") == 0) {
 				kmaPipe = &kmaPipeFork;
 			} else if(strcmp(argv[args], "-verbose") == 0) {
-				verbose = 1;
+				if(++args < argc && argv[args][0] != '-') {
+					verbose = strtol(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-verbose\".\n");
+						exit(1);
+					}
+				} else {
+					verbose = 1;
+					--args;
+				}
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
@@ -872,7 +908,6 @@ int kma_main(int argc, char *argv[]) {
 			inputfiles[0] = "--";
 			fileCounter = 1;
 		}
-		status = 0;
 		
 		/* set scoring matrix */
 		rewards->MM = (Ts + Tv - 1) / 2; /* avg. of transition and transversion, rounded down */
@@ -995,13 +1030,14 @@ int kma_main(int argc, char *argv[]) {
 		
 		templatefilename = *templatefilenames;
 		ioStream = stdout;
+		anker_rc(0, 0, one2one, 0, 0, 0);
+		anker_rc_comp(0, 0, (unsigned char *)(&one2one), 0, 0, 0, 0, 0);
 	} else {
 		if(strcmp(*argv, "-s1") == 0) {
 			step1 = 1;
 		} else if(strcmp(*argv, "-s2") == 0) {
 			step2 = 1;
 		}
-		status = 0;
 		ioStream = (FILE *) argv[1];
 	}
 	
@@ -1129,6 +1165,8 @@ int kma_main(int argc, char *argv[]) {
 				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
 			}
 			
+			status |= errno;
+			
 			if(Mt1) {
 				Mt1 = -1;
 				sfwrite(&Mt1, sizeof(int), 1, ioStream);
@@ -1145,18 +1183,18 @@ int kma_main(int argc, char *argv[]) {
 	} else if(Mt1) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, sam, nc, nf, thread_num);
+		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, xml, sam, nc, nf, thread_num);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else if(step2) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status = save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT);
+		status |= save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT);
 		free(myTemplatefilename);
 	} else if(sparse_run) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status = save_kmers_sparse_batch(myTemplatefilename, outputfilename, "-s1", ID_t, evalue, ss, shm);
+		status |= save_kmers_sparse_batch(myTemplatefilename, outputfilename, "-s1", ID_t, evalue, ss, shm);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else {
@@ -1164,16 +1202,22 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status = runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else if(mem_mode) {
-			status = runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else {
-			status = runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	}
 	
+	fflush(stderr);
 	fflush(stdout);
-	return status | errno;
+	status |= errno;
+	if(status < 0) {
+		status = 1;
+	}
+	
+	return status;
 }

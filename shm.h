@@ -25,8 +25,6 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename);
 void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename);
 int * length_setupSHM(FILE *file, const char *filename);
 void length_destroySHM(FILE *file, const char *filename);
-int * index_setupSHM(FILE *file, const char *filename);
-void index_destroySHM(FILE *file, const char *filename);
 long unsigned * seq_setupSHM(FILE *file, const char *filename);
 void seq_destroySHM(FILE *file, const char *filename);
 char * name_setupSHM(FILE *file, const char *filename);

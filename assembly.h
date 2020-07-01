@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include "chain.h"
 #include "filebuff.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "nw.h"
 #include "qseqs.h"
 
@@ -38,12 +38,18 @@ struct assem {
 	long unsigned depth;
 	long unsigned depthVar;
 	long unsigned score;
+	long unsigned snpSum;
+	long unsigned insertSum;
+	long unsigned deletionSum;
 	unsigned cover;
 	unsigned len;
 	unsigned aln_len;
 	unsigned size;
 	unsigned fragmentCountAln;
 	unsigned readCountAln;
+	unsigned nucHighVar;
+	unsigned maxDepth;
+	double var;
 };
 
 struct assembly {
@@ -67,11 +73,16 @@ struct assemble_thread {
 	int minlen;
 	int bcd;
 	int sam;
+	int ef;
+	int t_len;
+	int seq_in;
+	int kmersize;
 	int thread_num;
 	double scoreT;
 	double evalue;
 	char *template_name;
 	FILE **files;
+	FILE *xml_out;
 	FileBuff *frag_out;
 	Assem *aligned_assem;
 	Aln *aligned, *gap_align;
@@ -79,7 +90,7 @@ struct assemble_thread {
 	AssemInfo *matrix;
 	AlnPoints *points;
 	NWmat *NWmatrices;
-	HashMap_index *template_index;
+	HashMapCCI *template_index;
 	Assemble_thread *next;
 };
 #define ASSEMBLY 1
@@ -88,6 +99,7 @@ struct assemble_thread {
 extern void * (*assembly_KMA_Ptr)(void *);
 extern int (*significantBase)(int, int, double);
 extern unsigned char (*baseCall)(unsigned char, unsigned char, int, int, double, Assembly*);
+extern void (*alnToMatPtr)(AssemInfo *, Assem *, Aln *, AlnScore, int, int);
 void updateMatrix(FileBuff *dest, char *template_name, long unsigned *template_seq, AssemInfo *matrix, int t_len);
 int significantNuc(int X, int Y, double evalue);
 int significantAnd90Nuc(int X, int Y, double evalue);
@@ -100,3 +112,8 @@ unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestS
 void * assemble_KMA_threaded(void *arg);
 void * assemble_KMA_dense_threaded(void *arg);
 void * skip_assemble_KMA(void *arg);
+void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore alnStat, int t_len, int flag);
+void alnToMatDense(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore alnStat, int t_len, int flag);
+void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, int t_len, int bcd, double evalue, int thread_num);
+void fixVarOverflow(Assem *aligned_assem, Assembly *assembly, int t_len, int thread_num);
+void * assemble_KMA(void *arg);

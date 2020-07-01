@@ -270,7 +270,7 @@ int update_main(int argc, char *argv[]) {
 				version = strtoul(argv[args], &error, 10);
 				if(*error != 0) {
 					fprintf(stderr, " Invalid version specified.\n");
-					exit(2);
+					exit(1);
 				}
 			}
 		} else if(strcmp(argv[args], "-h") == 0) {
@@ -288,7 +288,7 @@ int update_main(int argc, char *argv[]) {
 	} else if(version == 1415) {
 		if(index_014to015(filename)) {
 			fprintf(stderr, "Conversion error.\n");
-			exit(3);
+			exit(1);
 		}
 	} else {
 		fprintf(stderr, "Invalid version swifting specified.\n");

@@ -95,7 +95,7 @@ int intpos_bin_contamination(const unsigned *str1, const int str2) {
 	}
 	
 	downLim = 1;
-	pos = (upLim + downLim) / 2;
+	pos = (upLim + downLim) >> 1;
 	while(0 < (upLim - downLim)) {
 		template = str1[pos];
 		if(template == str2) {
@@ -105,7 +105,7 @@ int intpos_bin_contamination(const unsigned *str1, const int str2) {
 		} else {
 			upLim = pos - 1;
 		}
-		pos = (upLim + downLim) / 2;
+		pos = (upLim + downLim) >> 1;
 	}
 	if(str1[pos] == str2) {
 		return pos;
@@ -125,7 +125,7 @@ int intpos_bin_contamination_s(const unsigned *Str1, const int str2) {
 	}
 	
 	downLim = 1;
-	pos = (upLim + downLim) / 2;
+	pos = (upLim + downLim) >> 1;
 	while(0 < (upLim - downLim)) {
 		template = str1[pos];
 		if(template == str2) {
@@ -135,7 +135,7 @@ int intpos_bin_contamination_s(const unsigned *Str1, const int str2) {
 		} else {
 			upLim = pos - 1;
 		}
-		pos = (upLim + downLim) / 2;
+		pos = (upLim + downLim) >> 1;
 	}
 	if(str1[pos] == str2) {
 		return pos;
@@ -417,7 +417,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	if(shmid < 0) {
 		/* not shared */
 		fprintf(stderr, "DB e not shared, see kma_shm\n");
-		exit(2);
+		exit(1);
 	} else {
 		/* found */
 		dest->exist = shmat(shmid, NULL, 0);
@@ -440,7 +440,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	if(shmid < 0) {
 		/* not shared */
 		fprintf(stderr, "DB v not shared, see kma_shm\n");
-		exit(2);
+		exit(1);
 	} else {
 		/* found */
 		dest->values = shmat(shmid, NULL, 0);
@@ -469,7 +469,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	if(shmid < 0) {
 		/* not shared */
 		fprintf(stderr, "DB k not shared, see kma_shm\n");
-		exit(2);
+		exit(1);
 	} else {
 		/* found */
 		dest->key_index = shmat(shmid, NULL, 0);
@@ -490,7 +490,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	if(shmid < 0) {
 		/* not shared */
 		fprintf(stderr, "DB i not shared, see kma_shm\n");
-		exit(2);
+		exit(1);
 	} else {
 		/* found */
 		dest->value_index = shmat(shmid, NULL, 0);

@@ -116,7 +116,8 @@ FILE * kmaPipeThread(const char *cmd, const char *type, FILE *ioStream, int *sta
 		/* close stream and get exit status */
 		*status = 0;
 		id = src->id;
-		if((errno = pthread_join(id, NULL))) {
+		//if((errno = pthread_join(id, NULL))) {
+		if((errno = pthread_join(id, (void *) &status))) {
 			ERROR();
 		}
 		fclose(ioStream);
@@ -146,7 +147,7 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 	/* kmaPipe is a combination of popen and pclose, but allows for binary mode */
 	static volatile int lock[1] = {0};
 	static Pid *pidlist = 0;
-	int pdes[2];
+	int exit_status, pdes[2];
 	char *argv[2];
 	pid_t id;
 	volatile pid_t pid;
@@ -173,6 +174,7 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 		if(pid < 0) {
 			ERROR();
 		} else if(pid == 0) {
+			errno = 0;
 			lock(lock);
 			for(src = pidlist; src; src = src->next) {
 				close(fileno(src->fp));
@@ -193,13 +195,13 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 			/* start child work */
 			argv[0] = dest->cmd;
 			argv[1] = (char *) dest->ioStream;
-			kma_main(0, argv);
+			exit_status = kma_main(0, argv);
 			
 			/* close stream */
 			fclose(dest->ioStream);
 			
 			/* kill child */
-			_exit(127);
+			_exit(exit_status);
 		} else if(*type == 'r') {
 			close(pdes[1]);
 			dest->fp = fdopen(pdes[0], type);
@@ -237,6 +239,12 @@ FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *statu
 		#ifndef _WIN32
 		while ((pid = waitpid(src->pid, status, 0)) == -1 && errno == EINTR) {
 			usleep(100);
+		}
+		if(WIFEXITED(*status)) {
+			exit_status = WEXITSTATUS(*status);
+			*status = exit_status;
+		} else {
+			*status = 1;
 		}
 		#else
 		WaitForSingleObject(src->pid, INFINITE);

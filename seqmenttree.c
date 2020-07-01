@@ -80,7 +80,8 @@ unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node) {
 		}
 		
 		/* search tree */
-		if(node->end < (pos = root->branch[1]->start)) { /* left */
+		pos = root->branch[1]->start;
+		if(node->end < pos) { /* left */
 			root->covered = root->branch[1]->covered + addSeqmentTrees(root->branch[0], node);
 		} else if(pos <= node->start) { /* right */
 			root->covered = root->branch[0]->covered + addSeqmentTrees(root->branch[1], node);
@@ -97,24 +98,31 @@ unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node) {
 			node->covered = node->end - node->start;
 			root->covered = covered + addSeqmentTrees(root->branch[0], node);
 		}
-	} else if((pos = node->end < root->start) || (pos = root->end < node->start)) { /* new leaf */
+	} else if(node->end < root->start || root->end < node->start) { /* new leaf */
 		/* create and grow bud */
 		bud = node + 1;
-		root->branch[pos] = node;
-		root->branch[pos] = bud;
-		
-		/* form new leaf */
 		bud->start = root->start;
 		bud->end = root->end;
 		bud->covered = root->covered;
 		*(bud->branch) = 0;
 		
-		/* update the root */
+		if(node->end < root->start) {
+			/* right bud */
+			root->start = node->start;
+			root->branch[0] = node;
+			root->branch[1] = bud;
+		} else {
+			/* left bud */
+			root->end = node->end;
+			root->branch[0] = bud;
+			root->branch[1] = node;
+		}
 		root->covered += node->covered;
 	} else { /* extend leaf */
 		if(node->start < root->start) { /* extend left */
 			root->start = node->start;
-		} else if(root->end < node->end) { /* extend right */
+		}
+		if(root->end < node->end) { /* extend right */
 			root->end = node->end;
 		}
 		node->covered = 0;
@@ -125,16 +133,16 @@ unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node) {
 	return root->covered;
 }
 
-void growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end) {
+int growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end) {
 	
 	SeqmentTrees *node;
-		
+	
 	/* make room for new anker */
 	if(src->size <= src->n + 2) {
 		reallocSeqmentTree(src);
 	} else if(src->n == 0) {
 		initSeqmentTree(src, start, end);
-		return;
+		return end - start;
 	}
 	
 	/* make new leaf */
@@ -149,6 +157,8 @@ void growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end)
 	if(node->covered) {
 		src->n += 2;
 	}
+	
+	return src->root->covered;
 }
 
 unsigned queSeqmentTree(SeqmentTrees *src, const unsigned start, const unsigned end) {
@@ -162,8 +172,15 @@ unsigned queSeqmentTree(SeqmentTrees *src, const unsigned start, const unsigned 
 	} else if(*(src->branch)) {
 		/* check next */
 		return queSeqmentTree(src->branch[0], start, end) + queSeqmentTree(src->branch[1], start, end);
-	} else {
-		/* query covered by leaf */
+	} else if(src->start <= start && end <= src->end) {
 		return end - start;
+	} else if(src->start <= start && start < src->end) {
+		/* left side */
+		return src->end - start;
+	} else if(src->start < end && end <= src->end) {
+		/* right side */
+		return end - src->start;
 	}
+	
+	return 0;
 }

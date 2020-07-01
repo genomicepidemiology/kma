@@ -64,7 +64,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	}
 	t0 = clock();
 	
-	/* do not output not mapped sam reads */
+	/* do not output unmapped sam reads */
 	if(sam != 1 || out == stdout) {
 		sam = 0;
 	}
@@ -86,7 +86,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	} else {
 		if(hashMapKMA_load(templates, templatefile, templatefilename) == 1) {
 			fprintf(stderr, "Wrong format of DB.\n");
-			exit(2);
+			exit(1);
 		}
 	}
 	templatefilename[file_len] = 0;
@@ -104,26 +104,18 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 			deConPrintPtr = printPtr;
 		}
 		if(templates->prefix_len == 0 && get_kmers_for_pair_ptr != &get_kmers_for_pair_count) {
-			/* here */
-			/*
 			if(kmerScan == &save_kmers) {
 				kmerScan = &save_kmers_pseuodeSparse;
 			} else {
 				kmerScan = &save_kmers_sparse_chain;
 			}
-			*/
-			kmerScan = &save_kmers_pseuodeSparse;
 			get_kmers_for_pair_ptr = &get_kmers_for_pair_pseoudoSparse;
 		} else {
-			/* here */
-			/*
-			if(kmerScan == &save_kmers || get_kmers_for_pair_ptr == &get_kmers_for_pair_count) {
+			if(kmerScan == &save_kmers) {
 				kmerScan = &save_kmers_Sparse;
 			} else {
 				kmerScan = &save_kmers_sparse_chain;
 			}
-			*/
-			kmerScan = &save_kmers_Sparse;
 			get_kmers_for_pair_ptr = &get_kmers_for_pair_Sparse;
 		}
 	}
@@ -144,7 +136,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 			shmid = shmget(key, templates->DB_size * sizeof(int), 0666);
 			if(shmid < 0) {
 				fprintf(stderr, "No shared length\n");
-				exit(2);
+				exit(1);
 			} else {
 				template_lengths = shmat(shmid, NULL, 0);
 			}
@@ -155,13 +147,9 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		templatefilename[file_len] = 0;
 		fclose(templatefile);
 		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, minlen, 0, 0);
-	}
-	/* here */
-	/*
-	else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
+	} else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
 		kmerScan(0, 0, &(int){thread_num}, (int *)(&coverT), (int *)(&mrs), 0, 0, 0, 0, 0, minlen, 0, 0);
 	}
-	*/
 	
 	t1 = clock();
 	fprintf(stderr, "#\n# Total time used for DB loading: %.2f s.\n#\n", difftime(t1, t0) / 1000000);
@@ -255,13 +243,10 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	}
 	if(kmerScan == &save_kmers_HMM && (shm & 4) == 0) {
 		free(template_lengths);
-	}
-	/* here */
-	/*
-	else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
+	} else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
 		kmerScan(0, 0, &(int){thread_num}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	}
-	*/
+	
 	for(thread = threads; thread; thread = threads) {
 		threads = thread->next;
 		free(thread->bestTemplates);

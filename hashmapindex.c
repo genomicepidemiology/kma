@@ -33,21 +33,32 @@ typedef int key_t;
 #define shmget(key, size, permission) ((size != 0) ? (-1) : (-key))
 #define shmat(shmid, NULL_Ptr, integer) (NULL)
 #endif
+#define murmur(index, kmer) index = (3323198485ul ^ kmer) * 0x5bd1e995; index ^= index >> 15;
 
 void (*destroyPtr)(HashMap_index *) = &alignClean;
 HashMap_index * (*alignLoadPtr)(HashMap_index *, int, int, int, int, long unsigned, long unsigned) = &alignLoad_fly;
 
 int hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex) {
 	
+	long unsigned size;
+	
 	dest->len = len;
 	dest->kmerindex = kmerindex;
-	if(dest->size < (len << 1)) {
+	/* convert to 2 times nearest power of 2 */
+	size = (len << 1) - 1;
+	size |= size >> 1;
+	size |= size >> 2;
+	size |= size >> 4;
+	size |= size >> 8;
+	size |= size >> 16;
+	size |= size >> 32;
+	if(dest->size < size) {
 		if(dest->size) {
 			free(dest->index);
 			free(dest->seq);
 		}
-		dest->size = len << 1;
-		dest->index = calloc(dest->size, sizeof(int));
+		dest->size = size++;
+		dest->index = calloc(size, sizeof(int));
 		dest->seq = malloc(((len >> 5) + 1) * sizeof(long unsigned));
 		if(!dest->index || !dest->seq) {
 			ERROR();
@@ -61,7 +72,7 @@ int hashMap_index_initialize(HashMap_index *dest, int len, int kmerindex) {
 
 void hashMap_index_set(HashMap_index *dest) {
 	
-	memset(dest->index, -1, dest->size * sizeof(int));
+	memset(dest->index, -1, (dest->size + 1) * sizeof(int));
 	memset(dest->seq, 0, ((dest->len >> 5) + 1) * sizeof(long unsigned));
 }
 
@@ -80,10 +91,13 @@ int hashMap_index_get(const HashMap_index *dest, long unsigned key, unsigned shi
 	unsigned index;
 	int pos;
 	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
+	murmur(index, key);
+	index &= dest->size;
+	while(index < dest->size && (pos = dest->index[index]) != 0) {
 		if(getKmer(dest->seq, abs(pos) - 1, shifter) == key) {
 			return pos;
 		}
+		++index;
 	}
 	
 	if(index == dest->size) {
@@ -102,10 +116,14 @@ int hashMap_index_get_bound(const HashMap_index *dest, long unsigned key, int mi
 	unsigned index;
 	int pos;
 	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
+	murmur(index, key);
+	index &= dest->size;
+	
+	while(index < dest->size && (pos = dest->index[index]) != 0) {
 		if(min < abs(pos) && abs(pos) < max && getKmer(dest->seq, abs(pos) - 1, shifter) == key) {
 			return pos;
 		}
+		++index;
 	}
 	
 	if(index == dest->size) {
@@ -124,10 +142,13 @@ int hashMap_index_getDubPos(const HashMap_index *dest, long unsigned key, int va
 	unsigned index;
 	int pos;
 	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
+	murmur(index, key);
+	index &= dest->size;
+	while(index < dest->size && (pos = dest->index[index]) != 0) {
 		if(pos == value) {
 			return index;
 		}
+		++index;
 	}
 	
 	if(index == dest->size) {
@@ -177,7 +198,9 @@ void hashMap_index_add(HashMap_index *dest, long unsigned key, int newpos, unsig
 	
 	neg = 1;
 	++newpos;
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
+	murmur(index, key);
+	index &= dest->size;
+	while(index < dest->size && (pos = dest->index[index]) != 0) {
 		if(pos > 0) {
 			if(getKmer(dest->seq, pos - 1, shifter) == key) {
 				dest->index[index] = -pos;
@@ -188,6 +211,7 @@ void hashMap_index_add(HashMap_index *dest, long unsigned key, int newpos, unsig
 				neg = -1;
 			}
 		}
+		++index;
 	}
 	
 	if(index == dest->size) {
@@ -218,8 +242,9 @@ void hashMapIndex_add(HashMap_index *dest, long unsigned key, int newpos) {
 	neg = 1;
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmerindex << 1);
 	++newpos;
-	
-	for(index = key % dest->size; index < dest->size && (pos = dest->index[index]) != 0; ++index) {
+	murmur(index, key);
+	index &= dest->size;
+	while(index < dest->size && (pos = dest->index[index]) != 0) {
 		if(pos > 0) {
 			if(getKmer(dest->seq, pos - 1, shifter) == key) {
 				dest->index[index] = -pos;
@@ -230,6 +255,7 @@ void hashMapIndex_add(HashMap_index *dest, long unsigned key, int newpos) {
 				neg = -1;
 			}
 		}
+		++index;
 	}
 	
 	if(index == dest->size) {
@@ -261,7 +287,6 @@ HashMap_index * hashMap_index_load(HashMap_index *src, int seq, int index, int l
 	}
 	if(hashMap_index_initialize(src, len, kmersize)) {
 		src->size = len << 1;
-		memset(src->index, 0, src->size * sizeof(int));
 	}
 	
 	read(seq, src->seq, ((src->len >> 5) + 1) * sizeof(long unsigned));
@@ -376,7 +401,7 @@ HashMap_index * alignLoad_shm_initial(char *templatefilename, int file_len, int 
 	shmid = shmget(key, size, 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "SHM error i.\n");
-		exit(2);
+		exit(1);
 	} else {
 		dest->index = shmat(shmid, NULL, 0);
 	}
@@ -388,7 +413,7 @@ HashMap_index * alignLoad_shm_initial(char *templatefilename, int file_len, int 
 	shmid = shmget(key, size, 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "SHM error s.\n");
-		exit(2);
+		exit(1);
 	} else {
 		dest->seq = shmat(shmid, NULL, 0);
 	}

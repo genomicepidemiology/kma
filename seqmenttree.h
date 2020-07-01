@@ -39,5 +39,5 @@ SeqmentTree * initializeSeqmentTree(long unsigned size);
 SeqmentTree * initSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end);
 void reallocSeqmentTree(SeqmentTree *src);
 unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node);
-void growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end);
+int growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end);
 unsigned queSeqmentTree(SeqmentTrees *src, const unsigned start, const unsigned end);

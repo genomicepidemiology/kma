@@ -56,6 +56,39 @@ void freeComp(CompDNA *compressor) {
 	
 }
 
+CompDNA * setComp(unsigned size) {
+	
+	CompDNA *dest;
+	
+	dest = smalloc(sizeof(CompDNA));
+	dest->seqlen = 0;
+	dest->size = 
+	dest->complen = 0;
+	
+	if(size & 31) {
+		dest->size = (size >> 5) + 1;
+		dest->size <<= 5;
+	} else {
+		dest->size = size;
+	}
+	
+	dest->seq = calloc(dest->size >> 5, sizeof(long unsigned));
+	if(!dest->seq) {
+		ERROR();
+	}
+	dest->N = smalloc((dest->size + 1) * sizeof(int));
+	*(dest->N) = 0;
+	
+	return dest;
+}
+
+void destroyComp(CompDNA *src) {
+	
+	free(src->seq);
+	free(src->N);
+	free(src);
+}
+
 void resetComp(CompDNA *compressor) {
 	compressor->N[0] = 0;
 	compressor->seqlen = 0;
@@ -317,4 +350,25 @@ int getComp(CompDNA *compressor, FILE* file) {
 	sfread(compressor->N + 1, sizeof(int), compressor->N[0], file);
 	
 	return 1;
+}
+
+void dallocComp(CompDNA *compressor, unsigned size) {
+	
+	compressor->seqlen = 0;
+	compressor->size = size;
+	compressor->complen = 0;
+	free(compressor->N);
+	free(compressor->seq);
+	if(size & 31) {
+		compressor->size = (size >> 5) + 1;
+		compressor->size <<= 5;
+	} else {
+		compressor->size = size;
+	}
+	compressor->seq = calloc(compressor->size >> 5, sizeof(long unsigned));
+	if(!compressor->seq) {
+		ERROR();
+	}
+	compressor->N = smalloc((compressor->size + 1) * sizeof(int));
+	compressor->N[0] = 0;
 }

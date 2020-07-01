@@ -78,13 +78,14 @@ void seedPoint_free(AlnPoints *src) {
 int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ) {
 	
 	int i, j, nMems, weight, gap, score, bestScore, secondScore, bestPos;
-	int tStart, tEnd, qEnd, tGap, qGap, nMin, W1, U, M;
+	int tStart, tEnd, qEnd, tGap, qGap, nMin, W1, U, M, MM, Ms, MMs;
 	Penalties *rewards;
 	
 	rewards = points->rewards;
 	W1 = rewards->W1;
 	U = rewards->U;
 	M = rewards->M;
+	MM = rewards->MM;
 	nMems = points->len;
 	i = nMems - 1;
 	bestPos = i;
@@ -110,8 +111,8 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 		}
 		score += weight;
 		
-		/* 64 is the bandwidth */
-		nMin = MIN(nMems, i + 64);
+		/* 128 is the bandwidth */
+		nMin = MIN(nMems, i + 128);
 		
 		/* find best link */
 		for(j = i + 1; j < nMin; ++j) {
@@ -128,7 +129,17 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 						gap += W1;
 					}
 					//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
-					gap += weight + points->score[j];
+					Ms = MIN(tGap, qGap);
+					if(Ms == 2) {
+						MMs = 2;
+						Ms = 0;
+					} else {
+						MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+						MMs = MAX(2, MMs);
+						Ms = MIN(Ms - MMs, kmersize);
+					}
+					
+					gap += weight + points->score[j] + Ms * M + MMs * MM;
 					
 					/* check if score is max */
 					if(score < gap) {
@@ -194,7 +205,7 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 		}
 	}
 	/* calculate mapping quality */
-	*mapQ = ceil(40 * (1 - 1.0 * secondScore / bestScore) * MIN(1, points->weight[bestPos] / 10.0) * log(bestScore));
+	*mapQ = 0 < bestScore ? (ceil(40 * (1 - 1.0 * secondScore / bestScore) * MIN(1, points->weight[bestPos] / 10.0) * log(bestScore))) : 0;
 	
 	/* penalize start */
 	/*
@@ -213,13 +224,14 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ) {
 	
 	int i, j, nMems, weight, gap, score, bestScore, secondScore, bestPos;
-	int tStart, tEnd, qEnd, tGap, qGap, nMin, W1, U, M;
+	int tStart, tEnd, qEnd, tGap, qGap, nMin, W1, U, M, MM, Ms, MMs;
 	Penalties *rewards;
 	
 	rewards = points->rewards;
 	W1 = rewards->W1;
 	U = rewards->U;
 	M = rewards->M;
+	MM = rewards->MM;
 	nMems = points->len;
 	i = nMems - 1;
 	bestPos = i;
@@ -245,8 +257,8 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 		}
 		score += weight;
 		
-		/* 64 is the bandwidth */
-		nMin = MIN(nMems, i + 64);
+		/* 128 is the bandwidth */
+		nMin = MIN(nMems, i + 128);
 		
 		/* find best link */
 		for(j = i + 1; j < nMin; ++j) {
@@ -264,7 +276,17 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						gap += W1;
 					}
 					//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
-					gap += weight + points->score[j];
+					Ms = MIN(tGap, qGap);
+					if(Ms == 2) {
+						MMs = 2;
+						Ms = 0;
+					} else {
+						MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+						MMs = MAX(2, MMs);
+						Ms = MIN(Ms - MMs, kmersize);
+					}
+					
+					gap += weight + points->score[j] + Ms * M + MMs * MM;
 					
 					/* check if score is max */
 					if(score < gap) {
@@ -297,7 +319,17 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						gap += W1;
 					}
 					//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
-					gap += weight + points->score[j];
+					Ms = MIN(tGap, qGap);
+					if(Ms == 2) {
+						MMs = 2;
+						Ms = 0;
+					} else {
+						MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+						MMs = MAX(2, MMs);
+						Ms = MIN(Ms - MMs, kmersize);
+					}
+					
+					gap += weight + points->score[j] + Ms * M + MMs * MM;
 					
 					/* check if score is max */
 					if(score < gap) {
@@ -308,9 +340,6 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 			} else if(kmersize <= points->qEnd[j] - qEnd) {
 				/* cut in query is reflected in template */
 				tStart = points->tStart[j] + qEnd - points->qStart[j];
-				if(t_len < tStart) {
-					tStart -= t_len;
-				}
 				if(tEnd < tStart) { /* full compatability */
 					tGap = tStart - tEnd;
 					
@@ -328,22 +357,26 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						score = gap;
 						points->next[i] = j;
 					}
-				} else if(tEnd != tStart) { /* circular joining */
-					tGap = t_len - tEnd + tStart;
-					
-					/* calculate score for this chaining */
-					if((gap = tGap)) {
-						--gap;
-						gap *= U;
-						gap += W1;
+				} else {
+					if(t_len < tStart) {
+						tStart -= t_len;
 					}
-					//gap += ((MIN(tGap, qGap)) * pM + weight + points->score[j]);
-					gap += (weight + points->score[j] - (tEnd - tStart) * M);
+					if(tStart != tEnd && points->tEnd[j] < tStart) {
+						tGap = t_len - tEnd + tStart;
 					
-					/* check if score is max */
-					if(score < gap) {
-						score = gap;
-						points->next[i] = j;
+						/* calculate score for this chaining */
+						if((gap = tGap)) {
+							--gap;
+							gap *= U;
+							gap += W1;
+						}
+						gap += (weight + points->score[j] - (tEnd - tStart) * M);
+						
+						/* check if score is max */
+						if(score < gap) {
+							score = gap;
+							points->next[i] = j;
+						}
 					}
 				}/* if the modified tStart was invalid, then the entire mem is lost. */
 			}

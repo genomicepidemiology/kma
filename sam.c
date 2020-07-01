@@ -186,11 +186,14 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	}
 	
 	lock(lock);
+	if(Cigar == 0) {
+		Cigar = setQseqs(256);
+	}
 	if(aligned) {
-		if(Cigar == 0) {
-			Cigar = setQseqs(256);
-		}
 		cigar = makeCigar(Cigar, aligned);
+	} else if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+		cigar = (char *) Cigar->seq;
+		sprintf(cigar, "%dS", *((int*) (header->seq + (header->len - 2 * sizeof(int)))));
 	}
 	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);
 	unlock(lock);

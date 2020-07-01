@@ -182,6 +182,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				/* QUAL */
 				//QUAL = lnConst * log(P);
 				QUAL = lnConst * log(binP(DP, AD, 0.25));
+				QUAL = (QUAL < 0 || 3079 < QUAL) ? 3079 : QUAL;
 				
 				/* FILTER */
 				if(isupper(bestNuc)) {

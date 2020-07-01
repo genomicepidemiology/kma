@@ -19,11 +19,12 @@
 #define _XOPEN_SOURCE 600
 #include "chain.h"
 #include "compdna.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "nw.h"
 
-AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int q_len, Aln *aligned, Aln *Frag_align, int min, int max, int mq, double scoreT, AlnPoints *points, NWmat *matrices);
-AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qseq, int q_len, const CompDNA *qseq_comp, int mq, double scoreT, AlnPoints *points, NWmat *matrices);
-int preseed(const HashMap_index *template_index, unsigned char *qseq, int q_len);
+AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, Aln *aligned, Aln *Frag_align, int min, int max, int mq, double scoreT, AlnPoints *points, NWmat *matrices);
+AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, const CompDNA *qseq_comp, int mq, double scoreT, AlnPoints *points, NWmat *matrices);
+int preseed(const HashMapCCI *template_index, unsigned char *qseq, int q_len);
 void intcpy(int *dest, int *src, int size);
-int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len, AlnPoints *points);
+int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, int q_start, int q_end, AlnPoints *points);
+int anker_rc_comp(const HashMapCCI *template_index, unsigned char *qseq, unsigned char *qseq_r, CompDNA *qseq_comp, CompDNA *qseq_r_comp, int q_start, int q_end, AlnPoints *points);

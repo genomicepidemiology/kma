@@ -37,7 +37,7 @@
 #include "threader.h"
 
 void (*ankerPtr)(int*, int*, int*, char*, int*, unsigned**, unsigned**, int*, CompDNA*, int, int, int, int, Qseqs*, volatile int*, FILE*) = &ankerAndClean;
-int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_HMM; //&save_kmers_chain;
+int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_chain; //&save_kmers_HMM;
 int (*save_kmers_pair)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_unionPair;
 int (*get_kmers_for_pair_ptr)(const HashMapKMA *, const Penalties *, int *, int *, int *, int *, CompDNA *, int *, int) = &get_kmers_for_pair;
 int (*getMatch)(int*, int*) = &getBestMatch;
@@ -4780,7 +4780,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	static KmerAnker **tVF_scores, **tVR_scores;
 	static SeqmentTree **tSeqments;
 	int i, j, rc, Wl, W1, U, M, MM, Ms, MMs, Us, W1s, score, gaps, SU, HIT;
-	int start, end, pos, shifter, kmersize, cover, len, template;
+	int start, end, pos, shifter, kmersize, cover, len, template, test;
 	int cStart, cStart_r, *bests;
 	unsigned DB_size, hitCounter, hitCounter_r, ties, *values, *last;
 	short unsigned *values_s;
@@ -4899,12 +4899,26 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 								/* go for best scenario */
 								if(gaps == 1) {
 									MMs += 2;
+								}  else if((2 * MM + (gaps - 2) * M) < 0) {
+									Ms += (gaps - 2);
+									MMs += 2;
 								} else {
-									gaps -= 2;
-									if((MM << 1) + gaps * M < 0) {
-										Ms += gaps;
-										MMs += 2;
+									if(last) {
+										/* update and link between ankers */
+										V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
+										V_score->end = j - gaps + kmersize;
+										V_score->descend = V_score + 1;
+										++V_score;
 									}
+									V_score->start = j;
+									V_score->values = values;
+									V_score->descend = 0;
+									last = values;
+									Ms = kmersize;
+									MMs = 0;
+									Us = 0;
+									W1s = 0;
+									++hitCounter;
 								}
 							} else {
 								++MMs;
@@ -4945,7 +4959,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		if(last) {
 			/* update anker */
 			V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
-			V_score->end = j - gaps + kmersize;
+			V_score->end = qseq->seqlen - gaps;
 		}
 	}
 	
@@ -4995,12 +5009,26 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 								/* go for best scenario */
 								if(gaps == 1) {
 									MMs += 2;
+								} else if((2 * MM + (gaps - 2) * M) < 0) {
+									Ms += (gaps - 2);
+									MMs += 2;
 								} else {
-									gaps -= 2;
-									if((MM << 1) + gaps * M < 0) {
-										Ms += gaps;
-										MMs += 2;
+									if(last) {
+										/* update and link between ankers */
+										V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
+										V_score->end = j - gaps + kmersize;
+										V_score->descend = V_score + 1;
+										++V_score;
 									}
+									V_score->start = j;
+									V_score->values = values;
+									V_score->descend = 0;
+									last = values;
+									Ms = kmersize;
+									MMs = 0;
+									Us = 0;
+									W1s = 0;
+									++hitCounter_r;
 								}
 							} else {
 								++MMs;
@@ -5043,7 +5071,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		if(last) {
 			/* update anker */
 			V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
-			V_score->end = j - gaps + kmersize;
+			V_score->end = qseq->seqlen - gaps;
 		}
 	}
 	--*(qseq->N);
@@ -5125,12 +5153,20 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 					} else if((MM * 2 + (gaps - 2) * M) < 0) {
 						score += V_score->weight + (MM * 2 + (gaps - 2) * M);
 					} else {
-						score += V_score->weight - gaps * M;
+						MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
+						MMs = MAX(2, MMs);
+						gaps -= MMs;
+						Ms = MIN(gaps, kmersize);
+						score += V_score->weight + Ms * M + MMs * MM;
 					}
 					
 					/* verify extension */
-					if(score <= Wl + V_score->weight) {
-						score = Wl + V_score->weight;
+					if(score < 0) {
+						test = start ? (W1 + (start - 1) * U) : 0;
+						test = MAX(test, Wl);
+						if(score < test + V_score->weight) {
+							score = test + V_score->weight;
+						}
 					}
 				}
 				
@@ -5179,37 +5215,37 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	*bestTemplates = 0;
 	*bestTemplates_r = 0;
 	if(best_score_r->score < best_score->score) {
-		tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+		tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 		score = best_score->score;
 		cStart = (start = tmp_score->start);
 		cStart_r = -1;
 		len = best_score->end - start;
 		rc = 1;
 	} else if(best_score->score < best_score_r->score) {
-		tmp_score = getBestChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
+		tmp_score = getChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
 		score = best_score_r->score;
 		cStart = -1;
 		cStart_r = (start = tmp_score->start);
 		len = best_score_r->end - start;
 		rc = 2;
 	} else if(best_score->end == best_score_r->end) {
-		tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+		tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 		cStart = tmp_score->start;
-		getBestChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
+		getChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
 		score = best_score->score;
 		cStart_r = tmp_score->start;
 		start = MAX(cStart, cStart_r);
 		len = best_score->end - start;
 		rc = 3;
 	} else if(best_score->end < best_score_r->end) {
-		tmp_score = getBestChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
+		tmp_score = getChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
 		score = best_score_r->score;
 		cStart = -1;
 		cStart_r = (start = tmp_score->start);
 		len = best_score_r->end - start;
 		rc = 2;
 	} else {
-		tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+		tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 		score = best_score->score;
 		cStart = (start = tmp_score->start);
 		cStart_r = -1;
@@ -5217,11 +5253,16 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		rc = 1;
 	}
 	
+	if(len < minlen || score < mrs * len) {
+		*include = 0;
+		return 1;
+	}
+	
 	/* get best chains */
 	while(best_score || best_score_r) {
 		/* get equal ankers inside chain,
 		that lies under the threshold */
-		if(ties) {
+		if(0 && ties) {
 			if(rc & 1) {
 				score = best_score->score;
 				V_score = best_score;
@@ -5245,7 +5286,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 						/* update best template candidates */
 						template = *bests;
 						*bests = 0;
-						getBestChainTemplates(V_score, rewards, kmersize, bests, Score, extendScore, include);
+						getChainTemplates(V_score, rewards, kmersize, bests, Score, extendScore, include);
 						*bestTemplates += *bests;
 						*bests = template;
 					}
@@ -5274,7 +5315,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 						/* update best template candidates */
 						template = *bests;
 						*bests = 0;
-						getBestChainTemplates(V_score, rewards, kmersize, bests, Score, extendScore, include);
+						getChainTemplates(V_score, rewards, kmersize, bests, Score, extendScore, include);
 						*bestTemplates_r += *bests;
 						*bests = template;
 					}
@@ -5289,7 +5330,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			growSeqmentTree(chainSeqments, start, best_score->end);
 			insertKmerBound((Qseqs *) header, start, best_score->end);
 		} else {
-			growSeqmentTree(chainSeqments, start, best_score_r->end);
+			growSeqmentTree(chainSeqments, qseq->seqlen - best_score_r->end, qseq->seqlen - start);
 			insertKmerBound((Qseqs *) header, qseq->seqlen - best_score_r->end, qseq->seqlen - start);
 		}
 		
@@ -5305,6 +5346,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				best_score_r->score = 0;
 				*bestTemplates_r = 0;
 			}
+			
 			lock(excludeOut);
 			i = deConPrintPtr(bestTemplates, qseq, best_score->score, header, 0, out);
 			unlock(excludeOut);
@@ -5323,12 +5365,13 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		rc = 0;
 		if(best_score) {
 			if(best_score->score) {
-				tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+				tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 				cStart = tmp_score->start;
 				cover = queSeqmentTree(chainSeqments->root, cStart, best_score->end);
+				
 				/* verify chain */
 				len = best_score->end - cStart;
-				if(minlen <= len && cover < coverT * len && mrs * len <= best_score->score) {
+				if(minlen <= len && cover <= coverT * len && mrs * len <= best_score->score) {
 					/* get chain */
 					rc = 1;
 				} else {
@@ -5341,13 +5384,13 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				if((best_score = getBestAnker(&VF_scores, &ties))) {
 					if(kmersize < best_score->score) {
 						/* check chain */
-						tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+						tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 						cStart = tmp_score->start;
 						cover = queSeqmentTree(chainSeqments->root, cStart, best_score->end);
 						
 						/* verify chain */
 						len = best_score->end - cStart;
-						if(minlen <= len && cover < coverT * len && mrs * len <= best_score->score) {
+						if(minlen <= len && cover <= coverT * len && mrs * len <= best_score->score) {
 							/* get chain */
 							rc = 1;
 						} else {
@@ -5364,12 +5407,14 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		
 		if(best_score_r) {
 			if(best_score_r->score) {
-				tmp_score = getBestChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
+				tmp_score = getChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
 				cStart_r = tmp_score->start;
-				cover = queSeqmentTree(chainSeqments->root, cStart_r, best_score_r->end);
+				//cover = queSeqmentTree(chainSeqments->root, cStart_r, best_score_r->end);
+				cover = queSeqmentTree(chainSeqments->root, qseq->seqlen - best_score_r->end, qseq->seqlen - cStart_r);
+				
 				/* verify chain */
 				len = best_score_r->end - cStart_r;
-				if(minlen <= len && cover < coverT * len && mrs * len <= best_score_r->score) {
+				if(minlen <= len && cover <= coverT * len && mrs * len <= best_score_r->score) {
 					/* get chain */
 					rc |= 2;
 				} else {
@@ -5382,13 +5427,14 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				if((best_score_r = getBestAnker(&VR_scores, &ties))) {
 					if(kmersize < best_score_r->score) {
 						/* check chain */
-						tmp_score = getBestChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
+						tmp_score = getChainTemplates(best_score_r, rewards, kmersize, bestTemplates_r, Score, extendScore, include);
 						cStart_r = tmp_score->start;
-						cover = queSeqmentTree(chainSeqments->root, cStart_r, best_score_r->end);
+						//cover = queSeqmentTree(chainSeqments->root, cStart_r, best_score_r->end);
+						cover = queSeqmentTree(chainSeqments->root, qseq->seqlen - best_score_r->end, qseq->seqlen - cStart_r);
 						
 						/* verify chain */
 						len = best_score_r->end - cStart_r;
-						if(minlen <= best_score_r->end - cStart_r && cover < coverT * len && mrs * len <= best_score_r->score) {
+						if(minlen <= best_score_r->end - cStart_r && cover <= coverT * len && mrs * len <= best_score_r->score) {
 							/* get chain */
 							rc |= 2;
 						} else {
@@ -5437,7 +5483,6 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			start = cStart_r;
 			len = best_score_r->end - start;
 		}
-		
 	}
 	*include = 0;
 	
@@ -5452,8 +5497,10 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 	static KmerAnker **tVF_scores;
 	static SeqmentTree **tSeqments;
 	int i, j, shifter, prefix_shifter, kmersize, DB_size, pos, start, score;
-	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, end, len, gaps, template, *bests;
-	unsigned SU, HIT, cover, hitCounter, ties, prefix_len, *values, *last;
+	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, end, len, gaps, template, test;
+	int *bests;
+	unsigned SU, HIT, cover, hitCounter, ties, prefix_len, flag;
+	unsigned *values, *last;
 	short unsigned *values_s;
 	long unsigned prefix;
 	char *include;
@@ -5528,88 +5575,150 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 	V_score->end = 0;
 	V_score->values = 0;
 	V_score->descend = 0;
-	
 	if((prefix_len = templates->prefix_len)) {
 		prefix = templates->prefix;
+		flag = 16;
 		rc_comp(qseq, qseq_r);
 		++*(qseq->N);
 		qseq->N[*(qseq->N)] = qseq->seqlen;
 		i = 0;
 		j = qseq->seqlen - kmersize - prefix_len;
 		for(gaps = 1; gaps <= *(qseq->N); ++gaps) {
+			V_score->end = i;
 			end = qseq->N[gaps] - kmersize - prefix_len + 1;
 			while(i < end) {
 				if(getKmer(qseq->seq, i, prefix_shifter) == prefix) {
 					if((values = hashMap_get(templates, getKmer(qseq->seq, i + prefix_len, shifter)))) {
-						if(last) {
-							/* update and link between ankers */
-							V_score->end = (V_score->end + i) / 2;
-							start = V_score->end + 1;
-							V_score->weight = (V_score->end - V_score->start) * M;
-							V_score->descend = V_score + 1;
-							++V_score;
-						} else if(start) {
-							start = (start + i) / 2;
+						if(values == last) {
+							/* update end */
+							V_score->end = i;
+						} else if(last) {
+							/* find mid point between ankers */
+							tmp_score = V_score++;
+							tmp_score->end = (tmp_score->end + i) >> 1;
+							
+							/* start new anker */
+							V_score->start = tmp_score->end + 1;
+							V_score->end = i;
+							V_score->ties = 0;
+							V_score->values = values;
+							
+							/* finish last anker */
+							tmp_score->end += kmersize + prefix_len;
+							tmp_score->weight = (tmp_score->end - tmp_score->start) * M;
+							tmp_score->descend = V_score;
+							
+							/* count hit */
+							++hitCounter;
+							last = values;
+						} else {
+							/* make hit anker */
+							V_score->start = V_score->end ? ((V_score->end + i) >> 1) : 0;
+							V_score->end = i;
+							V_score->ties = 0;
+							V_score->values = values;
+							last = values;
 						}
+					} else if(last) {
+						/* finish last anker */
+						tmp_score = V_score++;
+						tmp_score->end = ((tmp_score->end + i) >> 1) + kmersize + prefix_len;
+						tmp_score->weight = (tmp_score->end - tmp_score->start) * M;
+						tmp_score->descend = V_score;
 						
-						V_score->start = start;
-						V_score->end = i + kmersize;
-						V_score->values = (last = values);
-						V_score->descend = 0;
-					} else {
-						if(last) {
-							/* update and link between ankers */
-							V_score->end = (V_score->end + i) / 2;
-							V_score->weight = (V_score->end - V_score->start) * M;
-							V_score->descend = V_score + 1;
-							++V_score;
-						}
-						start = i + kmersize;
+						/* start new anker */
+						V_score->end = i;
+						V_score->ties = 0;
+						V_score->values = 0;
+						
+						++hitCounter;
 						last = 0;
+					} else {
+						V_score->end = i;
 					}
-				} else if(getKmer(qseq_r->seq, j, prefix_shifter) == prefix) {
+				} else if(getKmer(qseq_r->seq, j, prefix_shifter) == prefix) { /* f-hit -> rc-hit -> else */
 					if((values = hashMap_get(templates, getKmer(qseq_r->seq, j + prefix_len, shifter)))) {
-						if(last) {
-							/* update and link between ankers */
-							V_score->end = (V_score->end + i) / 2;
-							start = V_score->end + 1;
-							V_score->weight = (V_score->end - V_score->start) * M;
-							V_score->descend = V_score + 1;
-							++V_score;
-						} else if(start) {
-							start = (start + i) / 2;
+						if(values == last) {
+							/* update end */
+							V_score->end = i;
+						} else if(last) {
+							/* find mid point between ankers */
+							tmp_score = V_score++;
+							tmp_score->end = (tmp_score->end + i) >> 1;
+							
+							/* start new anker */
+							V_score->start = tmp_score->end + 1;
+							V_score->end = i;
+							V_score->ties = 0;
+							V_score->values = values;
+							
+							/* finish last anker */
+							tmp_score->end += kmersize + prefix_len;
+							tmp_score->weight = (tmp_score->end - tmp_score->start) * M;
+							tmp_score->descend = V_score;
+							
+							/* count hit */
+							++hitCounter;
+							last = values;
+						} else {
+							/* make hit anker */
+							V_score->start = V_score->end ? ((V_score->end + i) >> 1) : 0;
+							V_score->end = i;
+							V_score->ties = 0;
+							V_score->values = values;
+							last = values;
 						}
+					} else if(last) {
+						/* finish last anker */
+						tmp_score = V_score++;
+						tmp_score->end = ((tmp_score->end + i) >> 1) + kmersize + prefix_len;
+						tmp_score->weight = (tmp_score->end - tmp_score->start) * M;
+						tmp_score->descend = V_score;
 						
-						V_score->start = start;
-						V_score->end = i + kmersize;
-						V_score->values = (last = values);
-						V_score->descend = 0;
-					} else {
-						if(last) {
-							/* update and link between ankers */
-							V_score->end = (V_score->end + i) / 2;
-							V_score->weight = (V_score->end - V_score->start) * M;
-							V_score->descend = V_score + 1;
-							++V_score;
-						}
-						start = i + kmersize;
+						/* start new anker */
+						V_score->end = i;
+						V_score->ties = 0;
+						V_score->values = 0;
+						
+						++hitCounter;
 						last = 0;
+					} else {
+						V_score->end = i;
 					}
 				}
 				++i;
-				--j;
+				--j;	
 			}
+			
+			if(last) {
+				/* finish last anker */
+				tmp_score = V_score++;
+				tmp_score->end = i;
+				tmp_score->weight = (tmp_score->end - tmp_score->start) * M;
+				tmp_score->descend = V_score;
+				
+				/* start new anker */
+				V_score->ties = 0;
+				V_score->values = 0;
+				
+				++hitCounter;
+				last = 0;
+			}
+			
 			i = qseq->N[gaps] + 1;
-			j -= (kmersize + prefix_len);
+			j = qseq->seqlen - kmersize - prefix_len - i;
 		}
-		if(last) {
-			V_score->end = qseq->seqlen;
-			V_score->weight = V_score->end - V_score->start;
-		} else {
-			(--V_score)->descend = 0;
+		
+		if(hitCounter) {
+			--V_score;
+			V_score->descend = 0;
 		}
 		--*(qseq->N);
+		
+		/* adjust the kmersize for chaining */
+		kmersize += prefix_len - 1;
 	} else {
+		flag = 0;
 		HIT = exhaustive;
 		j = 0;
 		++*(qseq->N);
@@ -5632,6 +5741,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 			Us = 0;
 			W1s = 0;
 			gaps = 0;
+			last = 0;
 			j = 0;
 			for(i = 1; i <= *(qseq->N); ++i) {
 				end = qseq->N[i] - kmersize + 1;
@@ -5645,12 +5755,26 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 									/* go for best scenario */
 									if(gaps == 1) {
 										MMs += 2;
+									} else if((MM * 2 + (gaps - 2) * M) < 0) {
+										Ms += (gaps - 2);
+										MMs += 2;
 									} else {
-										gaps -= 2;
-										if((MM << 1) + gaps * M < 0) {
-											Ms += gaps;
-											MMs += 2;
+										if(last) {
+											/* update and link between ankers */
+											V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
+											V_score->end = j - gaps + kmersize;
+											V_score->descend = V_score + 1;
+											++V_score;
 										}
+										V_score->start = j;
+										V_score->values = values;
+										V_score->descend = 0;
+										last = values;
+										Ms = kmersize;
+										MMs = 0;
+										Us = 0;
+										W1s = 0;
+										++hitCounter;
 									}
 								} else {
 									++MMs;
@@ -5662,6 +5786,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 							} else {
 								++Ms;
 							}
+							gaps = 0;
 						} else {
 							if(last) {
 								/* update and link between ankers */
@@ -5671,9 +5796,10 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 								++V_score;
 							}
 							V_score->start = j;
-							V_score->values = (last = values);
+							V_score->values = values;
 							V_score->descend = 0;
-							Ms = 0;
+							last = values;
+							Ms = kmersize;
 							MMs = 0;
 							Us = 0;
 							W1s = 0;
@@ -5690,7 +5816,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 			if(last) {
 				/* update anker */
 				V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
-				V_score->end = j - gaps + kmersize;
+				V_score->end = qseq->seqlen - gaps;
 			}
 		}
 		--*(qseq->N);
@@ -5759,12 +5885,20 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 				} else if((MM * 2 + (gaps - 2) * M) < 0) {
 					score += V_score->weight + (MM * 2 + (gaps - 2) * M);
 				} else {
-					score += V_score->weight - gaps * M;
+					MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
+					MMs = MAX(2, MMs);
+					gaps -= MMs;
+					Ms = MIN(gaps, kmersize);
+					score += V_score->weight + Ms * M + MMs * MM;
 				}
 				
 				/* verify extension */
-				if(score <= Wl + V_score->weight) {
-					score = Wl + V_score->weight;
+				if(score < 0) {
+					test = start ? (W1 + (start - 1) * U) : 0;
+					test = MAX(test, Wl);
+					if(score <= test + V_score->weight) {
+						score = test + V_score->weight;
+					}
 				}
 			}
 			
@@ -5809,10 +5943,16 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 	and zero out ankers */
 	*include = SU;
 	*bestTemplates = 0;
-	tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+	tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 	score = best_score->score;
 	start = tmp_score->start;
 	len = best_score->end - start;
+	
+	/* verify best anker */
+	if(len < minlen || score < mrs * len) {
+		*include = 0;
+		return 1;
+	}
 	
 	/* get best chains */
 	while(best_score) {
@@ -5827,7 +5967,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 				2. Best match is last on seq -> tie_start < best_start
 				1. && 2. -> cover = |tie_start - best_end| / len
 				*/
-				if((V_score->end - start) < coverT * len ) {
+				if((V_score->end - start) <= coverT * len ) {
 					/* not a co-match / overlap is insufficient ->
 					no more equal matches */
 					V_score = 0;
@@ -5841,7 +5981,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 					/* update best template candidates */
 					template = *bests;
 					*bests = 0;
-					getBestChainTemplates(V_score, rewards, kmersize, bests, Score, extendScore, include);
+					getChainTemplates(V_score, rewards, kmersize, bests, Score, extendScore, include);
 					*bestTemplates += *bests;
 					*bests = template;
 				}
@@ -5857,7 +5997,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 		
 		/* print match */
 		lock(excludeOut);
-		i = deConPrintPtr(bestTemplates, qseq, best_score->score, header, 0, out);
+		i = deConPrintPtr(bestTemplates, qseq, best_score->score, header, flag, out);
 		unlock(excludeOut);
 		
 		/* get next match */
@@ -5869,13 +6009,13 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 			if((best_score = getBestAnker(&VF_scores, &ties))) {
 				if(kmersize < best_score->score) {
 					/* check chain */
-					tmp_score = getBestChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
+					tmp_score = getChainTemplates(best_score, rewards, kmersize, bestTemplates, Score, extendScore, include);
 					start = tmp_score->start;
 					cover = queSeqmentTree(chainSeqments->root, start, best_score->end);
 					len = best_score->end - start;
 					
 					/* verify chain */
-					if(len < minlen || coverT * len <= cover || best_score->score < mrs * len) {
+					if(len < minlen || coverT * len < cover || best_score->score < mrs * len) {
 						/* silence anker */
 						best_score->score = 0;
 					}
@@ -5885,7 +6025,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 				}
 			} else {
 				*include = 0;
-				return 0;	
+				return 0;
 			}
 		}
 	}

@@ -48,10 +48,10 @@ void insertKmerBound(Qseqs *header, int start, int end) {
 			ERROR();
 		}
 	}
-	
+	header->seq[header->len] = 0;
 	seq = (int *) (header->seq + header->len + 1);
 	*seq = start;
 	*++seq = end;
-	header->len += (2 * sizeof(int));
+	header->len += (2 * sizeof(int) + 1);
 	
 }

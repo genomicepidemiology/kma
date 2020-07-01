@@ -109,7 +109,6 @@ int index_main(int argc, char *argv[]) {
 	homQ = 1;
 	homT = 1;
 	cmp = &cmp_or;
-	dumpIndex = &makeIndexing;
 	template_ulengths = 0;
 	template_slengths = 0;
 	filecount = 0;
@@ -228,7 +227,7 @@ int index_main(int argc, char *argv[]) {
 				kmersize = strtoul(argv[args], &exeBasic, 10);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "# Invalid kmersize parsed\n");
-					exit(4);
+					exit(1);
 				} else if(kmersize == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmersize = 16;
@@ -243,7 +242,7 @@ int index_main(int argc, char *argv[]) {
 				kmersize = strtoul(argv[args], &exeBasic, 10);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "# Invalid kmersize parsed\n");
-					exit(4);
+					exit(1);
 				} else if(kmersize == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmersize = 16;
@@ -257,7 +256,7 @@ int index_main(int argc, char *argv[]) {
 				kmerindex = strtoul(argv[args], &exeBasic, 10);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "# Invalid kmersize parsed\n");
-					exit(4);
+					exit(1);
 				} else if(kmerindex == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmerindex = 16;
@@ -272,7 +271,7 @@ int index_main(int argc, char *argv[]) {
 				size = strtoul(argv[args], &exeBasic, 10);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "# Invalid start size parsed\n");
-					exit(4);
+					exit(1);
 				}
 				initialSize = pow(2, ceil(log(size)/log(2))) + 0.5;
 				initialSize *= 1048576;
@@ -289,7 +288,7 @@ int index_main(int argc, char *argv[]) {
 				MinLen = strtoul(argv[args], &exeBasic, 10);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "# Invalid minimum length parsed\n");
-					exit(4);
+					exit(1);
 				} else if(MinLen <= 0) {
 					fprintf(stderr, "# Invalid minimum length parsed, using default\n");
 					MinLen = 0;
@@ -301,7 +300,7 @@ int index_main(int argc, char *argv[]) {
 				homQ = strtod(argv[args], &exeBasic);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "Invalid argument at \"-hq\".\n");
-					exit(4);
+					exit(1);
 				} else if(homQ < 0) {
 					fprintf(stderr, "Invalid -hq\n");
 					homQ = 1.0;
@@ -313,7 +312,7 @@ int index_main(int argc, char *argv[]) {
 				homT = strtod(argv[args], &exeBasic);
 				if(*exeBasic != 0) {
 					fprintf(stderr, "Invalid argument at \"-ht\".\n");
-					exit(4);
+					exit(1);
 				} else if(homT < 0) {
 					fprintf(stderr, "Invalid -hq\n");
 					homT = 1.0;
@@ -322,10 +321,7 @@ int index_main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-batch") == 0) {
 			++args;
 			if(args < argc) {
-				inputfile = fopen(argv[args], "rb");
-				if(!inputfile) {
-					ERROR();
-				}
+				inputfile = sfopen(argv[args], "rb");
 				fseek(inputfile, 0, SEEK_END);
 				size = ftell(inputfile) + 1;
 				rewind(inputfile);
@@ -375,10 +371,7 @@ int index_main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-batchD") == 0) {
 			++args;
 			if(args < argc) {
-				inputfile = fopen(argv[args], "rb");
-				if(!inputfile) {
-					ERROR();
-				}
+				inputfile = sfopen(argv[args], "rb");
 				fseek(inputfile, 0, SEEK_END);
 				size = ftell(inputfile) + 1;
 				rewind(inputfile);
@@ -452,7 +445,7 @@ int index_main(int argc, char *argv[]) {
 		} else if(strcmp(argv[args], "-ME") == 0) {
 			megaDB = 1;
 		} else if(strcmp(argv[args], "-NI") == 0) {
-			dumpIndex = &dumpSeq;
+			
 		} else if(strcmp(argv[args], "-nbp") == 0) {
 			biasPrintPtr = &biasNoPrint;
 		} else if(strcmp(argv[args], "-v") == 0) {

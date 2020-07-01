@@ -170,10 +170,7 @@ unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **templ
 	
 	/* load lengths */
 	strcat(templatefilename, ".length.b");
-	infile = fopen(templatefilename, "rb");
-	if(!infile) {
-		ERROR();
-	}
+	infile = sfopen(templatefilename, "rb");
 	templatefilename[file_len] = 0;
 	fread(&DB_size, sizeof(unsigned), 1, infile);
 	if(finalDB->prefix) {
@@ -208,19 +205,6 @@ unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **templ
 	CP(templatefilename, outputfilename);
 	templatefilename[file_len] = 0;
 	outputfilename[out_len] = 0;
-	
-	strcat(templatefilename, ".index.b");
-	if(dumpIndex == &makeIndexing) {
-		strcat(outputfilename, ".index.b");
-		if(CP(templatefilename, outputfilename) == 2) {
-			dumpIndex = &dumpSeq;
-		}
-		outputfilename[out_len] = 0;
-	} else if((infile = fopen(templatefilename, "rb"))) {
-		fclose(infile);
-		remove(templatefilename);
-	}
-	templatefilename[file_len] = 0;
 	
 	return kmerindex;
 }

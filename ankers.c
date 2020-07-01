@@ -56,7 +56,7 @@ int print_ankers_Sparse(int *out_Tem, CompDNA *qseq, int rc_flag, const Qseqs *h
 	infoSize[0] = qseq->seqlen;
 	infoSize[1] = qseq->complen;
 	infoSize[2] = *(qseq->N);
-	infoSize[3] = -(abs(rc_flag));
+	infoSize[3] = rc_flag < 0 ? rc_flag : -rc_flag;
 	infoSize[4] = *out_Tem;
 	infoSize[5] = header->len;
 	infoSize[6] = flag;

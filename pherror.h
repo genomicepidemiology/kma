@@ -30,7 +30,7 @@
 #define sfwrite(ptr, size, nmemb, stream) if(fwrite(ptr, size, nmemb, stream) != nmemb) {if(errno) {ERROR();} else {fprintf(stderr, "Writing error.\n"); exit(1);}}
 #define sfread(ptr, size, nmemb, stream) if(fread(ptr, size, nmemb, stream) != nmemb) {if(errno) {ERROR();} else {fprintf(stderr, "Reading error.\n"); exit(1);}}
 void * smalloc(const size_t size);
-FILE * sfopen(const char *filename, char *mode);
+FILE * sfopen(const char *filename, const char *mode);
 
 /* cyclic */
 void cfread(void *src, size_t size, size_t nmemb, FILE *stream);

@@ -622,8 +622,8 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 		
 		fprintf(stderr, "# Total number of matches: %lu of %lu kmers\n", Nhits.tot, Ntot);
 		/* copy scores */
-		w_Scores = smalloc(templates->DB_size * sizeof(*w_Scores));
-		w_Scores_tot = smalloc(templates->DB_size * sizeof(*w_Scores_tot));
+		w_Scores = smalloc(templates->DB_size * sizeof(int));
+		w_Scores_tot = smalloc(templates->DB_size * sizeof(long unsigned));
 		
 		for(i = 0; i < templates->DB_size; ++i) {
 			w_Scores[i] = Scores[i];

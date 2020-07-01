@@ -26,7 +26,7 @@
 #include "compdna.h"
 #include "frags.h"
 #include "filebuff.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "pherror.h"
 #include "qseqs.h"
 #include "sam.h"
@@ -35,12 +35,12 @@
 #include "threader.h"
 #include "updatescores.h"
 
-int (*alnFragsPE)(HashMap_index**, int*, int*, int, double, int, CompDNA*, CompDNA*, unsigned char*, unsigned char*, Qseqs*, Qseqs*, int, int*, int*, long unsigned*, long unsigned*, int*, int*, int*, int*, int*, int*, int, int, long*, long*, FILE*, AlnPoints*, NWmat*, volatile int*, volatile int*) = alnFragsUnionPE;
+int (*alnFragsPE)(HashMapCCI**, int*, int*, int, double, int, CompDNA*, CompDNA*, CompDNA*, CompDNA*, unsigned char*, unsigned char*, unsigned char*, unsigned char*, Qseqs*, Qseqs*, int, int*, int*, long unsigned*, long unsigned*, int*, int*, int*, int*, int*, int*, int, long*, FILE*, AlnPoints*, NWmat*, volatile int*, volatile int*) = alnFragsUnionPE;
 
-int alnFragsSE(HashMap_index **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, int rc_flag, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, int kmersize, Qseqs *header, int *bestTemplates, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *best_read_score, int seq_in, int index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
+int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, int rc_flag, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, int kmersize, Qseqs *header, int *bestTemplates, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *best_read_score, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
-	int t_i, template, read_score, bestHits, aln_len;
-	int start, end, W1;
+	int t_i, template, read_score, bestHits, aln_len, start, end, W1, arc, rc;
+	int q_start, q_end, *qBoundPtr;
 	double score, bestScore;
 	AlnScore alnStat;
 	
@@ -63,6 +63,8 @@ int alnFragsSE(HashMap_index **templates_index, int *matched_templates, int *tem
 	*best_read_score = 0;
 	bestHits = 0;
 	W1 = NWmatrices->rewards->W1;
+	arc = points->len;
+	points->len = 0;
 	
 	for(t_i = 1; t_i <= *matched_templates; ++t_i) {
 		template = matched_templates[t_i];
@@ -70,17 +72,46 @@ int alnFragsSE(HashMap_index **templates_index, int *matched_templates, int *tem
 		/* check if index DB is loaded */
 		lock(excludeDB);
 		if(template >= 0 && templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, index_in, template_lengths[template], kmersize, seq_indexes[template], index_indexes[template]);
+			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, template_lengths[template], kmersize, seq_indexes[template]);
 		} else if(template < 0 && templates_index[-template] == 0) {
-			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, index_in, template_lengths[-template], kmersize, seq_indexes[-template], index_indexes[-template]);
+			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, template_lengths[-template], kmersize, seq_indexes[-template]);
 		}
 		unlock(excludeDB);
 		
-		/* align qseq */
-		if(template < 0) {
-			alnStat = KMA_score(templates_index[-template], qseq_r, q_len, qseq_r_comp, mq, scoreT, points, NWmatrices);
+		/* q-bound */
+		if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+			qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
+			q_start = *qBoundPtr;
+			q_end = *++qBoundPtr;
 		} else {
-			alnStat = KMA_score(templates_index[template], qseq, q_len, qseq_comp, mq, scoreT, points, NWmatrices);
+			q_start = 0;
+			q_end = q_len;
+		}
+		
+		
+		/* check ankers */
+		if(arc) {
+			rc = anker_rc_comp(templates_index[abs(template)], qseq, qseq_r, qseq_comp, qseq_r_comp, q_start, q_end, points);
+			if(rc < 0) {
+				if(0 < template) {
+					template = -template;
+				}
+				alnStat = KMA_score(templates_index[-template], qseq_r, q_len, q_len - q_end, q_len - q_start, qseq_r_comp, mq, scoreT, points, NWmatrices);
+			} else if(rc) {
+				alnStat = KMA_score(templates_index[abs(template)], qseq, q_len, q_start, q_end, qseq_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat.score = 0;
+				alnStat.pos = 0;
+				alnStat.len = 0;
+				alnStat.gaps = 0;
+				points->len = 0;
+			}
+		} else {
+			if(template < 0) {
+				alnStat = KMA_score(templates_index[-template], qseq_r, q_len, q_len - q_end, q_len - q_start, qseq_r_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat = KMA_score(templates_index[template], qseq, q_len, q_start, q_end, qseq_comp, mq, scoreT, points, NWmatrices);
+			}
 		}
 		
 		/* get read score */
@@ -129,7 +160,7 @@ int alnFragsSE(HashMap_index **templates_index, int *matched_templates, int *tem
 				best_end_pos[bestHits] = end;
 				++bestHits;
 			}
-		}
+		}	
 	}
 	if(*best_read_score > kmersize) {
 		lock(excludeOut);
@@ -143,10 +174,10 @@ int alnFragsSE(HashMap_index **templates_index, int *matched_templates, int *tem
 	return 1;
 }
 
-int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, int index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
+int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, CompDNA *qseq_fr_comp, CompDNA *qseq_rr_comp, unsigned char *qseq, unsigned char *qseq_r, unsigned char *qseq_fr, unsigned char *qseq_rr, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
-	int t_i, template, read_score;
-	int compScore, bestHits, bestHits_r, aln_len, start, end, rc, W1;
+	int t_i, template, read_score, W1;
+	int compScore, bestHits, bestHits_r, aln_len, start, end, arc, rc;
 	double score;
 	AlnScore alnStat;
 	
@@ -157,6 +188,13 @@ int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int
 	unCompDNA(qseq_r_comp, qseq_r);
 	qseq_r_comp->N[0]++;
 	qseq_r_comp->N[qseq_r_comp->N[0]] = qseq_r_comp->seqlen;
+	if((arc = points->len)) {
+		qseq_fr_comp->N[0]++;
+		qseq_fr_comp->N[qseq_fr_comp->N[0]] = qseq_fr_comp->seqlen;
+		qseq_rr_comp->N[0]++;
+		qseq_rr_comp->N[qseq_rr_comp->N[0]] = qseq_rr_comp->seqlen;
+		points->len = 0;
+	}
 	W1 = NWmatrices->rewards->W1;
 	start = 0;
 	end = 0;
@@ -187,16 +225,33 @@ int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int
 		
 		lock(excludeDB);
 		if(0 <= template && templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, index_in, template_lengths[template], kmersize, seq_indexes[template], index_indexes[template]);
+			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, template_lengths[template], kmersize, seq_indexes[template]);
 		} else if(template < 0 && templates_index[-template] == 0) {
-			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, index_in, template_lengths[-template], kmersize, seq_indexes[-template], index_indexes[-template]);
+			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, template_lengths[-template], kmersize, seq_indexes[-template]);
 		}
 		unlock(excludeDB);
 		
-		template = abs(template);
-		
 		/* align qseqs */
-		alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+		template = abs(template);
+		if(arc) {
+			rc = anker_rc_comp(templates_index[template], qseq, qseq_fr, qseq_comp, qseq_fr_comp, 0, qseq_comp->seqlen,  points);
+			if(rc < 0) {
+				/* rc */
+				alnStat = KMA_score(templates_index[template], qseq_fr, qseq_fr_comp->seqlen, 0, qseq_fr_comp->seqlen, qseq_fr_comp, mq, scoreT, points, NWmatrices);
+			} else if(rc) {
+				/* forward */
+				matched_templates[t_i] = -matched_templates[t_i];
+				alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, 0, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat.score = 0;
+				alnStat.pos = 0;
+				alnStat.len = 0;
+				alnStat.gaps = 0;
+				points->len = 0;
+			}
+		} else {
+			alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, 0, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+		}
 		
 		/* get read score */
 		aln_len = alnStat.len;
@@ -204,7 +259,6 @@ int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int
 		if(minlen <= aln_len && 0 < read_score) {
 			start = alnStat.pos;
 			end = alnStat.pos + alnStat.len - alnStat.gaps;
-			
 			if(start == 0 && end == template_lengths[abs(template)]) {
 				read_score += abs(W1);
 			}
@@ -225,7 +279,26 @@ int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int
 			best_end_pos[t_i] = -1;
 		}
 		
-		alnStat = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+		/* align qseqs */
+		template = abs(template);
+		if(arc) {
+			if(rc < 0) {
+				/* rc */
+				alnStat = KMA_score(templates_index[template], qseq_rr, qseq_rr_comp->seqlen, 0, qseq_rr_comp->seqlen, qseq_rr_comp, mq, scoreT, points, NWmatrices);
+			} else if(rc) {
+				/* forward */
+				alnStat = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, 0, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat.score = 0;
+				alnStat.pos = 0;
+				alnStat.len = 0;
+				alnStat.gaps = 0;
+			}
+			rc = 1;
+		} else {
+			alnStat = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, 0, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+		}
+		
 		/* get read score */
 		aln_len = alnStat.len;
 		read_score = alnStat.score;
@@ -271,6 +344,14 @@ int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int
 		}
 		if(compScore < read_score) {
 			compScore = read_score;
+		}
+	}
+	
+	/* get rc flag */
+	if(arc) {
+		rc = 0;
+		for(t_i = 1; t_i <= *matched_templates && !rc; ++t_i) {
+			rc = matched_templates[t_i] < 0;
 		}
 	}
 	
@@ -420,10 +501,10 @@ int alnFragsUnionPE(HashMap_index **templates_index, int *matched_templates, int
 	return 3;
 }
 
-int alnFragsPenaltyPE(HashMap_index **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, int index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
+int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, CompDNA *qseq_fr_comp, CompDNA *qseq_rr_comp, unsigned char *qseq, unsigned char *qseq_r, unsigned char *qseq_fr, unsigned char *qseq_rr, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
-	int t_i, template, read_score;
-	int compScore, bestHits, bestHits_r, aln_len, start, end, rc, W1, PE;
+	int t_i, template, read_score, W1, PE;
+	int compScore, bestHits, bestHits_r, aln_len, start, end, arc, rc;
 	double score;
 	AlnScore alnStat;
 	
@@ -434,6 +515,13 @@ int alnFragsPenaltyPE(HashMap_index **templates_index, int *matched_templates, i
 	unCompDNA(qseq_r_comp, qseq_r);
 	qseq_r_comp->N[0]++;
 	qseq_r_comp->N[qseq_r_comp->N[0]] = qseq_r_comp->seqlen;
+	if((arc = points->len)) {
+		qseq_fr_comp->N[0]++;
+		qseq_fr_comp->N[qseq_fr_comp->N[0]] = qseq_fr_comp->seqlen;
+		qseq_rr_comp->N[0]++;
+		qseq_rr_comp->N[qseq_rr_comp->N[0]] = qseq_rr_comp->seqlen;
+		points->len = 0;
+	}
 	W1 = NWmatrices->rewards->W1;
 	PE = NWmatrices->rewards->PE;
 	start = 0;
@@ -465,16 +553,33 @@ int alnFragsPenaltyPE(HashMap_index **templates_index, int *matched_templates, i
 		
 		lock(excludeDB);
 		if(0 <= template && templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, index_in, template_lengths[template], kmersize, seq_indexes[template], index_indexes[template]);
+			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, template_lengths[template], kmersize, seq_indexes[template]);
 		} else if(template < 0 && templates_index[-template] == 0) {
-			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, index_in, template_lengths[-template], kmersize, seq_indexes[-template], index_indexes[-template]);
+			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, template_lengths[-template], kmersize, seq_indexes[-template]);
 		}
 		unlock(excludeDB);
 		
-		template = abs(template);
-		
 		/* align qseqs */
-		alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+		template = abs(template);
+		if(arc) {
+			rc = anker_rc_comp(templates_index[template], qseq, qseq_fr, qseq_comp, qseq_fr_comp, 0, qseq_comp->seqlen, points);
+			if(rc < 0) {
+				/* rc */
+				alnStat = KMA_score(templates_index[template], qseq_fr, qseq_fr_comp->seqlen, 0, qseq_fr_comp->seqlen, qseq_fr_comp, mq, scoreT, points, NWmatrices);
+			} else if(rc) {
+				/* forward */
+				matched_templates[t_i] = -matched_templates[t_i];;
+				alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, 0, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat.score = 0;
+				alnStat.pos = 0;
+				alnStat.len = 0;
+				alnStat.gaps = 0;
+				points->len = 0;
+			}
+		} else {
+			alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, 0, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+		}
 		
 		/* get read score */
 		aln_len = alnStat.len;
@@ -503,7 +608,24 @@ int alnFragsPenaltyPE(HashMap_index **templates_index, int *matched_templates, i
 			best_end_pos[t_i] = -1;
 		}
 		
-		alnStat = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+		if(arc) {
+			if(rc < 0) {
+				/* rc */
+				alnStat = KMA_score(templates_index[template], qseq_rr, qseq_rr_comp->seqlen, 0, qseq_rr_comp->seqlen, qseq_rr_comp, mq, scoreT, points, NWmatrices);
+			} else if(rc) {
+				/* forward */
+				alnStat = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, 0, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat.score = 0;
+				alnStat.pos = 0;
+				alnStat.len = 0;
+				alnStat.gaps = 0;
+			}
+			rc = 1;
+		} else {
+			alnStat = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, 0, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+		}
+		
 		/* get read score */
 		aln_len = alnStat.len;
 		read_score = alnStat.score;
@@ -546,6 +668,14 @@ int alnFragsPenaltyPE(HashMap_index **templates_index, int *matched_templates, i
 		read_score += (bestTemplates[t_i] + PE);
 		if(compScore < read_score) {
 			compScore = read_score;
+		}
+	}
+	
+	/* get rc flag */
+	if(arc) {
+		rc = 0;
+		for(t_i = 1; t_i <= *matched_templates && !rc; ++t_i) {
+			rc = matched_templates[t_i] < 0;
 		}
 	}
 	
@@ -695,10 +825,9 @@ int alnFragsPenaltyPE(HashMap_index **templates_index, int *matched_templates, i
 	return 3;
 }
 
-int alnFragsForcePE(HashMap_index **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, int index_in, long *seq_indexes, long *index_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
+int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, CompDNA *qseq_fr_comp, CompDNA *qseq_rr_comp, unsigned char *qseq, unsigned char *qseq_r, unsigned char *qseq_fr, unsigned char *qseq_rr, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
-	int t_i, template, read_score, bestHits, aln_len, W1;
-	int start, end, rc;
+	int t_i, template, read_score, bestHits, aln_len, W1, start, end, arc, rc;
 	double score, bestScore;
 	AlnScore alnStat, alnStat_r;
 	
@@ -709,6 +838,13 @@ int alnFragsForcePE(HashMap_index **templates_index, int *matched_templates, int
 	unCompDNA(qseq_r_comp, qseq_r);
 	qseq_r_comp->N[0]++;
 	qseq_r_comp->N[qseq_r_comp->N[0]] = qseq_r_comp->seqlen;
+	if((arc = points->len)) {
+		qseq_fr_comp->N[0]++;
+		qseq_fr_comp->N[qseq_fr_comp->N[0]] = qseq_fr_comp->seqlen;
+		qseq_rr_comp->N[0]++;
+		qseq_rr_comp->N[qseq_rr_comp->N[0]] = qseq_rr_comp->seqlen;
+		points->len = 0;
+	}
 	W1 = NWmatrices->rewards->W1;
 	start = 0;
 	end = 0;
@@ -738,18 +874,52 @@ int alnFragsForcePE(HashMap_index **templates_index, int *matched_templates, int
 		
 		lock(excludeDB);
 		if(0 <= template && templates_index[template] == 0) {
-			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, index_in, template_lengths[template], kmersize, seq_indexes[template], index_indexes[template]);
+			templates_index[template] = alignLoadPtr(templates_index[template], seq_in, template_lengths[template], kmersize, seq_indexes[template]);
 		} else if(template < 0 && templates_index[-template] == 0) {
-			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, index_in, template_lengths[-template], kmersize, seq_indexes[-template], index_indexes[-template]);
+			templates_index[-template] = alignLoadPtr(templates_index[-template], seq_in, template_lengths[-template], kmersize, seq_indexes[-template]);
 		}
 		unlock(excludeDB);
 		
+		/* align qseqs */
 		template = abs(template);
+		if(arc) {
+			rc = anker_rc_comp(templates_index[template], qseq, qseq_fr, qseq_comp, qseq_fr_comp, 0, qseq_comp->seqlen, points);
+			if(rc < 0) {
+				/* rc */
+				alnStat = KMA_score(templates_index[template], qseq_fr, qseq_fr_comp->seqlen, 0, qseq_fr_comp->seqlen, qseq_fr_comp, mq, scoreT, points, NWmatrices);
+			} else if(rc) {
+				/* forward */
+				matched_templates[t_i] = -matched_templates[t_i];;
+				alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, 0, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+			} else {
+				alnStat.score = 0;
+				alnStat.pos = 0;
+				alnStat.len = 0;
+				alnStat.gaps = 0;
+				points->len = 0;
+			}
+		} else {
+			alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, 0, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
+		}
 		
-		/* align qseq */
-		alnStat = KMA_score(templates_index[template], qseq, qseq_comp->seqlen, qseq_comp, mq, scoreT, points, NWmatrices);
 		if(0 < alnStat.score && minlen <= alnStat.len) {
-			alnStat_r = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+			if(arc) {
+				if(rc < 0) {
+					/* rc */
+					alnStat_r = KMA_score(templates_index[template], qseq_rr, qseq_rr_comp->seqlen, 0, qseq_rr_comp->seqlen, qseq_rr_comp, mq, scoreT, points, NWmatrices);
+				} else if(rc) {
+					/* forward */
+					alnStat_r = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, 0, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+				} else {
+					alnStat_r.score = 0;
+					alnStat_r.pos = 0;
+					alnStat_r.len = 0;
+					alnStat_r.gaps = 0;
+				}
+				rc = 1;
+			} else {
+				alnStat_r = KMA_score(templates_index[template], qseq_r, qseq_r_comp->seqlen, 0, qseq_r_comp->seqlen, qseq_r_comp, mq, scoreT, points, NWmatrices);
+			}
 			
 			/* get read score */
 			if(0 < alnStat_r.score && minlen <= alnStat_r.len) {
@@ -802,6 +972,14 @@ int alnFragsForcePE(HashMap_index **templates_index, int *matched_templates, int
 		}
 	}
 	
+	/* get rc flag */
+	if(arc) {
+		rc = 0;
+		for(t_i = 1; t_i <= *matched_templates && !rc; ++t_i) {
+			rc = matched_templates[t_i] < 0;
+		}
+	}
+	
 	if((*best_read_score_r = *best_read_score)) {
 		/* check direction of qseqs */
 		if(*bestTemplates < 0) {
@@ -831,20 +1009,21 @@ void * alnFrags_threaded(void * arg) {
 	
 	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeDB[1] = {0};
 	Aln_thread *thread = arg;
-	int rc_flag, read_score, delta, index_in, seq_in, kmersize, minlen;
+	int rc_flag, read_score, delta, seq_in, kmersize, minlen;
 	int flag, flag_r, mq, sam, unmapped, best_read_score, stats[2];
 	int *matched_templates, *bestTemplates, *bestTemplates_r;
 	int *template_lengths, *best_start_pos, *best_end_pos;
-	long *index_indexes, *seq_indexes;
+	long *seq_indexes;
 	long unsigned *alignment_scores, *uniq_alignment_scores;
+	unsigned char *qseq_fr, *qseq_rr;
 	double scoreT;
 	FILE *inputfile, *frag_out_raw;
 	FileBuff *frag_out_all;
-	CompDNA *qseq_comp, *qseq_r_comp;
+	CompDNA *qseq_comp, *qseq_r_comp, *qseq_fr_comp, *qseq_rr_comp;
 	Qseqs *qseq, *qseq_r, *header, *header_r;
 	AlnPoints *points;
 	NWmat *NWmatrices;
-	HashMap_index **templates_index;
+	HashMapCCI **templates_index;
 	
 	/* get input */
 	matched_templates = thread->matched_templates;
@@ -854,12 +1033,10 @@ void * alnFrags_threaded(void * arg) {
 	best_end_pos = thread->best_end_pos;
 	alignment_scores = thread->alignment_scores;
 	uniq_alignment_scores = thread->uniq_alignment_scores;
-	index_indexes = thread->index_indexes;
 	seq_indexes = thread->seq_indexes;
 	inputfile = thread->inputfile;
 	frag_out_raw = thread->frag_out_raw;
 	frag_out_all = thread->frag_out_all;
-	index_in = thread->index_in;
 	seq_in = thread->seq_in;
 	qseq_comp = thread->qseq_comp;
 	qseq_r_comp = thread->qseq_r_comp;
@@ -877,12 +1054,17 @@ void * alnFrags_threaded(void * arg) {
 	template_lengths = thread->template_lengths;
 	templates_index = thread->templates_index;
 	
+	qseq_fr_comp = setComp(32);
+	qseq_rr_comp = setComp(32);
+	qseq_fr = smalloc(32);
+	qseq_rr = smalloc(32);
 	delta = qseq->size;
 	read_score = 0;
 	stats[0] = 0;
 	//lock(excludeIn);
 	lockTime(excludeIn, 65536);
 	while((rc_flag = get_ankers(matched_templates, qseq_comp, header, &flag, inputfile)) != 0) {
+		points->len = rc_flag < 0;
 		if(*matched_templates) { // SE
 			read_score = 0;
 		} else { // PE
@@ -900,22 +1082,35 @@ void * alnFrags_threaded(void * arg) {
 			qseq_r->size = delta;
 			free(qseq->seq);
 			free(qseq_r->seq);
-			qseq->seq = malloc(delta);
-			qseq_r->seq = malloc(delta);
-			if(!qseq->seq || !qseq_r->seq) {
-				ERROR();
+			qseq->seq = smalloc(delta);
+			qseq_r->seq = smalloc(delta);
+		}
+		
+		if(points->len && read_score) {
+			if(qseq_fr_comp->size < delta) {
+				free(qseq_fr);
+				free(qseq_rr);
+				qseq_fr = smalloc(delta);
+				qseq_rr = smalloc(delta);
+				dallocComp(qseq_fr_comp, delta);
+				dallocComp(qseq_rr_comp, delta);
 			}
+			rc_comp(qseq_comp, qseq_fr_comp);
+			rc_comp(qseq_r_comp, qseq_rr_comp);
+			unCompDNA(qseq_fr_comp, qseq_fr);
+			unCompDNA(qseq_rr_comp, qseq_rr);
 		}
 		
 		if(kmersize <= qseq->len) {
 			if(read_score && kmersize <= qseq_r->len) { // PE
-				unmapped = alnFragsPE(templates_index, matched_templates, template_lengths, mq, scoreT, minlen, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, header, header_r, kmersize, bestTemplates, bestTemplates_r, alignment_scores, uniq_alignment_scores, best_start_pos, best_end_pos, &flag, &flag_r, &best_read_score, &read_score, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points, NWmatrices, excludeOut, excludeDB);
+				unmapped = alnFragsPE(templates_index, matched_templates, template_lengths, mq, scoreT, minlen, qseq_comp, qseq_r_comp, qseq_fr_comp, qseq_rr_comp, qseq->seq, qseq_r->seq, qseq_fr, qseq_rr, header, header_r, kmersize, bestTemplates, bestTemplates_r, alignment_scores, uniq_alignment_scores, best_start_pos, best_end_pos, &flag, &flag_r, &best_read_score, &read_score, seq_in, seq_indexes, frag_out_raw, points, NWmatrices, excludeOut, excludeDB);
 			} else { // SE
-				unmapped = alnFragsSE(templates_index, matched_templates, template_lengths, mq, scoreT, minlen, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, kmersize, header, bestTemplates, alignment_scores, uniq_alignment_scores, best_start_pos, best_end_pos, &flag, &best_read_score, seq_in, index_in, seq_indexes, index_indexes, frag_out_raw, points, NWmatrices, excludeOut, excludeDB);
+				unmapped = alnFragsSE(templates_index, matched_templates, template_lengths, mq, scoreT, minlen, rc_flag, qseq_comp, qseq_r_comp, qseq->seq, qseq_r->seq, qseq->len, kmersize, header, bestTemplates, alignment_scores, uniq_alignment_scores, best_start_pos, best_end_pos, &flag, &best_read_score, seq_in, seq_indexes, frag_out_raw, points, NWmatrices, excludeOut, excludeDB);
 			}
 		} else {
 			unmapped = 0;
 		}
+		
 		if(sam && unmapped) {
 			if(unmapped & 1) {
 				stats[1] = flag;
@@ -941,6 +1136,11 @@ void * alnFrags_threaded(void * arg) {
 		lock(excludeIn);
 	}
 	unlock(excludeIn);
+	
+	destroyComp(qseq_fr_comp);
+	destroyComp(qseq_rr_comp);
+	free(qseq_fr);
+	free(qseq_rr);
 	
 	return NULL;
 }

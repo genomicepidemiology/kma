@@ -33,7 +33,9 @@ struct kmerAnker {
 };
 #endif
 
+extern KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, int, int*, int*, int*, char*);
 KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include);
+KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include);
 KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize);
 KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties);
 KmerAnker * getTieAnker(int stop, KmerAnker *src, int score);

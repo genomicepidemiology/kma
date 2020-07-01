@@ -23,15 +23,16 @@
 #include "align.h"
 #include "chain.h"
 #include "compdna.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "nw.h"
 #include "stdnuc.h"
 #include "stdstat.h"
 
-AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int q_len, Aln *aligned, Aln *Frag_align, int min, int max, int mq, double scoreT, AlnPoints *points, NWmat *matrices) {
+AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, Aln *aligned, Aln *Frag_align, int min, int max, int mq, double scoreT, AlnPoints *points, NWmat *matrices) {
 	
+	const int bandwidth = 64;
 	int i, j, k, bias, prev, start, stop, t_len, value, end, band, mem_count;
-	int t_l, t_s, t_e, q_s, q_e, score, shifter, kmersize, U, M, **d;
+	int t_l, t_s, t_e, q_s, q_e, score, shifter, kmersize, U, M, *seeds, **d;
 	long unsigned key, mask;
 	unsigned char nuc;
 	AlnScore Stat, NWstat;
@@ -62,11 +63,11 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		mem_count = points->len;
 	} else {
 		mem_count = 0;
-		i = 0;
-		while(i < q_len) {
+		i = q_start;
+		while(i < q_end) {
 			end = charpos(qseq, 4, i, q_len);
 			if(end == -1) {
-				end = q_len;
+				end = q_end;
 			}
 			
 			if(i < end - kmersize) {
@@ -78,7 +79,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 			
 			while(i < end) {
 				key = ((key << 2) | qseq[i]) & mask;
-				value = hashMap_index_get_bound(template_index, key, min, max, shifter);
+				value = hashMapCCI_get_bound(template_index, key, min, max, shifter);
 				
 				if(value == 0) {
 					++i;
@@ -130,15 +131,15 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 					i -= (kmersize - 1);
 					
 					/* get position in hashmap */
-					stop = hashMap_index_getDubPos(template_index, key, value, shifter);
+					seeds = hashMapCCI_getDubPos(template_index, key, value, shifter);
 					
 					/* get all mems */
 					bias = i;
-					while(0 <= stop) {
+					while(seeds) {
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
-						value = abs(template_index->index[stop]);
+						value = abs(*seeds);
 						prev = value - 2;
 						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
 							--prev;
@@ -174,7 +175,8 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 						if(bias < k) {
 							bias = k;
 						}
-						stop = hashMap_index_getNextDubPos(template_index, key, min, max, stop, shifter);
+						
+						seeds = hashMapCCI_getNextDubPos(template_index, seeds, key, min, max, shifter);
 					}
 					i = bias + 1;
 					
@@ -236,17 +238,17 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 		t_e = value;
 		q_s = 0;
 		q_e = i;
-		if((q_e << 1) < t_e || (q_e + 64) < t_e) { // big leading template gap, cut down
-			//t_s = t_e - MIN(64, (q_e << 1));
-			t_s = t_e - (q_e + (q_e < 64 ? q_e : 64));
-		} else if((t_e << 1) < q_e || (t_e + 64) < q_e) { // big leading query gap, cut down
-			//q_s = q_e - MIN(64, (t_e << 1));
-			q_s = q_e - (t_e + (t_e < 64 ? t_e : 64));
+		if((q_e << 1) < t_e || (q_e + bandwidth) < t_e) { // big leading template gap, cut down
+			//t_s = t_e - MIN(bandwidth, (q_e << 1));
+			t_s = t_e - (q_e + (q_e < bandwidth ? q_e : bandwidth));
+		} else if((t_e << 1) < q_e || (t_e + bandwidth) < q_e) { // big leading query gap, cut down
+			//q_s = q_e - MIN(bandwidth, (t_e << 1));
+			q_s = q_e - (t_e + (t_e < bandwidth ? t_e : bandwidth));
 		}
 		
 		/* align */
 		if(t_e - t_s > 0 && q_e - q_s > 0) {
-			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+			band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
 			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
 			} else {
@@ -340,7 +342,7 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 				return Stat;
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
-				band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+				band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
 				if(q_e - q_s <= band || t_l <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
 				} else {
@@ -366,19 +368,19 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	t_s = points->tEnd[start] - 1;
 	q_e = q_len;
 	t_e = t_len;
-	if(((q_len - q_s) << 1) < (t_len - t_s) || (q_len - q_s + 64) < (t_len - t_s)) { // big trailing template gap, cut down
-		//t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+	if(((q_len - q_s) << 1) < (t_len - t_s) || (q_len - q_s + bandwidth) < (t_len - t_s)) { // big trailing template gap, cut down
+		//t_e = t_s + MIN(bandwidth, ((q_len - q_s) << 1));
 		t_e = q_len - q_s;
-		t_e = t_s + (t_e + (t_e < 64 ? t_e : 64));
-	} else if(((t_len - t_s) << 1) < (q_len - q_s) || (t_len - t_s + 64) < (q_len - q_s)) { // big leading query gap, cut down
-		//q_e = q_s + MIN(64, ((t_len - t_s) << 1));
+		t_e = t_s + (t_e + (t_e < bandwidth ? t_e : bandwidth));
+	} else if(((t_len - t_s) << 1) < (q_len - q_s) || (t_len - t_s + bandwidth) < (q_len - q_s)) { // big leading query gap, cut down
+		//q_e = q_s + MIN(bandwidth, ((t_len - t_s) << 1));
 		q_e = t_len - t_s;
-		q_e = q_s + (q_e + (q_e < 64 ? q_e : 64));
+		q_e = q_s + (q_e + (q_e < bandwidth ? q_e : bandwidth));
 	}
 	
 	/* align trailing gap */
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
-		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+		band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
 		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
 			NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices);
 		} else {
@@ -422,11 +424,11 @@ AlnScore KMA(const HashMap_index *template_index, const unsigned char *qseq, int
 	return Stat;
 }
 
-AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qseq, int q_len, const CompDNA *qseq_comp, int mq, double scoreT, AlnPoints *points, NWmat *matrices) {
+AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, const CompDNA *qseq_comp, int mq, double scoreT, AlnPoints *points, NWmat *matrices) {
 	
-	int i, j, k, l, bias, prev, start, stop, t_len, value, end, band;
-	int t_l, t_s, t_e, q_s, q_e, mem_count, score, kmersize;
-	int U, M, **d;
+	const int bandwidth = 64;
+	int i, j, k, l, bias, prev, start, stop, t_len, value, end, band, U, M;
+	int t_l, t_s, t_e, q_s, q_e, mem_count, score, kmersize, *seeds, **d;
 	unsigned mapQ, shifter;
 	long unsigned key;
 	unsigned char nuc;
@@ -443,65 +445,27 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
 	
 	/* find seeds */
-	mem_count = 0;
-	j = 0;
-	for(i = 1; i <= qseq_comp->N[0]; ++i) {
-		end = qseq_comp->N[i] - kmersize + 1;
-		while(j < end) {
-			value = hashMap_index_get(template_index, getKmer(qseq_comp->seq, j, shifter), shifter);
-			
-			if(value == 0) {
-				++j;
-			} else if(0 < value) {
-				/* backseed for ambiguos seeds */
-				prev = value - 2;
-				for(k = j - 1; 0 <= k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
-					--prev;
-				}
-				
-				/* get start positions */
-				points->qStart[mem_count] = k + 1;
-				points->tStart[mem_count] = prev + 2;
-				
-				
-				/* skip k-mer bases */
-				value += (kmersize - 1);
-				j += kmersize;
-				
-				/* extend */
-				end += (kmersize - 1);
-				while(j < end && value < t_len && qseq[j] == getNuc(template_index->seq, value)) {
-					++j;
-					++value;
-				}
-				end -= (kmersize - 1);
-				
-				/* get end positions */
-				points->qEnd[mem_count] = j;
-				points->tEnd[mem_count] = value + 1;
-				
-				/* calculate weight */
-				points->weight[mem_count] = (points->qEnd[mem_count] - points->qStart[mem_count]);
-				++mem_count;
-				
-				/* realloc seeding points */
-				if(mem_count == points->size) {
-					seedPoint_realloc(points, points->size << 1);
-				}
+	if(points->len) {
+		mem_count = points->len;
+	} else {
+		mem_count = 0;
+		j = q_start;
+		for(i = 1; i <= qseq_comp->N[0]; ++i) {
+			if(i != qseq_comp->N[0]) {
+				end = qseq_comp->N[i] - kmersize + 1;
 			} else {
-				/* get position in hashmap */
+				end = q_end - kmersize + 1;
+			}
+			while(j < end) {
 				key = getKmer(qseq_comp->seq, j, shifter);
-				stop = hashMap_index_getDubPos(template_index, key, value, shifter);
+				value = hashMapCCI_get(template_index, key, shifter);
 				
-				/* get all mems */
-				bias = j;
-				while(0 <= stop) {
-					/* get mem info */
-					l = j;
-					/* backseed for overlapping seeds */
-					value = abs(template_index->index[stop]);
+				if(value == 0) {
+					++j;
+				} else if(0 < value) {
+					/* backseed for ambiguos seeds */
 					prev = value - 2;
-					for(k = l - 1; 0 <= k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
+					for(k = j - 1; 0 <= k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
 						--prev;
 					}
 					
@@ -509,20 +473,21 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 					points->qStart[mem_count] = k + 1;
 					points->tStart[mem_count] = prev + 2;
 					
+					
 					/* skip k-mer bases */
 					value += (kmersize - 1);
-					l += kmersize;
+					j += kmersize;
 					
 					/* extend */
 					end += (kmersize - 1);
-					while(l < end && value < t_len && qseq[l] == getNuc(template_index->seq, value)) {
-						++l;
+					while(j < end && value < t_len && qseq[j] == getNuc(template_index->seq, value)) {
+						++j;
 						++value;
 					}
 					end -= (kmersize - 1);
 					
 					/* get end positions */
-					points->qEnd[mem_count] = l;
+					points->qEnd[mem_count] = j;
 					points->tEnd[mem_count] = value + 1;
 					
 					/* calculate weight */
@@ -533,17 +498,62 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 					if(mem_count == points->size) {
 						seedPoint_realloc(points, points->size << 1);
 					}
+				} else {
+					/* get position in hashmap */
+					seeds = hashMapCCI_getDubPos(template_index, key, value, shifter);
 					
-					if(bias < l) {
-						bias = l;
+					/* get all mems */
+					bias = j;
+					while(seeds) {
+						/* get mem info */
+						l = j;
+						/* backseed for overlapping seeds */
+						value = abs(*seeds);
+						prev = value - 2;
+						for(k = l - 1; 0 <= k && 0 <= prev && qseq[k] == getNuc(template_index->seq, prev); --k) {
+							--prev;
+						}
+						
+						/* get start positions */
+						points->qStart[mem_count] = k + 1;
+						points->tStart[mem_count] = prev + 2;
+						
+						/* skip k-mer bases */
+						value += (kmersize - 1);
+						l += kmersize;
+						
+						/* extend */
+						end += (kmersize - 1);
+						while(l < end && value < t_len && qseq[l] == getNuc(template_index->seq, value)) {
+							++l;
+							++value;
+						}
+						end -= (kmersize - 1);
+						
+						/* get end positions */
+						points->qEnd[mem_count] = l;
+						points->tEnd[mem_count] = value + 1;
+						
+						/* calculate weight */
+						points->weight[mem_count] = (points->qEnd[mem_count] - points->qStart[mem_count]);
+						++mem_count;
+						
+						/* realloc seeding points */
+						if(mem_count == points->size) {
+							seedPoint_realloc(points, points->size << 1);
+						}
+						
+						if(bias < l) {
+							bias = l;
+						}
+						
+						seeds = hashMapCCI_getNextDubPos(template_index, seeds, key, 0, t_len, shifter);
 					}
-					
-					stop = hashMap_index_getNextDubPos(template_index, key, 0, t_len, stop, shifter);
+					j = bias + 1;
 				}
-				j = bias + 1;
 			}
+			j = qseq_comp->N[i] + 1;
 		}
-		j = qseq_comp->N[i] + 1;
 	}
 	
 	if(mem_count) {
@@ -586,17 +596,17 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 		t_e = value;
 		q_s = 0;
 		q_e = i;
-		if((q_e << 1) < t_e || (q_e + 64) < t_e) { // big leading template gap, cut down
-			//t_s = t_e - MIN(64, (q_e << 1));
-			t_s = t_e - (q_e + (q_e < 64 ? q_e : 64));
-		} else if((t_e << 1) < q_e || (t_e + 64) < q_e) { // big leading query gap, cut down
-			//q_s = q_e - MIN(64, (t_e << 1));
-			q_s = q_e - (t_e + (t_e < 64 ? t_e : 64));
+		if((q_e << 1) < t_e || (q_e + bandwidth) < t_e) { // big leading template gap, cut down
+			//t_s = t_e - MIN(bandwidth, (q_e << 1));
+			t_s = t_e - (q_e + (q_e < bandwidth ? q_e : bandwidth));
+		} else if((t_e << 1) < q_e || (t_e + bandwidth) < q_e) { // big leading query gap, cut down
+			//q_s = q_e - MIN(bandwidth, (t_e << 1));
+			q_s = q_e - (t_e + (t_e < bandwidth ? t_e : bandwidth));
 		}
 		
 		/* align */
 		if(t_e - t_s > 0 && q_e - q_s > 0) {
-			band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+			band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
 			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
 			} else {
@@ -661,7 +671,7 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 				return Stat;
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
-				band = 4 * abs(t_l - q_e + q_s) + 64;
+				band = 4 * abs(t_l - q_e + q_s) + bandwidth;
 				if(q_e - q_s <= band || t_l <= band) {
 					NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, matrices, t_len);
 				} else {
@@ -682,19 +692,19 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	t_s = points->tEnd[start] - 1;
 	q_e = q_len;
 	t_e = t_len;
-	if((t_len - t_s) > (q_len - q_s + 64) || (t_len - t_s) > ((q_len - q_s) << 1)) { // big trailing template gap, cut down
-		//t_e = t_s + MIN(64, ((q_len - q_s) << 1));
+	if((t_len - t_s) > (q_len - q_s + bandwidth) || (t_len - t_s) > ((q_len - q_s) << 1)) { // big trailing template gap, cut down
+		//t_e = t_s + MIN(bandwidth, ((q_len - q_s) << 1));
 		t_e = q_len - q_s;
-		t_e = t_s + (t_e + (t_e < 64 ? t_e : 64));
-	} else if ((q_len - q_s) > (t_len - t_s + 64) || (q_len - q_s) > ((t_len - t_s) << 1)) { // big leading query gap, cut down
-		//q_e = q_s + MIN(64, ((t_len - t_s) << 1));
+		t_e = t_s + (t_e + (t_e < bandwidth ? t_e : bandwidth));
+	} else if ((q_len - q_s) > (t_len - t_s + bandwidth) || (q_len - q_s) > ((t_len - t_s) << 1)) { // big leading query gap, cut down
+		//q_e = q_s + MIN(bandwidth, ((t_len - t_s) << 1));
 		q_e = t_len - t_s;
-		q_e = q_s + (q_e + (q_e < 64 ? q_e : 64));
+		q_e = q_s + (q_e + (q_e < bandwidth ? q_e : bandwidth));
 	}
 	
 	/* align trailing gap */
 	if(t_e - t_s > 0 && q_e - q_s > 0) {
-		band = 4 * abs(t_e - t_s - q_e + q_s) + 64;
+		band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
 		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
 			NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, matrices, t_len);
 		} else {
@@ -709,10 +719,10 @@ AlnScore KMA_score(const HashMap_index *template_index, const unsigned char *qse
 	return Stat;
 }
 
-int preseed(const HashMap_index *template_index, unsigned char *qseq, int q_len) {
+int preseed(const HashMapCCI *template_index, unsigned char *qseq, int q_len) {
 	
 	static int exhaustive = 1;
-	int i, shifter, kmersize;
+	int i, shifter, kmersize, len;
 	
 	if(exhaustive) {
 		exhaustive = q_len;
@@ -720,9 +730,10 @@ int preseed(const HashMap_index *template_index, unsigned char *qseq, int q_len)
 	}
 	
 	kmersize = template_index->kmerindex;
+	len = template_index->len;
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
 	for(i = 0; i < q_len; i += kmersize) {
-		if(hashMap_index_get_bound(template_index, makeKmer(qseq, i, kmersize), 0, template_index->len, shifter) != 0) {
+		if(hashMapCCI_get_bound(template_index, makeKmer(qseq, i, kmersize), 0, len, shifter)) {
 			return 0;
 		}
 	}
@@ -732,16 +743,23 @@ int preseed(const HashMap_index *template_index, unsigned char *qseq, int q_len)
 
 void intcpy(int *dest, int *src, int size) {
 	
-	while(size--) {
-		*dest++ = *src++;
+	*dest = *src;
+	while(--size) {
+		*++dest = *++src;
 	}
 }
 
-int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len, AlnPoints *points) {
+int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, int q_start, int q_end, AlnPoints *points) {
 	
-	int i, j, k, rc, end, stop, score, score_r, value, t_len, prev, bias;
-	int bestScore, mem_count, totMems, shifter, kmersize;
+	static int one2one = 0;
+	int i, j, k, rc, end, score, score_r, value, t_len, prev, bias;
+	int bestScore, mem_count, totMems, shifter, kmersize, *seeds;
 	long unsigned key, mask;
+	
+	if(!template_index) {
+		one2one = q_len;
+		return 0;
+	}
 	
 	t_len = template_index->len;
 	kmersize = template_index->kmerindex;
@@ -762,14 +780,21 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 			strrc(qseq, q_len);
 			score = score_r;
 			points->len = mem_count;
+			i = q_len - q_start;
+			q_start = q_len - q_end;
+			q_end = i;
 		}
 		score_r = 0;
 		mem_count = 0;
-		i = preseed(template_index, qseq, q_len);
-		while(i < q_len) {
+		if(q_start) {
+			i = q_start;
+		} else {
+			i = preseed(template_index, qseq, q_end - q_start);
+		}
+		while(i < q_end) {
 			end = charpos(qseq, 4, i, q_len);
 			if(end == -1) {
-				end = q_len;
+				end = q_end;
 			}
 			
 			if(i < end - kmersize) {
@@ -781,7 +806,7 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 			
 			while(i < end) {
 				key = ((key << 2) | qseq[i]) & mask;
-				value = hashMap_index_get_bound(template_index, key, 0, t_len, shifter);
+				value = hashMapCCI_get(template_index, key, shifter);
 				
 				if(value == 0) {
 					++i;
@@ -838,15 +863,15 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 					score_r += kmersize;
 					
 					/* get position in hashmap */
-					stop = hashMap_index_getDubPos(template_index, key, value, shifter);
+					seeds = hashMapCCI_getDubPos(template_index, key, value, shifter);
 					
 					/* get all mems */
 					bias = i;
-					while(0 <= stop) {
+					while(seeds) {
 						/* get mem info */
 						k = i;
 						/* backseed for overlapping seeds */
-						value = abs(template_index->index[stop]);
+						value = abs(*seeds);
 						prev = value - 2;
 						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
 							--prev;
@@ -884,7 +909,7 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 							bias = k;
 						}
 						
-						stop = hashMap_index_getNextDubPos(template_index, key, 0, t_len, stop, shifter);
+						seeds = hashMapCCI_getNextDubPos(template_index, seeds, key, 0, t_len, shifter);
 					}
 					/* add best anker score */
 					score_r += (bias - i);
@@ -907,7 +932,7 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 		}
 	}
 	
-	if(bestScore * kmersize < (q_len - kmersize - bestScore)) {
+	if(one2one && bestScore * kmersize < (q_len - kmersize - bestScore)) {
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {
@@ -922,6 +947,182 @@ int anker_rc(const HashMap_index *template_index, unsigned char *qseq, int q_len
 			intcpy(points->weight, points->weight + points->len, mem_count);
 		}
 		points->len = mem_count;
+	}
+	
+	return bestScore;
+}
+
+int anker_rc_comp(const HashMapCCI *template_index, unsigned char *qseq, unsigned char *qseq_r, CompDNA *qseq_comp, CompDNA *qseq_r_comp, int q_start, int q_end, AlnPoints *points) {
+	
+	static int one2one = 0;
+	int i, j, k, rc, end, score, score_r, value, t_len, q_len, prev;
+	int bestScore, mem_count, totMems, shifter, kmersize, bias, *Ns, *seeds;
+	long unsigned key, mask, *seq;
+	
+	if(!template_index) {
+		one2one = *((int *)(qseq_r));
+		return 0;
+	}
+	
+	q_len = qseq_comp->seqlen;
+	t_len = template_index->len;
+	kmersize = template_index->kmerindex;
+	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
+	mask = 0;
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	key = 0;
+	
+	/* find seeds */
+	bestScore = 0;
+	score = 0;
+	score_r = 0;
+	mem_count = 0;
+	totMems = 0;
+	points->len = 0;
+	seq = qseq_comp->seq;
+	Ns = qseq_comp->N;
+	Ns[*Ns] = q_len;
+	for(rc = 0; rc < 2; ++rc) {
+		if(rc) {
+			qseq = qseq_r;
+			seq = qseq_r_comp->seq;
+			score = score_r;
+			points->len = mem_count;
+			Ns = qseq_r_comp->N;
+			Ns[*Ns] = q_len;
+		}
+		score_r = 0;
+		mem_count = 0;
+		i = 0;
+		while(i < q_len) {
+			end = *++Ns - kmersize + 1;
+			while(i < end) {
+				key = getKmer(seq, i, shifter);
+				value = hashMapCCI_get(template_index, key, shifter);
+				
+				if(value == 0) {
+					++i;
+				} else if(0 < value) {
+					/* backseed for ambiguos seeds */
+					prev = value - 2;
+					for(j = i - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
+						--prev;
+						++score_r;
+					}
+					
+					/* get start positions */
+					points->qStart[totMems] = j + 1;
+					points->tStart[totMems] = prev + 2;
+					
+					/* skip k-mer bases */
+					value += (kmersize - 1);
+					i += kmersize;
+					score_r += kmersize;
+					
+					/* extend */
+					while(i < end && value < t_len && qseq[i] == getNuc(template_index->seq, value)) {
+						++i;
+						++value;
+						++score_r;
+					}
+					
+					/* get end positions */
+					points->qEnd[totMems] = i;
+					points->tEnd[totMems] = value + 1;
+					
+					/* calculate weight */
+					points->weight[totMems] = (points->tEnd[totMems] - points->tStart[totMems]);
+					++mem_count;
+					++totMems;
+					
+					/* realloc seeding points */
+					if(totMems == points->size) {
+						seedPoint_realloc(points, points->size << 1);
+					}
+					
+					/* update position */
+					++i;
+				} else {
+					score_r += kmersize;
+					
+					/* get position in hashmap */
+					seeds = hashMapCCI_getDubPos(template_index, key, value, shifter);
+					
+					/* get all mems */
+					bias = i;
+					while(seeds) {
+						/* get mem info */
+						k = i;
+						/* backseed for overlapping seeds */
+						value = abs(*seeds);
+						prev = value - 2;
+						for(j = k - 1; 0 <= j && 0 <= prev && qseq[j] == getNuc(template_index->seq, prev); --j) {
+							--prev;
+						}
+						
+						/* get start positions */
+						points->qStart[totMems] = j + 1;
+						points->tStart[totMems] = prev + 2;
+						
+						/* skip k-mer bases */
+						value += (kmersize - 1);
+						k += kmersize;
+						
+						/* extend */
+						while(k < end && value < t_len && qseq[k] == getNuc(template_index->seq, value)) {
+							++k;
+							++value;
+						}
+						
+						/* get end positions */
+						points->qEnd[totMems] = k;
+						points->tEnd[totMems] = value + 1;
+						
+						/* calculate weight */
+						points->weight[totMems] = (points->qEnd[totMems] - points->qStart[totMems]);
+						++mem_count;
+						++totMems;
+						
+						/* realloc seeding points */
+						if(totMems == points->size) {
+							seedPoint_realloc(points, points->size << 1);
+						}
+						
+						if(bias < k) {
+							bias = k;
+						}
+						
+						seeds = hashMapCCI_getNextDubPos(template_index, seeds, key, 0, t_len, shifter);
+					}
+					/* add best anker score */
+					score_r += (bias - i);
+					i = bias + 1;
+				}
+			}
+			i = end + kmersize;
+		}
+		
+		if(bestScore < score_r) {
+			bestScore = score_r;
+		}
+	}
+	
+	if(one2one && bestScore * kmersize < (q_len - kmersize - bestScore)) {
+		bestScore = 0;
+		points->len = 0;
+	} else if(bestScore == score) {
+		return bestScore;
+	} else {
+		/* move mems down */
+		if(points->len) {
+			intcpy(points->tStart, points->tStart + points->len, mem_count);
+			intcpy(points->tEnd, points->tEnd + points->len, mem_count);
+			intcpy(points->qStart, points->qStart + points->len, mem_count);
+			intcpy(points->qEnd, points->qEnd + points->len, mem_count);
+			intcpy(points->weight, points->weight + points->len, mem_count);
+		}
+		points->len = mem_count;
+		return -bestScore;
 	}
 	
 	return bestScore;

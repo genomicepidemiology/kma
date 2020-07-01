@@ -22,11 +22,13 @@
 #include "kmeranker.h"
 #include "penalties.h"
 
+KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, int, int*, int*, int*, char*) = &getBestChainTemplates;
+
 KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include) {
 	
 	/* get set of best templates and silences the chain, except for the initial anker */
-	int i, j, template, score, tmpScore, bestScore, Wl, W1, U, M, MM, gaps;
-	int start, end, pos, SU, nextAnker;
+	int i, j, template, score, tmpScore, bestScore, Wl, W1, U, M, MM, Ms, MMs;
+	int gaps, start, end, pos, SU, nextAnker;
 	unsigned *values;
 	short unsigned *values_s;
 	KmerAnker *node, *prev;
@@ -78,9 +80,9 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 			i = *values + 1;
 			values += i;
 		}
-		
 		start = node->start;
 		end = node->end;
+		
 		while(--i) {
 			template = SU ? *--values_s : *--values;
 			if(include[template]) {
@@ -105,15 +107,18 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 					} else if((MM * 2 + (gaps - 2) * M) < 0) {
 						score += node->weight + (MM * 2 + (gaps - 2) * M);
 					} else {
-						score += node->weight - gaps * M;
+						MMs = gaps / kmersize + ((gaps % kmersize) ? 1 : 0);
+						MMs = 2 < MMs ? MMs : 2;
+						gaps -= MMs;
+						Ms = gaps < kmersize ? gaps : kmersize;
+						score += node->weight + Ms * M + MMs * MM;
 					}
 					/* mark as used */
 					node->score = 0;
 				}
+				
 				/* verify extension */
-				if(score < 0) {
-					include[template] = 0;
-				} else if(bestScore <= score) {
+				if(bestScore <= score) {
 					/* test if anker is finalising the chain */
 					if(node->start) {
 						tmpScore = W1 + (node->start - 1) * U;
@@ -150,6 +155,126 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int 
 	return prev;
 }
 
+KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include) {
+	
+	/* get set of best templates and silences the chain, except for the initial anker */
+	static double minFrac = 0.0;
+	int i, j, template, score, tmpScore, bestScore, Wl, W1, U, M, MM, Ms, MMs;
+	int gaps, start, end, pos, SU, nextAnker, proxiScore;
+	unsigned *values;
+	short unsigned *values_s;
+	KmerAnker *node, *prev;
+	
+	/* mark template candidates */
+	if(!src) {
+		if(rewards) {
+			minFrac = *((double *) rewards);
+		}
+		return 0;
+	}
+	
+	SU = *include;
+	*bests = 0;
+	M = rewards->M;
+	MM = rewards->MM;
+	U = rewards->U;
+	W1 = rewards->W1;
+	Wl = rewards->Wl;
+	bestScore = src->score;
+	proxiScore = minFrac * bestScore;
+	values_s = 0;
+	values = 0;
+	nextAnker = 1;
+	prev = src;
+	
+	/* get chaining scores */
+	for(node = src; nextAnker; --node) {
+		if(SU) {
+			values_s = (short unsigned *) node->values;
+			i = *values_s + 1;
+			values_s += i;
+		} else {
+			values = node->values;
+			i = *values + 1;
+			values += i;
+		}
+		start = node->start;
+		end = node->end;
+		
+		while(--i) {
+			template = SU ? *--values_s : *--values;
+			if(!include[template]) {
+				score = Score[template];
+				pos = extendScore[template];
+				gaps = pos - end;
+				
+				/* extend chain */
+				if(pos == 0) {
+					/* new template */
+					score = node->weight;
+					bests[++*bests] = template;
+				} else {
+					if(gaps < 0) {
+						if(gaps == -kmersize) {
+							score += node->weight - (kmersize - 1) * M;
+						} else {
+							score += (W1 + (-gaps - 1) * U) + node->weight + gaps * M;
+						}
+					} else if(gaps == 0) {
+						score += node->weight + W1;
+					} else if(gaps <= 2) {
+						score += node->weight + gaps * MM;
+					} else if((MM * 2 + (gaps - 2) * M) < 0) {
+						score += node->weight + (MM * 2 + (gaps - 2) * M);
+					} else {
+						MMs = gaps / kmersize + ((gaps % kmersize) ? 1 : 0);
+						MMs = 2 < MMs ? MMs : 2;
+						gaps -= MMs;
+						Ms = gaps < kmersize ? gaps : kmersize;
+						score += node->weight + Ms * M + MMs * MM;
+					}
+					/* mark as used */
+					node->score = 0;
+				}
+				
+				/* verify extension */
+				if(bestScore <= score) {
+					/* test if anker is finalising the chain */
+					if(node->start) {
+						tmpScore = W1 + (node->start - 1) * U;
+						tmpScore = score + (Wl < tmpScore ? tmpScore : Wl);
+					} else {
+						tmpScore = score;
+					}
+					if(tmpScore == bestScore) {
+						score = bestScore;
+						nextAnker = 0;
+						prev = node;
+					}
+				}
+				extendScore[template] = start;
+				Score[template] = score;
+			}
+		}
+	}
+	
+	/* get best templates */
+	j = 0;
+	for(i = 1; i <= *bests; ++i) {
+		if(proxiScore <= Score[(template = bests[i])]) {
+			bests[++j] = template;
+		}
+		
+		/* clear Score arrays */
+		Score[template] = 0;
+		extendScore[template] = 0;
+		include[template] = 0;
+	}
+	*bests = j;
+	
+	return prev;
+}
+
 KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize) {
 	
 	KmerAnker *node, *prev;
@@ -162,6 +287,7 @@ KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize) {
 	if(!V_score) {
 		return 0;
 	}
+	
 	prev = V_score;
 	node = V_score->descend;
 	while(node) {
@@ -186,26 +312,27 @@ KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties) {
 		prev = prev->descend;
 	}
 	*src = prev;
-	if(!(best = prev)) {
+	if(!prev) {
 		return 0;
 	}
+	best = prev;
 	node = prev->descend;
 	while(node) {
-		if(best->score < node->score) {
-			best = node;
-			*ties = 0;
-		} else if(best->score == node->score) {
-			best = node;
-			++*ties;
-		}
-		if(node->score != 0) {
+		if(node->score) {
+			if(best->score < node->score) {
+				best = node;
+				*ties = 0;
+			} else if(best->score == node->score) {
+				best = node;
+				++*ties;
+			}
 			prev->descend = node;
 			prev = node;
 		}
 		node = node->descend;
 	}
 	prev->descend = 0;
-	
+			
 	return best;
 }
 

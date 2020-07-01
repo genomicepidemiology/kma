@@ -284,47 +284,6 @@ void length_destroySHM(FILE *file, const char *filename) {
 	
 }
 
-int * index_setupSHM(FILE *file, const char *filename) {
-	
-	int shmid, *index;
-	long unsigned size;
-	key_t key;
-	
-	/* load size */
-	fseek(file, 0, SEEK_END);
-	size = ftell(file) - sizeof(int);
-	fseek(file, sizeof(int), SEEK_SET);
-	
-	key = ftok(filename, 'i');
-	shmid = shmget(key, size, IPC_CREAT | 0666);
-	if(shmid < 0) {
-		fprintf(stderr, "Could not setup the shared length\n");
-		index = 0;
-	} else {
-		index = shmat(shmid, NULL, 0);
-		fread(index, sizeof(int), size / sizeof(int), file);
-	}
-	
-	return index;
-}
-
-void index_destroySHM(FILE *file, const char *filename) {
-	
-	int shmid;
-	long unsigned size;
-	key_t key;
-	
-	/* load size */
-	fseek(file, 0, SEEK_END);
-	size = ftell(file) - sizeof(int);
-	
-	key = ftok(filename, 'i');
-	shmid = shmget(key, size, 0666);
-	if(shmid >= 0) {
-		shmctl(shmid, IPC_RMID, NULL);
-	}
-}
-
 long unsigned * seq_setupSHM(FILE *file, const char *filename) {
 	
 	int shmid;
@@ -435,7 +394,7 @@ static void helpMessage(int exeStatus) {
 
 int shm_main(int argc, char *argv[]) {
 	
-	int args, file_len, destroy, status, *template_lengths, *index;
+	int args, file_len, destroy, status, *template_lengths;
 	unsigned shmLvl;
 	long unsigned *seq;
 	char *templatefilename, *template_names;
@@ -490,7 +449,7 @@ int shm_main(int argc, char *argv[]) {
 			fprintf(stderr, "#\t*.comp.b\t\t1\n");
 			fprintf(stderr, "#\t*.decon.comp.b\t\t2\n");
 			fprintf(stderr, "#\t*.length.b\t\t4\n");
-			fprintf(stderr, "#\t*.seq.b *.index.b\t8\n");
+			fprintf(stderr, "#\t*.seq.b\t\t\t8\n");
 			fprintf(stderr, "#\t*.name\t\t\t16\n");
 			//fprintf(stderr, "#\tall\t\t\t31\n");
 			exit(0);
@@ -558,7 +517,7 @@ int shm_main(int argc, char *argv[]) {
 			templatefilename[file_len] = 0;
 		}
 		
-		/* *.seq.b *.index.b */
+		/* *.seq.b */
 		if(shmLvl & 8) {
 			/* *.seq.b */
 			strcat(templatefilename, ".seq.b");
@@ -568,18 +527,6 @@ int shm_main(int argc, char *argv[]) {
 				status |= errno;
 			} else {
 				seq_destroySHM(file, templatefilename);
-				fclose(file);
-			}
-			templatefilename[file_len] = 0;
-			
-			/* *.index.b */
-			strcat(templatefilename, ".index.b");
-			file = fopen(templatefilename, "rb");
-			if(!file) {
-				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-				status |= errno;
-			} else {
-				index_destroySHM(file, templatefilename);
 				fclose(file);
 			}
 			templatefilename[file_len] = 0;
@@ -648,7 +595,7 @@ int shm_main(int argc, char *argv[]) {
 			templatefilename[file_len] = 0;
 		}
 		
-		/* *.seq.b *.index.b */
+		/* *.seq.b*/
 		if(shmLvl & 8) {
 			/* *.seq.b */
 			strcat(templatefilename, ".seq.b");
@@ -660,23 +607,6 @@ int shm_main(int argc, char *argv[]) {
 				seq = seq_setupSHM(file, templatefilename);
 				if(seq) {
 					shmdt(seq);
-				} else {
-					status |= 1;
-				}
-				fclose(file);
-			}
-			templatefilename[file_len] = 0;
-			
-			/* *.index.b */
-			strcat(templatefilename, ".index.b");
-			file = fopen(templatefilename, "rb");
-			if(!file) {
-				fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
-				status |= errno;
-			} else {
-				index = index_setupSHM(file, templatefilename);
-				if(index) {
-					shmdt(index);
 				} else {
 					status |= 1;
 				}

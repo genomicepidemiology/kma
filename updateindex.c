@@ -21,15 +21,14 @@
 #include <stdlib.h>
 #include "compdna.h"
 #include "hashmap.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "pherror.h"
 #include "qualcheck.h"
 #include "stdnuc.h"
 #include "updateindex.h"
 
-int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *);
-void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, FILE *, unsigned **, unsigned **, unsigned **);
-void (*dumpIndex)(CompDNA *, int, FILE *, FILE *);
+int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *) = &updateDBs;
+void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, unsigned **, unsigned **, unsigned **) = &updateAnnots;
 
 int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths) {
 	
@@ -121,10 +120,10 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 	return 0;
 }
 
-void updateAnnots(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, FILE *index_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
+void updateAnnots(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
 	
 	/* Dump annots */
-	dumpIndex(qseq, kmerindex, seq_out, index_out);
+	cfwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
 	
 	(*template_lengths)[DB_size] = qseq->seqlen;
 	if((DB_size + 1) >= **template_lengths) {
@@ -136,10 +135,10 @@ void updateAnnots(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, FILE
 	}
 }
 
-void updateAnnots_sparse(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, FILE *index_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
+void updateAnnots_sparse(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
 	
 	/* Dump annots */
-	dumpIndex(qseq, kmerindex, seq_out, index_out);
+	cfwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
 	
 	(*template_lengths)[DB_size] = qseq->seqlen;
 	if((DB_size + 1) >= **template_ulengths) {
@@ -151,45 +150,4 @@ void updateAnnots_sparse(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_ou
 			ERROR();
 		}
 	}
-}
-
-void dumpSeq(CompDNA *qseq, int kmerindex, FILE *seq_out, FILE *index_out) {
-	cfwrite(qseq->seq, sizeof(long unsigned), (qseq->seqlen >> 5) + 1, seq_out);
-}
-
-void makeIndexing(CompDNA *compressor, int kmerindex, FILE *seq_out, FILE *index_out) {
-	
-	int i, j, end, shifter;
-	HashMap_index *template_index;
-	
-	/* allocate index */
-	template_index = smalloc(sizeof(HashMap_index));
-	template_index->len = compressor->seqlen;
-	template_index->size = compressor->seqlen << 1;
-	template_index->kmerindex = kmerindex;
-	template_index->index = calloc(template_index->size, sizeof(int));
-	if(!template_index->index) {
-		ERROR();
-	}
-	
-	/* load index */
-	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmerindex << 1);
-	template_index->seq = compressor->seq;
-	compressor->N[0]++;
-	compressor->N[compressor->N[0]] = compressor->seqlen + 1;
-	j = 0;
-	for(i = 1; i <= compressor->N[0]; ++i) {
-		end = compressor->N[i] - kmerindex;
-		for(;j < end; ++j) {
-			hashMapIndex_add(template_index, getKmer(compressor->seq, j, shifter), j);
-		}
-		j = compressor->N[i] + 1;
-	}
-	compressor->N[0]--;
-	
-	/* dump index */
-	hashMap_index_dump(template_index, seq_out, index_out);
-	
-	free(template_index->index);
-	free(template_index);
 }

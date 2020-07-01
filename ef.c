@@ -23,6 +23,7 @@
 #include "assembly.h"
 #include "ef.h"
 #include "stdnuc.h"
+#include "threader.h"
 #include "vcf.h"
 #include "version.h"
 
@@ -44,60 +45,90 @@ void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, 
 	fprintf(out, "# refSequence\treadCount\tfragmentCount\tmapScoreSum\trefCoveredPositions\trefConsensusSum\tbpTotal\tdepthVariance\tnucHighDepthVariance\tdepthMax\tsnpSum\tinsertSum\tdeletionSum\treadCountAln\tfragmentCountAln\n");
 }
 
-void getExtendedFeatures(char *template_name, AssemInfo *matrix, long unsigned *template_seq, int t_len, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, unsigned fragmentCountAln, unsigned readCountAln, FILE *outfile) {
+void getExtendedFeatures(Assem *aligned_assem, AssemInfo *matrix, long unsigned *seq, int t_len, int thread_num) {
 	
-	unsigned pos, depthUpdate, maxDepth, nucHighVarSum;
+	static volatile int excludeMatrix[1] = {0}, next, thread_wait = 0;
+	unsigned pos, end, asm_len, chunk, nucHighVar, maxDepth, depthUpdate;
 	long unsigned snpSum, insertSum, deletionSum;
-	long double var, nucHighVar;
+	double highVar;
 	Assembly *assembly;
 	
-	fragmentCountAln = (((readCountAln >> 1) + (readCountAln & 1)) <= fragmentCountAln) ? (fragmentCountAln) : ((readCountAln >> 1) + (readCountAln & 1));
-	if(matrix) {
-		/* iterate matrix to get:
-			Nuc_high_depth_variance
-			Depth_max
-			Snp_sum
-			Inserts_sum
-			Deletions_sum
-		*/
-		nucHighVar = aligned_assem->depth;
-		nucHighVar /= t_len;
-		var = aligned_assem->depthVar;
-		var /= t_len;
-		var -= (nucHighVar * nucHighVar);
-		nucHighVar += (3 * sqrt(var));
+	/* init */
+	asm_len = matrix->len;
+	assembly = matrix->assmb;
+	maxDepth = 0;
+	nucHighVar = 0;
+	snpSum = 0;
+	insertSum = 0;
+	deletionSum = 0;
+	highVar = (long double)(aligned_assem->depth) / t_len + 3 * sqrt(aligned_assem->var);
+	chunk = 8112;
+	lock(excludeMatrix);
+	if(!thread_wait) {
+		next = 0;
+		thread_wait = thread_num;
+		aligned_assem->fragmentCountAln = (((aligned_assem->readCountAln >> 1) + (aligned_assem->readCountAln & 1)) <= aligned_assem->fragmentCountAln) ? (aligned_assem->fragmentCountAln) : ((aligned_assem->readCountAln >> 1) + (aligned_assem->readCountAln & 1));
+	}
+	unlock(excludeMatrix);
+	
+	/* get nucHighVar */
+	while(chunk) {
+		lock(excludeMatrix);
+		pos = next;
+		if((next += chunk) < 0) {
+			next = asm_len;
+		}
+		unlock(excludeMatrix);
 		
-		nucHighVarSum = 0;
-		maxDepth = 0;
-		snpSum = 0;
-		insertSum = 0;
-		deletionSum = 0;
-		
-		assembly = matrix->assmb;
-		pos = 0;
-		do {
-			depthUpdate = assembly[pos].counts[0] + assembly[pos].counts[1] + assembly[pos].counts[2] + assembly[pos].counts[3] + assembly[pos].counts[4];
-			
-			if(pos < t_len) {
-				deletionSum += assembly[pos].counts[5];
-				snpSum += (depthUpdate - assembly[pos].counts[getNuc(template_seq, pos)]);
-			} else {
-				insertSum += depthUpdate;
+		/* call chunk */
+		if(pos < asm_len) {
+			end = pos + chunk;
+			if(asm_len < end) {
+				end = asm_len;
+				chunk = 0;
 			}
-			
-			depthUpdate += assembly[pos].counts[5];
-			
-			if(maxDepth < depthUpdate) {
-				maxDepth = depthUpdate;
+			while(pos < end) {
+				depthUpdate = assembly[pos].counts[0] + assembly[pos].counts[1] + assembly[pos].counts[2] + assembly[pos].counts[3] + assembly[pos].counts[4];
+				
+				if(pos < t_len) {
+					deletionSum += assembly[pos].counts[5];
+					snpSum += (depthUpdate - assembly[pos].counts[getNuc(seq, pos)]);
+				} else {
+					insertSum += depthUpdate;
+				}
+				
+				depthUpdate += assembly[pos].counts[5];
+				
+				if(maxDepth < depthUpdate) {
+					maxDepth = depthUpdate;
+				}
+				if(highVar < depthUpdate) {
+					++nucHighVar;
+				}
+				++pos;
 			}
-			if(nucHighVar < depthUpdate) {
-				++nucHighVarSum;
-			}
-		} while((pos = assembly[pos].next) != 0);
-		
-		fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\t%u\t%u\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, (double) var, nucHighVarSum, maxDepth, snpSum, insertSum, deletionSum, readCountAln, fragmentCountAln);
-	} else if(aligned_assem) {
-		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%lu\t%f\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n", template_name, readCount, fragmentCount, 0, 0, 0, aligned_assem->depth, 0.0, 0, 0, 0, 0, 0, readCountAln, fragmentCountAln);
+		} else {
+			chunk = 0;
+		}
+	}
+	
+	lock(excludeMatrix);
+	aligned_assem->nucHighVar += nucHighVar;
+	if(aligned_assem->maxDepth < maxDepth) {
+		aligned_assem->maxDepth = maxDepth;
+	}
+	aligned_assem->snpSum += snpSum;
+	aligned_assem->insertSum += insertSum;
+	aligned_assem->deletionSum += deletionSum;
+	--thread_wait;
+	unlock(excludeMatrix);
+	wait_atomic(thread_wait);
+}
+
+void printExtendedFeatures(char *template_name, Assem *aligned_assem, unsigned fragmentCount, unsigned readCount, FILE *outfile) {
+	
+	if(aligned_assem) {
+		fprintf(outfile, "%s\t%u\t%u\t%lu\t%u\t%u\t%lu\t%f\t%u\t%u\t%lu\t%lu\t%lu\t%u\t%u\n", template_name, readCount, fragmentCount, aligned_assem->score, aligned_assem->aln_len, aligned_assem->cover, aligned_assem->depth, aligned_assem->var, aligned_assem->nucHighVar, aligned_assem->maxDepth, aligned_assem->snpSum, aligned_assem->insertSum, aligned_assem->deletionSum, aligned_assem->readCountAln, aligned_assem->fragmentCountAln);
 	} else {
 		fprintf(outfile, "%s\t%u\t%u\t%u\t%u\t%u\t%u\t%f\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n", template_name, 0, 0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0);
 	}

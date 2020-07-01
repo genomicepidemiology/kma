@@ -33,6 +33,8 @@ struct compDNA {
 
 void allocComp(CompDNA *compressor, int size);
 void freeComp(CompDNA *compressor);
+CompDNA * setComp(unsigned size);
+void destroyComp(CompDNA *src);
 void resetComp(CompDNA *compressor);
 void compDNA(CompDNA *compressor, unsigned char *seq, int seqlen);
 int compDNAref(CompDNA *compressor, unsigned char *qseq, int seqlen);
@@ -44,3 +46,4 @@ void comp_rc(CompDNA *compressor);
 void dumpComp(CompDNA *compressor, FILE* file);
 int loadComp(CompDNA *compressor, FILE* file);
 int getComp(CompDNA *compressor, FILE* file);
+void dallocComp(CompDNA *compressor, unsigned size);

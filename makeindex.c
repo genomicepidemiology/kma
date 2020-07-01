@@ -46,7 +46,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 	int fileCounter, file_len, bias, FASTQ;
 	char *filename;
 	unsigned char *seq;
-	FILE *index_out, *seq_out, *length_out, *name_out;
+	FILE *seq_out, *length_out, *name_out;
 	Qseqs *header, *qseq;
 	FileBuff *inputfile;
 	CompDNA *compressor;
@@ -81,20 +81,6 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 		seq_out = sfopen(outputfilename, "wb");
 		outputfilename[file_len] = 0;
 	}
-	if(dumpIndex == &makeIndexing) {
-		if(appender) {
-			strcat(outputfilename, ".index.b");
-			index_out = sfopen(outputfilename, "ab");
-			outputfilename[file_len] = 0;
-		} else {
-			strcat(outputfilename, ".index.b");
-			index_out = sfopen(outputfilename, "wb");
-			outputfilename[file_len] = 0;
-			cfwrite(&kmerindex, sizeof(int), 1, index_out);
-		}
-	} else {
-		index_out = 0;
-	}
 	
 	fprintf(stderr, "# Updating DBs\n");
 	/* iterate inputfiles */
@@ -124,7 +110,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 					} else {
 						fprintf(name_out, "%s\n", header->seq + 1);
 					}
-					updateAnnotsPtr(compressor, templates->DB_size, kmerindex, seq_out, index_out, template_lengths, template_ulengths, template_slengths);
+					updateAnnotsPtr(compressor, templates->DB_size, kmerindex, seq_out, template_lengths, template_ulengths, template_slengths);
 					
 					fprintf(stderr, "# Added:\t%s\n", header->seq + 1);
 					
@@ -160,9 +146,6 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 	} else {
 		**template_lengths = kmerindex;
 		cfwrite(*template_lengths, sizeof(unsigned), templates->DB_size, length_out);
-	}
-	if(index_out) {
-		fclose(index_out);
 	}
 	fclose(seq_out);
 	fclose(length_out);

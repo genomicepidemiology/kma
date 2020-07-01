@@ -26,7 +26,7 @@
 #include "chain.h"
 #include "compdna.h"
 #include "filebuff.h"
-#include "hashmapindex.h"
+#include "hashmapcci.h"
 #include "kmapipe.h"
 #include "mt1.h"
 #include "nw.h"
@@ -38,6 +38,7 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 #include "vcf.h"
+#include "xml.h"
 
 void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	
@@ -79,7 +80,7 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r
 	
 }
 
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int sam, int nc, int nf, int thread_num) {
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
 	
 	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta;
 	int *template_lengths;
@@ -87,7 +88,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	double p_value, id, q_id, cover, q_cover;
 	long double depth;
 	FILE *res_out, *alignment_out, *consensus_out, *template_fragments;
-	FILE *DB_file;
+	FILE *DB_file, *xml_out;
 	time_t t0, t1;
 	FileBuff *frag_out, *matrix_out, *vcf_out;
 	Aln *aligned, *gap_align;
@@ -97,7 +98,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	AlnPoints *points;
 	NWmat *NWmatrices;
 	Assemble_thread *threads, *thread;
-	HashMap_index *template_index;
+	HashMapCCI *template_index;
 	
 	/* open pipe */
 	//template_fragments = popen(exePrev, "r");
@@ -154,9 +155,20 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		} else {
 			vcf_out = 0;
 		}
+		if(xml) {
+			if(xml == 2) {
+				xml_out = openInitXML("--", templatefilename, 1, 1, &exePrev);
+			} else {
+				strcat(outputfilename, ".xml");
+				xml_out = openInitXML(outputfilename, templatefilename, 1, 1, &exePrev);
+				outputfilename[file_len] = 0;
+			}
+		} else {
+			xml_out = 0;
+		}
 	} else {
 		fprintf(stderr, " No output file specified!\n");
-		exit(2);
+		exit(1);
 	}
 	
 	/* load indexing */
@@ -198,7 +210,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	strcat(templatefilename, ".seq.b");
 	DB_file = sfopen(templatefilename, "rb");
 	templatefilename[file_len] = 0;
-	template_index = alignLoad_fly_build(0, fileno(DB_file), 0, *template_lengths, kmersize, seeker, 0);
+	template_index = alignLoad_fly(0, fileno(DB_file), *template_lengths, kmersize, seeker);
 	fclose(DB_file);
 	
 	/* get name */
@@ -231,7 +243,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	/* preallocate assembly matrices */
 	matrix = smalloc(sizeof(AssemInfo));
 	aligned_assem = smalloc(sizeof(Assem));
-	if(assembly_KMA_Ptr == &assemble_KMA_threaded) {
+	if(alnToMatPtr == &alnToMat) {
 		matrix->size = (*template_lengths) << 1;
 	} else {
 		matrix->size = (*template_lengths) + 1;
@@ -276,10 +288,14 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		thread->evalue = evalue;
 		thread->bcd = bcd;
 		thread->sam = sam;
+		thread->ef = 0;
+		thread->seq_in = 0;
+		thread->kmersize = kmersize;
 		thread->template = -2;
 		thread->file_count = 1;
 		thread->files = &template_fragments;
 		thread->frag_out = frag_out;
+		thread->xml_out = xml_out;
 		thread->aligned_assem = aligned_assem;
 		thread->aligned = aligned;
 		thread->gap_align = gap_align;
@@ -336,10 +352,14 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	thread->evalue = evalue;
 	thread->bcd = bcd;
 	thread->sam = sam;
+	thread->ef = 0;
+	thread->seq_in = 0;
+	thread->kmersize = kmersize;
 	thread->template = 0;
 	thread->file_count = 1;
 	thread->files = &template_fragments;
 	thread->frag_out = frag_out;
+	thread->xml_out = xml_out;
 	thread->aligned_assem = aligned_assem;
 	thread->aligned = aligned;
 	thread->gap_align = gap_align;
@@ -361,12 +381,17 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	//assemblyPtr(aligned_assem, 0, &template_fragments, 1, frag_out, aligned, gap_align, qseq, header, matrix, points, NWmatrices);
 	thread->template_name = (char *) template_name->seq;
 	thread->template_index = template_index;
+	if(xml) {
+		newIterXML(xml_out, Mt1, *template_lengths, thread->template_name);
+	}
+	thread->t_len = *template_lengths;
 	assembly_KMA_Ptr(thread);
 	
 	/* make p_value */
 	read_score = aligned_assem->score;
 	t_len = *template_lengths;
-	p_value  = p_chisqr(read_score);
+	p_value = p_chisqr(read_score);
+	aln_len = 0;
 	
 	if(cmp((p_value <= evalue && read_score > 0), read_score >= scoreT * t_len)) {
 		
@@ -399,10 +424,15 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			}
 		}
 		/* destroy this DB index */
-		destroyPtr(template_index);
+		hashMapCCI_destroy(template_index);
 	} else if(ID_t == 0.0) {
 		fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				thread->template_name, read_score, 0, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) read_score, p_value);
+	}
+	
+	if(xml) {
+		capIterXML(xml_out, 1, t_len, t_len, read_score, p_value, read_score, aligned_assem->q, aln_len);
+		closeCapXML(xml_out);
 	}
 	
 	/* join threads */

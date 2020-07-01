@@ -104,7 +104,7 @@ When the mapping is done KMA will produce the following files:
 1. \*.res A result overview giving the most common statistics for each mapped template.
 2. \*.fsa The consensus sequences drawn from the alignments.
 3. \*.aln The consensus alignment of the reads against their template.
-4. \*.frag.gz Mapping information on each mapped read, columns are: read, number of equally well mapping templates, mapping score, start position, end position (w.r.t. template), the choosen template. Start position is zero indexed and end position is exclusive.
+4. \*.frag.gz Mapping information on each mapped read, columns are: read, number of equally well mapping templates, mapping score, start position, end position (w.r.t. template), the choosen template.
 5. \*.mat.gz Base counts on each position in each template, (only if -matrix is enabled)
 
 # Shared memory #
