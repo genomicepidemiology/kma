@@ -37,7 +37,7 @@
 #include "threader.h"
 
 void (*ankerPtr)(int*, int*, int*, char*, int*, unsigned**, unsigned**, int*, CompDNA*, int, int, int, int, Qseqs*, volatile int*, FILE*) = &ankerAndClean;
-int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_chain; //&save_kmers_HMM;
+int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_HMM; /* here */ //&save_kmers_chain;
 int (*save_kmers_pair)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_unionPair;
 int (*get_kmers_for_pair_ptr)(const HashMapKMA *, const Penalties *, int *, int *, int *, int *, CompDNA *, int *, int) = &get_kmers_for_pair;
 int (*getMatch)(int*, int*) = &getBestMatch;

@@ -104,18 +104,28 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 			deConPrintPtr = printPtr;
 		}
 		if(templates->prefix_len == 0 && get_kmers_for_pair_ptr != &get_kmers_for_pair_count) {
+			/* here */
+			/*
 			if(kmerScan == &save_kmers) {
 				kmerScan = &save_kmers_pseuodeSparse;
 			} else {
 				kmerScan = &save_kmers_sparse_chain;
 			}
+			*/
+			kmerScan = &save_kmers_pseuodeSparse;
+			
 			get_kmers_for_pair_ptr = &get_kmers_for_pair_pseoudoSparse;
 		} else {
+			/* here */
+			/*
 			if(kmerScan == &save_kmers) {
 				kmerScan = &save_kmers_Sparse;
 			} else {
 				kmerScan = &save_kmers_sparse_chain;
 			}
+			*/
+			kmerScan = &save_kmers_Sparse;
+			
 			get_kmers_for_pair_ptr = &get_kmers_for_pair_Sparse;
 		}
 	}
