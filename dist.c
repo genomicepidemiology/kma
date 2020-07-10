@@ -22,10 +22,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/param.h>
+#include "dist.h"
 #include "hashmapkma.h"
 #include "matrix.h"
 #include "pherror.h"
 #include "runkma.h"
+#include "threader.h"
+#include "tmp.h"
 #define missArg(opt) fprintf(stderr, "Missing argument at %s.\n", opt); exit(1);
 #define invaArg(opt) fprintf(stderr, "Invalid value parsed at %s.\n", opt); exit(1);
 
@@ -111,7 +116,6 @@ HashMapKMA * loadValues(const char *filename) {
 		return 0;
 	}
 	dest->values_s = (short unsigned *)(dest->values);
-	dest->shmFlag |= 2;
 	
 	/* check for megaMap */
 	if(dest->exist) {
@@ -147,7 +151,6 @@ HashMapKMA * loadValues(const char *filename) {
 		return 0;
 	}
 	dest->exist_l = (long unsigned *)(dest->value_index);
-	dest->shmFlag |= 1;
 	
 	fclose(file);
 	return dest;
@@ -162,7 +165,7 @@ void destroyValues(HashMapKMA *src) {
 
 void kmerSimilarity(HashMapKMA *DB, Matrix *Dist, int *N) {
 	
-	int i, j, el, vs, **D;
+	int i, j, el, vs, v_i, **D, *Di;
 	unsigned *exist, *values_i, *values_j;
 	long unsigned n, pos, *exist_l;
 	short unsigned *values_si, *values_sj;
@@ -186,10 +189,12 @@ void kmerSimilarity(HashMapKMA *DB, Matrix *Dist, int *N) {
 				while(--i) {
 					j = i;
 					values_sj = --values_si;
+					v_i = *values_si - 1;
+					Di = D[v_i];
 					while(--j) {
-						++D[*values_si - 1][*--values_sj - 1];
+						++Di[*--values_sj - 1];
 					}
-					++N[*values_si - 1];
+					++N[v_i];
 				}
 			} else {
 				values_i = DB->values + pos;
@@ -198,10 +203,12 @@ void kmerSimilarity(HashMapKMA *DB, Matrix *Dist, int *N) {
 				while(--i) {
 					j = i;
 					values_j = --values_i;
+					v_i = *values_i - 1;
+					Di = D[v_i];
 					while(--j) {
-						++D[*values_i - 1][*--values_j - 1];
+						++Di[*--values_j - 1];
 					}
-					++N[*values_i - 1];
+					++N[v_i];
 				}
 			}
 			--n;
@@ -209,192 +216,555 @@ void kmerSimilarity(HashMapKMA *DB, Matrix *Dist, int *N) {
 	}
 	
 	Dist->n = DB->DB_size - 1;
+	destroyValues(DB);
 }
 
-void kmerDist(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format) {
+void kmerSimilarity_thread(HashMapKMA *DB, Matrix *Dist, int *N, int thread_num, volatile int *lock) {
 	
-	int i, j, *D;
-	char *name;
+	static volatile int thread_wait = 0;
+	static volatile long unsigned next;
+	static long unsigned n;
+	int i, j, el, vs, v_i, chunk, chunkster, **D, *Di, *Dptr;
+	unsigned *exist, *values_i, *values_j;
+	long unsigned pos, size, *exist_l;
+	short unsigned *values_si, *values_sj;
 	
 	/* init */
-	D = *(Dist->mat) - 1;
+	el = DB->v_index < UINT_MAX;
+	vs = DB->DB_size < USHRT_MAX;
+	D = Dist->mat;
+	chunk = 1024;
+	size = ((DB->size - 1) == DB->mask) ? DB->size : DB->n;
 	
-	if(format & 4) {
-		fprintf(outfile, "#%s\n", "k-mer distance");
+	/* static init */
+	lock(lock);
+	if(!thread_wait) {
+		thread_wait = thread_num;
+		next = 0;
+		n = DB->n;
+		Dist->n = DB->DB_size - 1;
 	}
-	fprintf(outfile, "%10d\n", Dist->n);
-	for(i = 0; i < Dist->n; ++i) {
-		name = nameLoad(template_name, name_file);
-		if(format & 1) {
-			fprintf(outfile, "%s", name);
-		} else {
-			fprintf(outfile, "%-10.10s", name);
+	unlock(lock);
+	
+	/* get values */
+	while(n && chunk) {
+		/* get next chunk */
+		lock(lock);
+		pos = next;
+		if(size < (next += chunk)) {
+			next = size;
 		}
+		unlock(lock);
 		
-		for(j = 0; j < i; ++j) {
-			fprintf(outfile, "\t%d", N[i] + N[j] - 2 * *++D);
+		/* update chunk */
+		exist = DB->exist + pos - 1;
+		exist_l = DB->exist_l + pos - 1;
+		if(size < pos + chunk) {
+			chunkster = size - pos + 1;
+			chunk = 0;
+		} else {
+			chunkster = (chunk + 1);
 		}
-		fprintf(outfile, "\n");
+		while(n && --chunkster) {
+			pos = el ? *++exist : *++exist_l;
+			if(pos != 1) {
+				if(vs) {
+					values_si = DB->values_s + pos;
+					i = *values_si + 1;
+					values_si += i;
+					while(--i) {
+						j = i;
+						values_sj = --values_si;
+						v_i = *values_si - 1;
+						Di = D[v_i];
+						while(--j) {
+							Dptr = Di + (*--values_sj - 1);
+							__sync_add_and_fetch(Dptr, 1);
+						}
+						Dptr = N + v_i;
+						__sync_add_and_fetch(Dptr, 1);
+					}
+				} else {
+					values_i = DB->values + pos;
+					i = *values_i + 1;
+					values_i += i;
+					while(--i) {
+						j = i;
+						values_j = --values_i;
+						v_i = *values_i - 1;
+						Di = D[v_i];
+						while(--j) {
+							Dptr = Di + (*--values_j - 1);
+							__sync_add_and_fetch(Dptr, 1);
+						}
+						Dptr = N + v_i;
+						__sync_add_and_fetch(Dptr, 1);
+					}
+				}
+				__sync_sub_and_fetch(&n, 1);
+			}
+		}
 	}
-	fseek(name_file, 0, SEEK_SET);
+	
+	if(__sync_sub_and_fetch(&thread_wait, 1)) {
+		wait_atomic(thread_wait);
+	} else {
+		destroyValues(DB);
+	}
 }
 
-void kmerShared(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format) {
-	
-	int i, j, *D;
-	char *name;
-	
-	/* init */
-	D = *(Dist->mat) - 1;
-	
-	if(format & 4) {
-		fprintf(outfile, "#%s\n", "shared k-mers");
-	}
-	fprintf(outfile, "%10d\n", Dist->n);
-	for(i = 0; i < Dist->n; ++i) {
-		name = nameLoad(template_name, name_file);
-		if(format & 1) {
-			fprintf(outfile, "%s", name);
-		} else {
-			fprintf(outfile, "%-10.10s", name);
-		}
-		
-		for(j = 0; j < i; ++j) {
-			fprintf(outfile, "\t%d", *++D);
-		}
-		fprintf(outfile, "\n");
-	}
-	fseek(name_file, 0, SEEK_SET);
+int kmerDist(int Ni, int Nj, int D) {
+	return Ni + Nj - (D << 1);
 }
 
-void kmerQuery(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format) {
+int kmerShared(int Ni, int Nj, int D) {
+	return D;
+}
+
+int chi2dist(int Ni, int Nj, int D) {
+	D = (Ni + Nj - (D << 1));
+	return D * D / (Ni + Nj);
+}
+
+void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format, int thread_num, volatile int *lock, const char *method, int (*distPtr)(int, int, int)) {
 	
-	int i, j, **D;
-	double d;
-	char *name;
+	static volatile int thread_wait1 = 0, thread_wait2 = 0;
+	static int next_i, next_j, entrance = 0;
+	static long unsigned row_bias = 0;
+	volatile int *thread_wait;
+	int i, j, j_end, chunk, N_i, *Nj, **D, *Di;
+	char *outfile_chunk, *name;
 	
 	/* init */
 	D = Dist->mat;
-	
-	if(format & 4) {
-		fprintf(outfile, "#%s\n", "Query k-mer coverage");
-	}
-	fprintf(outfile, "%10d\n", Dist->n);
-	for(i = 0; i < Dist->n; ++i) {
-		name = nameLoad(template_name, name_file);
-		if(format & 1) {
-			fprintf(outfile, "%s", name);
+	chunk = 1048576;
+	lock(lock);
+	if(!row_bias) {
+		if(format & 4) {
+			row_bias += sprintf(outfile, "# %-35s\n", method);
+		}
+		row_bias += sprintf(outfile + row_bias, "%10d", Dist->n);
+		next_i = -1;
+		next_j = 0;
+		if(++entrance & 1) {
+			thread_wait1 = thread_num;
+			thread_wait = &thread_wait1;
 		} else {
-			fprintf(outfile, "%-10.10s", name);
+			thread_wait2 = thread_num;
+			thread_wait = &thread_wait2;
 		}
-		
-		for(j = 0; j < Dist->n; ++j) {
-			if(i == j) {
-				fprintf(outfile, "\t%.2f", 100.0);
-			} else {
-				d = i < j ? D[j][i] : D[i][j];
-				fprintf(outfile, "\t%.2f", 100.0 * d / N[i]);
-			}
-		}
-		fprintf(outfile, "\n");
+	} else if(entrance & 1) {
+		thread_wait = &thread_wait1;
+	} else {
+		thread_wait = &thread_wait2;
 	}
-	fseek(name_file, 0, SEEK_SET);
+	unlock(lock);
+	
+	while(next_i < Dist->n) {
+		lock(lock);
+		/* check for new row */
+		if(next_i <= next_j) {
+			i = ++next_i;
+			if(i) {
+				row_bias += (i - 1) * 11;
+			}
+			j = 0;
+			next_j = chunk;
+			if(next_i < Dist->n) {
+				name = nameLoad(template_name, name_file);
+				if(format & 1) {
+					row_bias += sprintf(outfile + row_bias, "\n%s", name);
+				} else {
+					row_bias += sprintf(outfile + row_bias, "\n%-10.10s", name);
+				}
+			} else {
+				outfile[row_bias] = '\n';
+				++row_bias;
+				chunk = 0;
+			}
+		} else {
+			i = next_i;
+			j = next_j;
+			next_j += chunk;
+		}
+		outfile_chunk = outfile + row_bias + j * 11;
+		unlock(lock);
+		
+		if(chunk) {
+			N_i = N[i];
+			j_end = (i < j + chunk) ? i : (j + chunk);
+			Di = D[i] + --j;
+			Nj = N + j;
+			while(++j < j_end) {
+				outfile_chunk += sprintf(outfile_chunk, "\t%10d", distPtr(N_i, *++Nj, *++Di));
+			}
+			/* fix null character */
+			*outfile_chunk = (j == i) ? '\n' : '\t';
+		}
+	}
+	
+	/* wait for matrix to finish */
+	lock(lock);
+	if(--*thread_wait) {
+		unlock(lock);
+		wait_atomic(*thread_wait);
+	} else {
+		fseek(name_file, 0, SEEK_SET);
+		row_bias = 0;
+		unlock(lock);
+	}
 }
 
-void kmerTemplate(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format) {
+double kmerQuery(int Ni, int Nj, int D) {
+	return 100.0 * D / Ni;
+}
+
+double kmerTemplate(int Ni, int Nj, int D) {
+	return 100.0 * D / Nj;
+}
+
+double kmerAvg(int Ni, int Nj, int D) {
+	return 200.0 * D / (Ni + Nj);
+}
+
+double kmerInvAvg(int Ni, int Nj, int D) {
+	return 100.0 - 200.0 * D / (Ni + Nj);
+}
+
+double kmerJaccardDist(int Ni, int Nj, int D) {
+	return 1.0 - (double)(D) / (Ni + Nj - D);
+}
+
+double kmerJaccardSim(int Ni, int Nj, int D) {
+	return (double)(D) / (Ni + Nj - D);
+}
+
+double kmerCosineDist(int Ni, int Nj, int D) {
+	return 1.0 - (double)(D) / (Ni + Nj);
+}
+
+double kmerCosineSim(int Ni, int Nj, int D) {
+	return (double)(D) / (Ni + Nj);
+}
+
+double kmerOverlapCoef(int Ni, int Nj, int D) {
+	return (double)(D) / (Ni < Nj ? Ni : Nj);
+}
+
+double kmerInvOverlapCoef(int Ni, int Nj, int D) {
+	return 1.0 - (double)(D) / (Ni < Nj ? Ni : Nj);
+}
+
+void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format, const char *formatString, int ltd, int thread_num, volatile int *lock, const char *method, double (*distPtr)(int, int, int)) {
 	
-	int i, j, **D;
-	double d;
-	char *name;
+	static volatile int thread_wait1 = 0, thread_wait2 = 0;
+	static int next_i, next_j, entrance = 0;
+	static long unsigned row_bias = 0;
+	volatile int *thread_wait;
+	int i, j, j_end, chunk, N_i, *Nj, **D, *Di;
+	char endChar, *outfile_chunk, *name;
 	
 	/* init */
 	D = Dist->mat;
-	
-	if(format & 4) {
-		fprintf(outfile, "#%s\n", "Template k-mer coverage");
-	}
-	fprintf(outfile, "%10d\n", Dist->n);
-	for(i = 0; i < Dist->n; ++i) {
-		name = nameLoad(template_name, name_file);
-		if(format & 1) {
-			fprintf(outfile, "%s", name);
-		} else {
-			fprintf(outfile, "%-10.10s", name);
+	chunk = 1048576;
+	lock(lock);
+	if(!row_bias) {
+		if(format & 4) {
+			row_bias += sprintf(outfile, "# %-35s\n", method);
 		}
-		
-		for(j = 0; j < Dist->n; ++j) {
-			if(i == j) {
-				fprintf(outfile, "\t%.2f", 100.0);
-			} else {
-				d = i < j ? D[j][i] : D[i][j];
-				fprintf(outfile, "\t%.2f", 100.0 * d / N[j]);
+		row_bias += sprintf(outfile + row_bias, "%10d", Dist->n);
+		next_i = -1;
+		next_j = Dist->n;
+		if(++entrance & 1) {
+			thread_wait1 = thread_num;
+			thread_wait = &thread_wait1;
+		} else {
+			thread_wait2 = thread_num;
+			thread_wait = &thread_wait2;
+		}
+	} else if(entrance & 1) {
+		thread_wait = &thread_wait1;
+	} else {
+		thread_wait = &thread_wait2;
+	}
+	unlock(lock);
+	
+	while(next_i < Dist->n) {
+		lock(lock);
+		/* check for new row */
+		if((ltd && next_i <= next_j) || (Dist->n <= next_j)) {
+			i = ++next_i;
+			if(i) {
+				row_bias += (ltd ? (i - 1) : Dist->n) * 11;
 			}
-		}
-		fprintf(outfile, "\n");
-	}
-	fseek(name_file, 0, SEEK_SET);
-}
-
-void kmerAvg(FILE *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format) {
-	
-	int i, j, *D;
-	char *name;
-	
-	/* init */
-	D = *(Dist->mat) - 1;
-	
-	if(format & 4) {
-		fprintf(outfile, "#%s\n", "Avg. k-mer coverage");
-	}
-	fprintf(outfile, "%10d\n", Dist->n);
-	for(i = 0; i < Dist->n; ++i) {
-		name = nameLoad(template_name, name_file);
-		if(format & 1) {
-			fprintf(outfile, "%s", name);
+			j = 0;
+			next_j = chunk;
+			if(next_i < Dist->n) {
+				name = nameLoad(template_name, name_file);
+				if(format & 1) {
+					row_bias += sprintf(outfile + row_bias, "\n%s", name);
+				} else {
+					row_bias += sprintf(outfile + row_bias, "\n%-10.10s", name);
+				}
+			} else {
+				outfile[row_bias] = '\n';
+				++row_bias;
+				chunk = 0;
+			}
 		} else {
-			fprintf(outfile, "%-10.10s", name);
+			i = next_i;
+			j = next_j;
+			next_j += chunk;
 		}
+		outfile_chunk = outfile + row_bias + j * 11;
+		unlock(lock);
 		
-		for(j = 0; j < i; ++j) {
-			fprintf(outfile, "\t%.2f", 200.0 * *++D / (N[i] + N[j]));
+		if(chunk) {
+			if(ltd) {
+				j_end = (i < j + chunk) ? i : (j + chunk);
+				endChar = (j_end == i) ? '\n' : '\t';
+			} else {
+				j_end = (Dist->n < j + chunk) ? Dist->n : (j + chunk);
+				endChar = (j_end == Dist->n) ? '\n' : '\t';
+			}
+			N_i = N[i];
+			Di = D[i] + --j;
+			Nj = N + j;
+			
+			if(j_end < i) {
+				while(++j < j_end) {
+					outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, *++Di));
+				}
+			} else if(i < j) {
+				while(++j < j_end) {
+					outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, D[j][i]));
+				}
+			} else {
+				while(++j < j_end) {
+					if(j < i) {
+						outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, *++Di));
+					} else if(i < j) {
+						outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, D[j][i]));
+					} else {
+						outfile_chunk += sprintf(outfile_chunk, formatString, 100.0);
+						++Nj;
+					}
+				}
+			}
+			/* fix null character */
+			*outfile_chunk = endChar;
 		}
-		fprintf(outfile, "\n");
 	}
-	fseek(name_file, 0, SEEK_SET);
+	
+	/* wait for matrix to finish */
+	lock(lock);
+	if(--*thread_wait) {
+		unlock(lock);
+		wait_atomic(*thread_wait);
+	} else {
+		fseek(name_file, 0, SEEK_SET);
+		row_bias = 0;
+		unlock(lock);
+	}
 }
 
-void runDist(char *templatefilename, char *outputfilename, int flag, int format) {
+long unsigned getPhySize(int flag, int format, long unsigned n, long unsigned *ltdMat, long unsigned *covMat, FILE *name_file) {
 	
-	int file_len, *N;
-	unsigned DB_size;
-	FILE *outfile, *name_file;
+	long unsigned size;
+	
+	/* get name name */
+	if(format & 1) {
+		fseek(name_file, 0, SEEK_END);
+		size = ftell(name_file);
+		rewind(name_file);
+	} else {
+		size = n * 11;
+	}
+	if(format & 4) {
+		size += 38;
+	}
+	
+	/* phy size */
+	size += 11;
+	
+	/* ltd cell size */
+	*ltdMat = size + (((n - 1) * (n - 2)) >> 1) * 11;
+	
+	/* cov cell size */
+	*covMat = size + (n - 1) * (n - 1) * 11;
+	
+	/* get number of matrices to make */
+	size = 0;
+	if(flag & 4) {
+		size += *covMat;
+		flag ^= 4;
+	}
+	if(flag & 8) {
+		size += *covMat;
+		flag ^= 8;
+	}
+	n = 0;
+	while(flag) {
+		n += flag & 1;
+		flag >>= 1;
+	}
+	
+	return size + n * *ltdMat;
+}
+
+char * mfile(FILE *outfile, long unsigned size) {
+	
+	char *outfileM;
+	
+	if(fseek(outfile, size - 1, SEEK_SET) || putc(0, outfile) == EOF) {
+		ERROR();
+	}
+	rewind(outfile);
+	outfileM = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(outfile), 0);
+	if(outfileM == MAP_FAILED) {
+		ERROR();
+	}
+	posix_madvise(outfileM, size, POSIX_MADV_SEQUENTIAL);
+	
+	return outfileM;
+}
+
+void * threadDist(void *arg) {
+	
+	static volatile int lock[1] = {0};
+	DistThread *thread = arg;
+	int flag, format, thread_num, *N;
+	long unsigned ltdMat, covMat;
+	char *outfileM;
+	FILE *name_file;
 	HashMapKMA *DB;
 	Matrix *Dist;
 	Qseqs *template_name;
 	
 	/* init */
-	if(*outputfilename == '-' && outputfilename[1] == '-' && outputfilename[2] == 0) {
-		outfile = stdout;
+	flag = thread->flag;
+	format = thread->format;
+	thread_num = thread->thread_num;
+	N = thread->N;
+	ltdMat = thread->ltdMat;
+	covMat = thread->covMat;
+	outfileM = thread->outfileM;
+	name_file = thread->name_file;
+	DB = thread->DB;
+	Dist = thread->Dist;
+	template_name = thread->template_name;
+	
+	/* get kmer similarities and lengths */
+	if(thread_num != 1) {
+		kmerSimilarity_thread(DB, Dist, N, thread_num, lock);
 	} else {
-		outfile = sfopen(outputfilename, "wb");
+		kmerSimilarity(DB, Dist, N);
 	}
+	
+	/* k-mer dist, lt */
+	if(flag & 1) {
+		printIntLtdPhy(outfileM, Dist, N, name_file, template_name, format, thread_num, lock, "k-mer distance", &kmerDist);
+		outfileM += ltdMat;
+	}
+	
+	/* k-mer shared, lt */
+	if(flag & 2) {
+		printIntLtdPhy(outfileM, Dist, N, name_file, template_name, format, thread_num, lock, "shared k-mers", &kmerShared);
+		outfileM += ltdMat;
+	}
+	
+	/* query cov, asym */
+	if(flag & 4) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%10.6f", 0, thread_num, lock, "Query k-mer coverage [%]", &kmerQuery);
+		outfileM += covMat;
+	}
+	
+	/* template cov, asym */
+	if(flag & 8) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%10.6f", 0, thread_num, lock, "Template k-mer coverage [%]", &kmerTemplate);
+		outfileM += covMat;
+	}
+	
+	/* avg. cov, lt */
+	if(flag & 16) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%10.6f", 1, thread_num, lock, "Avg. k-mer coverage [%]", &kmerAvg);
+		outfileM += ltdMat;
+	}
+	
+	/* inv. avg. cov, lt */
+	if(flag & 32) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%10.6f", 1, thread_num, lock, "Inverse Avg. k-mer coverage", &kmerInvAvg);
+		outfileM += ltdMat;
+	}
+	
+	/* Jaccard dist */
+	if(flag & 64) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%.8f", 1, thread_num, lock, "Jaccard Distance", &kmerJaccardDist);
+		outfileM += ltdMat;
+	}
+	
+	/* Jaccard similarity */
+	if(flag & 128) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%.8f", 1, thread_num, lock, "Jaccard Similarity", &kmerJaccardSim);
+		outfileM += ltdMat;
+	}
+	
+	/* Cosine dist */
+	if(flag & 256) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%.8f", 1, thread_num, lock, "Cosine distance", &kmerCosineDist);
+		outfileM += ltdMat;
+	}
+	
+	/* Cosine similarity */
+	if(flag & 512) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%.8f", 1, thread_num, lock, "Cosine similarity", &kmerCosineSim);
+		outfileM += ltdMat;
+	}
+	
+	/* Szymkiewicz–Simpson similarity */
+	if(flag & 1024) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%.8f", 1, thread_num, lock, "Szymkiewicz–Simpson similarity", &kmerOverlapCoef);
+		outfileM += ltdMat;
+	}
+	
+	/* Szymkiewicz–Simpson dissimilarity */
+	if(flag & 2048) {
+		printDoublePhy(outfileM, Dist, N, name_file, template_name, format, "\t%.8f", 1, thread_num, lock, "Szymkiewicz–Simpson dissimilarity", &kmerInvOverlapCoef);
+		outfileM += ltdMat;
+	}
+	
+	/* Chi-square distance */
+	if(flag & 4096) {
+		printIntLtdPhy(outfileM, Dist, N, name_file, template_name, format, thread_num, lock, "Chi-square distance", &chi2dist);
+		outfileM += ltdMat;
+	}
+	
+	return NULL;
+}
+
+void runDist(char *templatefilename, char *outputfilename, int flag, int format, int disk, int thread_num) {
+	
+	int i, file_len, *N;
+	unsigned DB_size;
+	long unsigned out_size, ltdMat, covMat;
+	char *outfileM;
+	FILE *outfile, *name_file;
+	DistThread *thread, *threads;
+	HashMapKMA *DB;
+	Matrix *Dist;
+	Qseqs *template_name;
+	
+	/* init */
+	outfile = sfopen(outputfilename, "wb+");
 	file_len = strlen(templatefilename);
+	
+	/* load k-mer links from KMA DB */
 	strcpy(templatefilename + file_len, ".comp.b");
 	if(!(DB = loadValues(templatefilename))) {
 		fprintf(stderr, "Wrong format of DB.\n");
 		exit(1);
 	}
 	templatefilename[file_len] = 0;
-	DB_size = DB->DB_size;
-	N = calloc(DB_size, sizeof(int));
-	if(!N) {
-		ERROR();
-	}
-	Dist = ltdMatrix_init(DB_size);
-	
-	/* get kmer similarities and lengths */
-	kmerSimilarity(DB, Dist, N);
-	destroyValues(DB);
 	
 	/* load names */
 	strcpy(templatefilename + file_len, ".name");
@@ -402,36 +772,75 @@ void runDist(char *templatefilename, char *outputfilename, int flag, int format)
 	templatefilename[file_len] = 0;
 	template_name = setQseqs(1024);
 	
-	/* k-mer dist, lt */
-	if(flag & 1) {
-		kmerDist(outfile, Dist, N, name_file, template_name, format);
+	/* allocate output file */
+	DB_size = DB->DB_size;
+	out_size = getPhySize(flag, format, DB_size, &ltdMat, &covMat, name_file);
+	outfileM = mfile(outfile, out_size);
+	
+	/* allocate matrices */
+	if(!(N = calloc(DB_size, sizeof(int)))) {
+		ERROR();
+	}
+	if(disk) {
+		Dist = ltdMatrix_minit(DB_size);
+	} else {
+		Dist = ltdMatrix_init(DB_size);
 	}
 	
-	/* k-mer shared, lt */
-	if(flag & 2) {
-		kmerShared(outfile, Dist, N, name_file, template_name, format);
+	/* thread out */
+	thread = 0;
+	threads = 0;
+	i = thread_num;
+	while(i--) {
+		/* init */
+		thread = smalloc(sizeof(DistThread));
+		thread->flag = flag;
+		thread->format = format;
+		thread->thread_num = thread_num;
+		thread->N = N;
+		thread->ltdMat = ltdMat;
+		thread->covMat = covMat;
+		thread->outfileM = outfileM;
+		thread->name_file = name_file;
+		thread->DB = DB;
+		thread->Dist = Dist;
+		thread->template_name = template_name;
+		thread->next = threads;
+		threads = thread;
+		/* start */
+		if(i && (errno = pthread_create(&thread->id, NULL, &threadDist, thread))) {
+			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
+			fprintf(stderr, "Will continue with %d threads.\n", thread_num - i);
+			i = 0;
+		}
 	}
+	/* start main thread */
+	thread->id = 0;
+	threadDist(thread);
 	
-	/* query cov, asym */
-	if(flag & 4) {
-		kmerQuery(outfile, Dist, N, name_file, template_name, format);
-	}
-	
-	/* template cov, asym */
-	if(flag & 8) {
-		kmerTemplate(outfile, Dist, N, name_file, template_name, format);
-	}
-	
-	/* avg. cov, lt */
-	if(flag & 16) {
-		kmerAvg(outfile, Dist, N, name_file, template_name, format);
+	/* join threads */
+	while((thread = thread->next)) {
+		/* join thread */
+		if((errno = pthread_join(thread->id, NULL))) {
+				ERROR();
+		}
 	}
 	
 	/* clean */
+	while(threads) {
+		thread = threads->next;
+		free(threads);
+		threads = thread;
+	}
+	munmap(outfileM - out_size, out_size);
 	fclose(outfile);
 	fclose(name_file);
 	free(N);
-	Matrix_destroy(Dist);
+	if(disk) {
+		Matrix_mdestroy(Dist);
+	} else {
+		Matrix_destroy(Dist);
+	}
 	destroyQseqs(template_name);
 }
 
@@ -440,11 +849,14 @@ static int helpMessage(FILE *out) {
 	fprintf(out, "#kma dist calculates distances between templates from a kma index\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "Options are:", "Desc:", "Default:");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-t_db", "Template DB", "");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-o", "Output file", "stdout");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-o", "Output file", "DB");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-f", "Output flags", "1");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-fh", "Help on option \"-f\"", "");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-d", "Distance method", "1");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-dh", "Help on option \"-d\"", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-m", "Allocate matrix on the disk", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-tmp", "Set directory for temporary files", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-t", "Number of threads", "1");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-h", "Shows this helpmessage", "");
 	return (out == stderr);
 }
@@ -452,15 +864,19 @@ static int helpMessage(FILE *out) {
 /* main */
 int dist_main(int argc, char *argv[]) {
 	
-	int args, flag, format, file_len;
+	int args, flag, format, mmap, thread_num, file_len;
 	char *arg, *errorMsg, *templatefilename, *outputfilename;
 	
 	/* init */
 	flag = 1;
 	format = 1;
+	mmap = 0;
+	thread_num = 1;
+	file_len = 0;
 	templatefilename = 0;
 	outputfilename = 0;
 	
+	/* parse cmd-line */
 	args = 1;
 	while(args < argc) {
 		arg = argv[args];
@@ -491,29 +907,55 @@ int dist_main(int argc, char *argv[]) {
 			} else if(strcmp(arg, "fh") == 0) {
 				fprintf(stdout, "# Format flags output, add them to combine them.\n");
 				fprintf(stdout, "#\n");
-				fprintf(stdout, "#   1:\tRelaxed Phylip\n");
-				fprintf(stdout, "#   4:\tInclude template name in phylip file\n");
-				fprintf(stdout, "#\n");
+				fprintf(stdout, "#%9d\t%s\n", 1, "Relaxed Phylip");
+				fprintf(stdout, "#%9d\t%s\n", 4, "Include distance method(s) in phylip file");
 				return 0;
 			} else if(strcmp(arg, "d") == 0) {
 				if(++args < argc) {
 					flag = strtoul(argv[args], &errorMsg, 10);
 					if(*errorMsg != 0) {
-						invaArg("\"-f\"");
+						invaArg("\"-d\"");
 					}
 				} else {
 					missArg("\"-d\"");
 				}
 			} else if(strcmp(arg, "dh") == 0) {
-				fprintf(stdout, "# Distance calculation methods, add them to combine them:\n");
+				fprintf(stdout, "# Distance / Similarity calculation methods, add them to combine them:\n");
 				fprintf(stdout, "#\n");
-				fprintf(stdout, "#   1:\tk-mer distance\n");
-				fprintf(stdout, "#   2:\tShared k-mers\n");
-				fprintf(stdout, "#   4:\tk-mer query coverage\n");
-				fprintf(stdout, "#   8:\tk-mer template coverage\n");
-				fprintf(stdout, "#   16:\tk-mer avg. coverage\n");
+				fprintf(stdout, "#%9d\t%s\n", 1, "k-mer hamming distance");
+				fprintf(stdout, "#%9d\t%s\n", 2, "Shared k-mers");
+				fprintf(stdout, "#%9d\t%s\n", 4, "k-mer query coverage");
+				fprintf(stdout, "#%9d\t%s\n", 8, "k-mer template coverage");
+				fprintf(stdout, "#%9d\t%s\n", 16, "k-mer avg. coverage");
+				fprintf(stdout, "#%9d\t%s\n", 32, "k-mer inv. avg. coverage");
+				fprintf(stdout, "#%9d\t%s\n", 64, "Jaccard distance");
+				fprintf(stdout, "#%9d\t%s\n", 128, "Jaccard similarity");
+				fprintf(stdout, "#%9d\t%s\n", 256, "Cosine distance");
+				fprintf(stdout, "#%9d\t%s\n", 512, "Cosine similarity");
+				fprintf(stdout, "#%9d\t%s\n", 1024, "Szymkiewicz–Simpson similarity");
+				fprintf(stdout, "#%9d\t%s\n", 2048, "Szymkiewicz–Simpson dissimilarity");
+				fprintf(stdout, "#%9d\t%s\n", 4096, "Chi-square distance");
 				fprintf(stdout, "#\n");
 				return 0;
+			} else if(strcmp(arg, "m") == 0) {
+				mmap = 1;
+			} else if(strcmp(argv[args], "-tmp") == 0) {
+				if(++args < argc) {
+					if(argv[args][0] != '-') {
+						tmpF(argv[args]);
+					} else {
+						invaArg("\"-tmp\"");
+					}
+				}
+			} else if(strcmp(argv[args], "-t") == 0) {
+				if(++args < argc) {
+					thread_num = strtoul(argv[args], &errorMsg, 10);
+					if(*errorMsg != 0) {
+						invaArg("\"-t\"");
+					}
+				} else {
+					missArg("\"-t\"");
+				}
 			} else if(strcmp(arg, "h") == 0) {
 				return helpMessage(stdout);
 			} else {
@@ -532,10 +974,11 @@ int dist_main(int argc, char *argv[]) {
 		exit(1);
 	}
 	if(!outputfilename) {
-		outputfilename = "--";
+		outputfilename = smalloc(file_len + 64);
+		sprintf(outputfilename, "%s.phy", templatefilename);
 	}
 	
-	runDist(templatefilename, outputfilename, flag, format);
+	runDist(templatefilename, outputfilename, flag, format, mmap, thread_num);
 	
 	return 0;
 }

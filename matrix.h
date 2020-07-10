@@ -29,7 +29,9 @@ struct matrix {
 
 Matrix * matrix_init(unsigned size);
 Matrix * ltdMatrix_init(unsigned size);
+Matrix * ltdMatrix_minit(long unsigned size);
 void ltdMatrix_realloc(Matrix *src, unsigned size);
 void Matrix_destroy(Matrix *src);
+void Matrix_mdestroy(Matrix *src);
 void ltdMatrix_popArrange(Matrix *mat, unsigned pos);
 int ltdMatrix_add(Matrix *src);

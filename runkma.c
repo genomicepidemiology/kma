@@ -1250,6 +1250,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				}
 			} else {
 				if(sam || ID_t == 0.0) {
+					thread->template_index = templates_index[template];
 					thread->template_name = nameLoad(template_name, name_file);
 					thread->template = template;
 					assembly_KMA_Ptr(thread);

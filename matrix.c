@@ -17,9 +17,15 @@
  * limitations under the License.
 */
 
+#define _XOPEN_SOURCE 600
+#include <limits.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <sys/mman.h>
+#include <sys/param.h>
 #include "matrix.h"
 #include "pherror.h"
+#include "tmp.h"
 
 Matrix * matrix_init(unsigned size) {
 	
@@ -54,7 +60,7 @@ Matrix * ltdMatrix_init(unsigned size) {
 	dest->n = 0;
 	dest->size = size;
 	dest->mat = smalloc(size * sizeof(int *));
-	*(dest->mat) = calloc(size * size / 2, sizeof(int));
+	*(dest->mat) = calloc(size * (size - 1) / 2, sizeof(int));
 	if(!*(dest->mat)) {
 		ERROR();
 	}
@@ -72,11 +78,50 @@ Matrix * ltdMatrix_init(unsigned size) {
 	return dest;
 }
 
+Matrix * ltdMatrix_minit(long unsigned size) {
+	
+	int i, n, **ptr, *src;
+	FILE *tmp;
+	Matrix *dest;
+	
+	dest = smalloc(sizeof(Matrix));
+	dest->n = 0;
+	dest->size = size;
+	dest->mat = smalloc(size * sizeof(int *));
+	n = size;
+	size = size * (size - 1) * sizeof(int) / 2;
+	
+	/* get matrix */
+	tmp = tmpF(0);
+	if(fseek(tmp, size - 1, SEEK_SET) || putc(0, tmp) == EOF) {
+		ERROR();
+	}
+	fflush(tmp);
+	fseek(tmp, 0, SEEK_SET);
+	*(dest->mat) = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(tmp), 0);
+	if(*(dest->mat) == MAP_FAILED) {
+			ERROR();
+	}
+	posix_madvise(*(dest->mat), size, POSIX_MADV_SEQUENTIAL);
+	
+	/* set matrix rows */
+	ptr = dest->mat;
+	src = *ptr;
+	i = 0;
+	*ptr++ = src;
+	while(--n) {
+		*ptr++ = src + i;
+		src += i++;
+	}
+	
+	return dest;
+}
+
 void ltdMatrix_realloc(Matrix *src, unsigned size) {
 	
 	int i, **ptr, *mat;
 	
-	*(src->mat) = realloc(*(src->mat), size * size * sizeof(int) / 2);
+	*(src->mat) = realloc(*(src->mat), size * (size - 1) * sizeof(int) / 2);
 	src->mat = realloc(src->mat, size * sizeof(int *));
 	if(!src->mat || !*(src->mat)) {
 		ERROR();
@@ -96,6 +141,14 @@ void ltdMatrix_realloc(Matrix *src, unsigned size) {
 
 void Matrix_destroy(Matrix *src) {
 	
+	free(*(src->mat));
+	free(src->mat);
+	free(src);
+}
+
+void Matrix_mdestroy(Matrix *src) {
+	
+	munmap(*(src->mat), src->size * src->size * sizeof(int) / 2);
 	free(src->mat);
 	free(src);
 }
