@@ -148,7 +148,11 @@ void Matrix_destroy(Matrix *src) {
 
 void Matrix_mdestroy(Matrix *src) {
 	
-	munmap(*(src->mat), src->size * src->size * sizeof(int) / 2);
+	long unsigned size;
+	
+	size = src->size * (src->size - 1) * sizeof(int) / 2;
+	msync(*(src->mat), size, MS_SYNC);
+	munmap(*(src->mat), size);
 	free(src->mat);
 	free(src);
 }

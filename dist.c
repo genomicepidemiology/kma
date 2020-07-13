@@ -233,11 +233,11 @@ void kmerSimilarity_thread(HashMapKMA *DB, Matrix *Dist, int *N, int thread_num,
 	el = DB->v_index < UINT_MAX;
 	vs = DB->DB_size < USHRT_MAX;
 	D = Dist->mat;
-	chunk = 1024;
+	chunk = 131072;
 	size = ((DB->size - 1) == DB->mask) ? DB->size : DB->n;
 	
 	/* static init */
-	lock(lock);
+	lockTime(lock, 10);
 	if(!thread_wait) {
 		thread_wait = thread_num;
 		next = 0;
@@ -249,7 +249,7 @@ void kmerSimilarity_thread(HashMapKMA *DB, Matrix *Dist, int *N, int thread_num,
 	/* get values */
 	while(n && chunk) {
 		/* get next chunk */
-		lock(lock);
+		lockTime(lock, 10);
 		pos = next;
 		if(size < (next += chunk)) {
 			next = size;
@@ -337,8 +337,8 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	
 	/* init */
 	D = Dist->mat;
-	chunk = 1048576;
-	lock(lock);
+	chunk = 65536;
+	lockTime(lock, 10);
 	if(!row_bias) {
 		if(format & 4) {
 			row_bias += sprintf(outfile, "# %-35s\n", method);
@@ -361,9 +361,11 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	unlock(lock);
 	
 	while(next_i < Dist->n) {
-		lock(lock);
+		lockTime(lock, 10);
 		/* check for new row */
-		if(next_i <= next_j) {
+		if(Dist->n <= next_i) {
+			chunk = 0;
+		} else if(next_i <= next_j) {
 			i = ++next_i;
 			if(i) {
 				row_bias += (i - 1) * 11;
@@ -404,7 +406,7 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	}
 	
 	/* wait for matrix to finish */
-	lock(lock);
+	lockTime(lock, 10);
 	if(--*thread_wait) {
 		unlock(lock);
 		wait_atomic(*thread_wait);
@@ -466,8 +468,8 @@ void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	
 	/* init */
 	D = Dist->mat;
-	chunk = 1048576;
-	lock(lock);
+	chunk = 65536;
+	lockTime(lock, 10);
 	if(!row_bias) {
 		if(format & 4) {
 			row_bias += sprintf(outfile, "# %-35s\n", method);
@@ -490,9 +492,11 @@ void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	unlock(lock);
 	
 	while(next_i < Dist->n) {
-		lock(lock);
+		lockTime(lock, 10);
 		/* check for new row */
-		if((ltd && next_i <= next_j) || (Dist->n <= next_j)) {
+		if(Dist->n <= next_i) {
+			chunk = 0;
+		} else if((ltd && next_i <= next_j) || (Dist->n <= next_j)) {
 			i = ++next_i;
 			if(i) {
 				row_bias += (ltd ? (i - 1) : Dist->n) * 11;
@@ -557,7 +561,7 @@ void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	}
 	
 	/* wait for matrix to finish */
-	lock(lock);
+	lockTime(lock, 10);
 	if(--*thread_wait) {
 		unlock(lock);
 		wait_atomic(*thread_wait);
@@ -620,7 +624,7 @@ char * mfile(FILE *outfile, long unsigned size) {
 		ERROR();
 	}
 	rewind(outfile);
-	outfileM = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(outfile), 0);
+	outfileM = mmap(0, size, PROT_WRITE, MAP_SHARED, fileno(outfile), 0);
 	if(outfileM == MAP_FAILED) {
 		ERROR();
 	}
@@ -832,7 +836,9 @@ void runDist(char *templatefilename, char *outputfilename, int flag, int format,
 		free(threads);
 		threads = thread;
 	}
-	munmap(outfileM - out_size, out_size);
+	outfileM -= out_size;
+	msync(outfileM, out_size, MS_SYNC);
+	munmap(outfileM, out_size);
 	fclose(outfile);
 	fclose(name_file);
 	free(N);
