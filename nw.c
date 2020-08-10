@@ -68,7 +68,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 			aligned->s[t_len] = 0;
 			memset(aligned->q, 5, t_len);
 			m = t_len;
-			nuc_pos = t_e - 1;
+			nuc_pos = (t_e ? t_e : aligned->pos) - 1;
 			while(m--) {
 				aligned->t[m] = getNuc(template, nuc_pos);
 				if(--nuc_pos < 0) {
@@ -157,7 +157,6 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 		
 		D_ptr[q_len] = (0 < k) ? 0 : (W1 + (t_len - 1 - m) * U);
 		Q_prev = (t_len + q_len) * (MM + U + W1);
-		
 		t_nuc = getNuc(template, nuc_pos);
 		for(n = q_len - 1; n >= 0; --n) {
 			E_ptr[n] = 0;
@@ -344,7 +343,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 			aligned->s[t_len] = 0;
 			memset(aligned->q, 5, t_len);
 			m = t_len;
-			nuc_pos = t_e - 1;
+			nuc_pos = (t_e ? t_e : aligned->pos) - 1;
 			while(m--) {
 				aligned->t[m] = getNuc(template, nuc_pos);
 				if(--nuc_pos < 0) {

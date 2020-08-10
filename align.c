@@ -211,7 +211,6 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	/* get best seed chain, returns best starting point */
 	start = chainSeedsPtr(points, q_len, t_len, kmersize, &aligned->mapQ);
 	score = points->score[start];
-	
 	if(aligned->mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
@@ -342,7 +341,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 				return Stat;
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
-				band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
+				band = 4 * abs(t_l - q_e + q_s) + bandwidth;
 				if(q_e - q_s <= band || t_l <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
 					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
 				} else {
