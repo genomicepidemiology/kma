@@ -544,6 +544,8 @@ int kma_main(int argc, char *argv[]) {
 					} else if(ref_fsa == 0) {
 						ref_fsa = 2;
 					}
+				} else {
+					--args;
 				}
 			} else if(strcmp(argv[args], "-Sparse") == 0) {
 				sparse_run = 1;
