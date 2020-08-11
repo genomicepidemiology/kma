@@ -27,21 +27,16 @@ void printConsensus(Assem *aligned_assem, char *header, FILE *alignment_out, FIL
 	
 	/* print alignment */
 	aln_len = aligned_assem->len;
-	fprintf(alignment_out, "# %s\n", header);
-	for(i = 0; i < aln_len; i += 60) {
-		fprintf(alignment_out, "%-10s\t%.60s\n", "template:", aligned_assem->t + i);
-		fprintf(alignment_out, "%-10s\t%.60s\n", "", aligned_assem->s + i);
-		fprintf(alignment_out, "%-10s\t%.60s\n\n", "query:", aligned_assem->q + i);
-	}
-	
-	/* Prepare consensus */
-	if(ref_fsa) {
-		for(i = 0; i < aln_len; ++i) {
-			if(aligned_assem->q[i] == '-') {
-				aligned_assem->q[i] = 'n';
-			}
+	if(alignment_out) {
+		fprintf(alignment_out, "# %s\n", header);
+		for(i = 0; i < aln_len; i += 60) {
+			fprintf(alignment_out, "%-10s\t%.60s\n", "template:", aligned_assem->t + i);
+			fprintf(alignment_out, "%-10s\t%.60s\n", "", aligned_assem->s + i);
+			fprintf(alignment_out, "%-10s\t%.60s\n\n", "query:", aligned_assem->q + i);
 		}
-	} else {
+	}
+	/* Prepare consensus */
+	if(ref_fsa == 0) {
 		for(i = 0, bias = 0; i < aln_len; ++i, ++bias) {
 			aligned_assem->q[bias] = aligned_assem->q[i];
 			if(aligned_assem->q[i] == '-') {
@@ -50,7 +45,14 @@ void printConsensus(Assem *aligned_assem, char *header, FILE *alignment_out, FIL
 		}
 		aln_len = bias;
 		aligned_assem->q[aln_len] = 0;
+	} else if(ref_fsa == 1) {
+		for(i = 0; i < aln_len; ++i) {
+			if(aligned_assem->q[i] == '-') {
+				aligned_assem->q[i] = 'n';
+			}
+		}
 	}
+	
 	/* Print consensus */
 	fprintf(consensus_out, ">%s\n", header);
 	for(i = 0; i < aln_len; i += 60) {

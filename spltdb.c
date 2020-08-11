@@ -520,6 +520,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		strcat(outputfilename, ".fsa");
 		consensus_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
+	} else if(nc == 2) {
+		alignment_out = 0;
+		strcat(outputfilename, ".fsa");
+		consensus_out = sfopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
 	} else {
 		alignment_out = 0;
 		consensus_out = 0;
@@ -1639,7 +1644,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
-					if(nc == 0) {
+					if(nc != 1) {
 						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 					}
 					/* print matrix */

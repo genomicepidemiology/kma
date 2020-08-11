@@ -123,11 +123,12 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-vcf\t\tMake vcf file, 2 to apply FT\tFalse/0\n");
 	fprintf(helpOut, "#\t-sam\t\tOutput sam to stdout, 4 to \n#\t\t\tonly output mapped reads, \n#\t\t\t2096 for aligned\t\tFalse/0\n");
 	fprintf(helpOut, "#\t-nc\t\tNo consensus file\t\tFalse\n");
+	fprintf(helpOut, "#\t-na\t\tNo aln file\t\tFalse\n");
 	fprintf(helpOut, "#\t-nf\t\tNo frag file\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-deCon\t\tRemove contamination\t\tFalse\n");
 	fprintf(helpOut, "#\t-dense\t\tDo not allow insertions\n#\t\t\tin assembly\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-sasm\t\tSkip alignment and assembly\tFalse\n");
-	fprintf(helpOut, "#\t-ref_fsa\tConsensus sequnce will\n#\t\t\thave \"n\" instead of gaps\tFalse\n");
+	fprintf(helpOut, "#\t-ref_fsa\tConsensus sequnce will\n#\t\t\thave \"n\" instead of gaps\tFalse / 0\n");
 	fprintf(helpOut, "#\t-matrix\t\tPrint assembly matrix\t\tFalse\n");
 	fprintf(helpOut, "#\t-a\t\tPrint all best mappings\t\tFalse\n");
 	fprintf(helpOut, "#\t-mp\t\tMinimum phred score\t\t20\n");
@@ -162,7 +163,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-gapopen\tPenalty for gap opening\t\t-3\n");
 	fprintf(helpOut, "#\t-gapextend\tPenalty for gap extension\t-1\n");
 	fprintf(helpOut, "#\t-per\t\tReward for pairing reads\t7\n");
-	fprintf(helpOut, "#\t-localopen\t\tPenalty for openning a local chain\t-6\n");
+	fprintf(helpOut, "#\t-localopen\tPenalty for openning a local chain\t-6\n");
 	fprintf(helpOut, "#\t-Npenalty\tPenalty matching N\t\t0\n");
 	fprintf(helpOut, "#\t-transition\tPenalty for transition\t\t-2\n");
 	fprintf(helpOut, "#\t-transversion\tPenalty for transversion\t-2\n");
@@ -535,6 +536,15 @@ int kma_main(int argc, char *argv[]) {
 				print_all = 1;
 			} else if(strcmp(argv[args], "-ref_fsa") == 0) {
 				ref_fsa = 1;
+				if(++args < argc && *(argv[args]) != '-') {
+					ref_fsa = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-3p\".\n");
+						exit(4);
+					} else if(ref_fsa == 0) {
+						ref_fsa = 2;
+					}
+				}
 			} else if(strcmp(argv[args], "-Sparse") == 0) {
 				sparse_run = 1;
 			} else if(strcmp(argv[args], "-1t1") == 0) {
@@ -551,7 +561,7 @@ int kma_main(int argc, char *argv[]) {
 					if(*exeBasic != 0 || support < 0 || 1 < support) {
 						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
 						exit(1);
-					} if(support != 1) {
+					} else {
 						/* set proximity parameter */
 						getMatch = &getProxiMatch;
 						getMatchSparse = &getProxiMatchSparse;
@@ -815,6 +825,8 @@ int kma_main(int argc, char *argv[]) {
 				}
 			} else if(strcmp(argv[args], "-nc") == 0) {
 				nc = 1;
+			} else if(strcmp(argv[args], "-na") == 0) {
+				nc = 2;
 			} else if(strcmp(argv[args], "-nf") == 0) {
 				nf = 1;
 			} else if(strcmp(argv[args], "-cge") == 0) {
@@ -886,7 +898,7 @@ int kma_main(int argc, char *argv[]) {
 			}
 		}
 		
-		if(ref_fsa) {
+		if(ref_fsa == 1) {
 			if(baseCall == nanoCaller) {
 				baseCall = &refNanoCaller;
 			} else {
