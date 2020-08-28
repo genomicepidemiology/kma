@@ -1,6 +1,6 @@
 CFLAGS ?= -Wall -O3
 CFLAGS += -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -34,6 +34,7 @@ chain.o: chain.h penalties.h pherror.h stdstat.h
 compdna.o: compdna.h pherror.h stdnuc.h
 compkmers.o: compkmers.h pherror.h
 compress.o: compress.h hashmap.h hashmapkma.h pherror.h valueshash.h
+db.o: db.h hashmapkma.h pherror.h stdstat.h
 decon.o: decon.h compdna.h filebuff.h hashmapkma.h seqparse.h stdnuc.h qseqs.h updateindex.h
 dist.o: dist.h hashmapkma.h matrix.h pherror.h
 ef.o: ef.h assembly.h stdnuc.h vcf.h version.h
