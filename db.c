@@ -162,7 +162,7 @@ void dbInfo(char *filename) {
 	fprintf(stderr, "k-mer co-occurence var:\t%f\n", var);
 	fprintf(stderr, "k-mer co-occurence mean:\t%f\n", mean);
 	fprintf(stderr, "k-mer co-occurence min:\t%d\n", min);
-	fprintf(stderr, "k-mer co-occurence min:\t%d\n", max);
+	fprintf(stderr, "k-mer co-occurence max:\t%d\n", max);
 }
 
 static void helpMessage(int exeStatus) {
