@@ -1633,14 +1633,19 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					q_cover = 100.0 * t_len / aln_len;
 				} else {
 					id = 0;
-					aln_len = 0;
+					q_id = 0;
+					depth = aligned_assem->depth;
+					depth /= t_len;
+					aln_len = aligned_assem->aln_len;
+					cover = 100.0 * aln_len / t_len;
+					q_cover = 0;
 				}
 				
 				if(xml) {
 					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
 				}
 				
-				if(ID_t <= id && 0 < id) {
+				if(ID_t <= id) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);

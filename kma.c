@@ -530,6 +530,7 @@ int kma_main(int argc, char *argv[]) {
 				alnToMatPtr = alnToMatDense;
 			} else if(strcmp(argv[args], "-sasm") == 0) {
 				assembly_KMA_Ptr = &skip_assemble_KMA;
+				ID_t = 0.0;
 			} else if(strcmp(argv[args], "-matrix") == 0) {
 				print_matrix = 1;
 			} else if(strcmp(argv[args], "-a") == 0) {
@@ -635,7 +636,7 @@ int kma_main(int argc, char *argv[]) {
 				if(args < argc) {
 					bcd = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-ID\".\n");
+						fprintf(stderr, "Invalid argument at \"-bcd\".\n");
 						exit(1);
 					}
 				}
