@@ -145,7 +145,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-mmap\t\tMemory map *.comp.by\n");
 	fprintf(helpOut, "#\t-tmp\t\tSet directory for temporary files.\n");
 	fprintf(helpOut, "#\t-1t1\t\tForce end to end mapping\tFalse\n");
-	fprintf(helpOut, "#\t-hmm\t\tUse a HMM to assign template(s)\n#\t\t\tto query sequences\t\tFalse\n");
+	fprintf(helpOut, "#\t-hmm\t\tUse a HMM to assign template(s)\n#\t\t\tto query sequences\t\tTrue\n");
 	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
 	fprintf(helpOut, "#\t-ca\t\tMake circular alignments\tFalse\n");
 	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
