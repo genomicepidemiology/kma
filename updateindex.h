@@ -21,10 +21,10 @@
 #include "compdna.h"
 #include "hashmap.h"
 
-extern int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *);
+extern int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *, Qseqs *);
 extern void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, unsigned **, unsigned **, unsigned **);
-int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths);
-int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths);
+int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header);
+int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header);
 void updateAnnots(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths);
 void updateAnnots_sparse(CompDNA *qseq, int DB_size, int kmerindex, FILE *seq_out, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths);
 void dumpSeq(CompDNA *qseq, int kmerindex, FILE *seq_out);

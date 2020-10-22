@@ -26,9 +26,9 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 
-int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *) = &lengthCheck;;
+int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *, Qseqs *) = &lengthCheck;
 
-int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths) {
+int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header) {
 	
 	int i, j, end, rc, thisKlen, prefix_len, prefix_shifter;
 	long unsigned prefix;
@@ -76,10 +76,10 @@ int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, dou
 	}
 }
 
-int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths) {
+int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header) {
 	
 	static unsigned *Scores_tot = 0, *bestTemplates = 0;
-	int i, j, end, rc;
+	int i, j, end, rc, template;
 	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, *values;
 	double bestQ, thisQ;
 	long unsigned prefix;
@@ -159,26 +159,30 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 	
 	/* get query cov */
 	bestQ = 0;
+	template = 0;
 	for(i = 1; i <= *bestTemplates; ++i) {
 		thisQ = 1.0 * Scores_tot[bestTemplates[i]] / thisKlen;
 		if(bestQ < thisQ) {
 			bestQ = thisQ;
+			template = bestTemplates[i];
 		}
 		Scores_tot[bestTemplates[i]] = 0;
 	}
 	
 	if(bestQ < homQ) {
+		fprintf(stdout, "%s\t%d\t%f\t%d\n", header->seq + 1, DB_size, bestQ, template);
 		return 1;
 	} else {
+		fprintf(stdout, "%s\t%d\t%f\t%d\n", header->seq + 1, template, bestQ, template);
 		return 0;
 	}
 }
 
-int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths) {
+int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header) {
 	
 	static unsigned *Scores = 0, *Scores_tot = 0, *bestTemplates = 0;
 	static HashMap_kmers *foundKmers = 0;
-	int i, j, end, rc;
+	int i, j, end, rc, templateQ, templateT;
 	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, *values;
 	double bestQ, thisQ, bestT, thisT;
 	long unsigned key, prefix;
@@ -270,15 +274,19 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	
 	/* get query cov */
 	bestQ = 0;
+	templateQ = 0;
 	bestT = 0;
+	templateT = 0;
 	for(i = 1; i <= *bestTemplates; ++i) {
 		thisQ = 1.0 * Scores_tot[bestTemplates[i]] / thisKlen;
 		if(thisQ > bestQ) {
 			bestQ = thisQ;
+			templateQ = bestTemplates[i];
 		}
 		thisT = 1.0 * Scores[bestTemplates[i]] / template_ulengths[bestTemplates[i]];
 		if(thisT > bestT) {
 			bestT = thisT;
+			templateT = bestTemplates[i];
 		}
 		Scores_tot[bestTemplates[i]] = 0;
 		Scores[bestTemplates[i]] = 0;
@@ -286,8 +294,14 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	
 	emptyHash(foundKmers);
 	
-	if(cmp(bestT < homT, bestQ < homQ) && thisKlen >= MinKlen) {
-		return 1;
+	if(thisKlen >= MinKlen) {
+		if(cmp(bestT < homT, bestQ < homQ)) {
+			fprintf(stdout, "%s\t%d\t%f\t%d\t%f\t%d\n", header->seq + 1, DB_size, bestQ, templateQ, bestT, templateT);
+			return 1;
+		} else {
+			fprintf(stdout, "%s\t%d\t%f\t%d\t%f\t%d\n", header->seq + 1, (bestT < homT) ? templateQ : templateT, bestQ, templateQ, bestT, templateT);
+			return 0;
+		}
 	} else {
 		return 0;
 	}

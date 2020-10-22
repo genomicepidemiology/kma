@@ -99,7 +99,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 				}
 				bias = compDNAref(compressor, qseq->seq, qseq->len);
 				
-				if(compressor->seqlen > MinLen && update_DB(templates, compressor, templates->DB_size, MinKlen, homQ, homT, *template_ulengths, *template_slengths)) {
+				if(compressor->seqlen > MinLen && update_DB(templates, compressor, templates->DB_size, MinKlen, homQ, homT, *template_ulengths, *template_slengths, header)) {
 					/* Update annots */
 					seq = header->seq + header->len;
 					while(isspace(*--seq)) {

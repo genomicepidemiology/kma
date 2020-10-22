@@ -27,10 +27,10 @@
 #include "stdnuc.h"
 #include "updateindex.h"
 
-int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *) = &updateDBs;
+int (*update_DB)(HashMap *, CompDNA *, unsigned, int, double, double, unsigned *, unsigned *, Qseqs *) = &updateDBs;
 void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, unsigned **, unsigned **, unsigned **) = &updateAnnots;
 
-int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths) {
+int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header) {
 	
 	int i, j, end, shifter;
 	
@@ -57,7 +57,7 @@ int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen,
 	return 1;
 }
 
-int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths) {
+int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header) {
 	
 	int i, j, end, rc, prefix_len, prefix_shifter, shifter;
 	long unsigned prefix;
@@ -71,7 +71,7 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
 	
 	/* test homology and length */
-	if(QualCheck(templates, qseq, MinKlen, homQ, homT, template_ulengths)) {
+	if(QualCheck(templates, qseq, MinKlen, homQ, homT, template_ulengths, header)) {
 		template_slengths[template] = 0;
 		template_ulengths[template] = 0;
 		for(rc = 0; rc < 2; ++rc) {

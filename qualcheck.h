@@ -20,10 +20,10 @@
 #include "compdna.h"
 #include "hashmap.h"
 
-extern int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *);
-int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths);
-int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths);
-int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths);
+extern int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *, Qseqs *);
+int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header);
+int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header);
+int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header);
 void updateScoreAndTemplate(unsigned *Scores_tot, unsigned *bestTemplates, unsigned *values);
 void updateScoreAndTemplateHU(unsigned *Scores_tot, unsigned *bestTemplates, unsigned *values_org);
 void addUscore(unsigned *Scores, unsigned *values);
