@@ -93,7 +93,7 @@ void hashMapCCI_destroy(HashMapCCI *dest) {
 
 int hashMapCCI_get(const HashMapCCI *dest, long unsigned key, unsigned shifter) {
 	
-	unsigned index;
+	long unsigned index;
 	int pos, *chain;
 	
 	/* get hash */
@@ -120,7 +120,7 @@ int hashMapCCI_get(const HashMapCCI *dest, long unsigned key, unsigned shifter) 
 
 int hashMapCCI_get_bound(const HashMapCCI *dest, long unsigned key, int min, int max, unsigned shifter) {
 	
-	unsigned index;
+	long unsigned index;
 	int pos, apos, *chain;
 	
 	/* get hash */
@@ -148,7 +148,7 @@ int hashMapCCI_get_bound(const HashMapCCI *dest, long unsigned key, int min, int
 
 int * hashMapCCI_getDubPos(const HashMapCCI *dest, long unsigned key, int value, unsigned shifter) {
 	
-	unsigned index;
+	long unsigned index;
 	int pos, *chain;
 	
 	/* check input */
@@ -198,8 +198,7 @@ int defragChain(HashMapCCI *dest, int size, int shifter) {
 	/* defragmentize the chains to make space for new chain, return 0 on failure */
 	int newsize, cci_size, pos, newpos, index, fulldefrag;
 	int *newchain, *chain, *next;
-	unsigned ipos;
-	long unsigned kmer;
+	long unsigned ipos, kmer;
 	
 	/* check if chain is available */
 	if(size <= dest->cci_avail) {
@@ -276,7 +275,8 @@ int defragChain(HashMapCCI *dest, int size, int shifter) {
 int newChain(HashMapCCI *dest, int pos, int newpos, long unsigned kmer, int shifter) {
 	
 	/* add new chain to hashmap */
-	int index, *chain;
+	int *chain;
+	unsigned index;
 	
 	if(4 <= dest->cci_avail) {
 		index = dest->cci_next;
@@ -307,7 +307,7 @@ int newChain(HashMapCCI *dest, int pos, int newpos, long unsigned kmer, int shif
 int extendChain(HashMapCCI *dest, int chainpos, int newpos, long unsigned kmer, int shifter) {
 	
 	int pos, dup, size, *chain, *newchain;
-	unsigned index;
+	long unsigned index;
 	
 	pos = chainpos;
 	chain = dest->chain + pos;
@@ -397,7 +397,7 @@ int extendChain(HashMapCCI *dest, int chainpos, int newpos, long unsigned kmer, 
 void hashMapCCI_add(HashMapCCI *dest, long unsigned key, int newpos, unsigned shifter) {
 	
 	int pos, *index_ptr;
-	unsigned index;
+	long unsigned index;
 	
 	if(key == 0) {
 		/* likely undefined region */
@@ -424,7 +424,7 @@ void hashMapCCI_add_thread(HashMapCCI *dest, long unsigned key, int newpos, unsi
 	
 	static volatile int indexLock[1] = {0}, cciLock[1] = {0};
 	int pos, *index_ptr;
-	unsigned index;
+	long unsigned index;
 	
 	if(key == 0) {
 		/* likely undefined region */
@@ -457,7 +457,7 @@ void hashMapCCI_add_thread(HashMapCCI *dest, long unsigned key, int newpos, unsi
 HashMapCCI * hashMapCCI_load(HashMapCCI *src, int seq, int len, int kmersize) {
 	
 	int i, end, shifter;
-	long unsigned size;
+	long size;
 	
 	/* init */
 	if(src == 0) {
@@ -469,7 +469,15 @@ HashMapCCI * hashMapCCI_load(HashMapCCI *src, int seq, int len, int kmersize) {
 	}
 	
 	/* get seq */
-	read(seq, src->seq, ((src->len >> 5) + 1) * sizeof(long unsigned));
+	size = ((src->len >> 5) + 1) * sizeof(long unsigned);
+	if(size != read(seq, src->seq, size)) {
+		if(0 < size) {
+			fprintf(stderr, "Corrupted *.seq.b\n");
+			exit(1);
+		} else {
+			ERROR();
+		}
+	}
 	
 	/* add k-mers */
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (src->kmerindex << 1);
@@ -486,6 +494,7 @@ HashMapCCI * hashMapCCI_load_thread(HashMapCCI *src, int seq, int len, int kmers
 	static volatile int lock[1] = {0}, next = 1, thread_wait = 0;
 	static long unsigned size;
 	int i, end, shifter, chunk;
+	long check;
 	
 	/* init */
 	lock(lock);
@@ -496,7 +505,15 @@ HashMapCCI * hashMapCCI_load_thread(HashMapCCI *src, int seq, int len, int kmers
 		unlock(lock);
 		
 		/* get seq */
-		read(seq, src->seq, ((src->len >> 5) + 1) * sizeof(long unsigned));
+		check = ((src->len >> 5) + 1) * sizeof(long unsigned);
+		if(check != read(seq, src->seq, check)) {
+			if(check < 0) {
+				ERROR();
+			} else {
+				fprintf(stderr, "Corrupted *.seq.b\n");
+				exit(1);
+			}
+		}
 	} else {
 		unlock(lock);
 	}

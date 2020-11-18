@@ -1396,6 +1396,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	seqin_size = 4 * ftell(seq_in);
 	fseek(seq_in, 0, SEEK_SET);
 	seq_in_no = fileno(seq_in);
+	if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
+		ERROR();
+	}
 	templatefilename[file_len] = 0;
 	
 	/* allocate stuff */
@@ -2228,7 +2231,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		thread->bcd = bcd;
 		thread->sam = sam;
 		thread->ef = extendedFeatures;
-		thread->seq_in = fileno(seq_in);
+		thread->seq_in = seq_in_no;
 		thread->kmersize = kmersize;
 		thread->template = -2;
 		thread->file_count = fileCount;
@@ -2292,7 +2295,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	thread->bcd = bcd;
 	thread->sam = sam;
 	thread->ef = extendedFeatures;
-	thread->seq_in = fileno(seq_in);
+	thread->seq_in = seq_in_no;
 	thread->kmersize = kmersize;
 	thread->template = 0;
 	thread->file_count = fileCount;
@@ -2329,7 +2332,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	if(verbose) {
 		fprintf(stderr, "# Template\tScore\tProgress\n");
 	}
-	
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
 			if(progress) {

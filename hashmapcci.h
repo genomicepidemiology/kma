@@ -23,9 +23,9 @@
 #ifndef HASHMAPCCI
 typedef struct hashMapCCI HashMapCCI;
 struct hashMapCCI {
-	unsigned mask;
+	long unsigned mask;
 	unsigned len; // seqlen
-	unsigned size; // size of index
+	long unsigned size; // size of index
 	unsigned kmerindex;
 	int *index; // k-mer posititions in seq / chain
 	int *chain; // k-mer collision positions

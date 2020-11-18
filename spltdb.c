@@ -1541,6 +1541,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	seqin_size = 4 * ftell(seq_in);
 	fseek(seq_in, 0, SEEK_SET);
 	seq_in_no = fileno(seq_in);
+	if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
+		ERROR();
+	}
 	templatefilename[file_len] = 0;
 	strcat(templatefilename, ".name");
 	name_file = sfopen(templatefilename, "rb");
