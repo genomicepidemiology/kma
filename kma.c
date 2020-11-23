@@ -843,6 +843,10 @@ int kma_main(int argc, char *argv[]) {
 				tmp = 1;
 				if(++args < argc) {
 					if(argv[args][0] != '-') {
+						if(argv[args][strlen(argv[args]) - 1] != '/') {
+							fprintf(stderr, "Invalid output directory specified.\n");
+							exit(1);
+						}
 						tmpF(argv[args]);
 						tmp = 0;
 					} else {
