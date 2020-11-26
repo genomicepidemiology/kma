@@ -197,7 +197,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 			
 			/* Update D, match */
 			thisScore = D_prev[n + 1] + d[t_nuc][query[n]];
-			if(D_ptr[n] < thisScore) {
+			if(D_ptr[n] <= thisScore) {
 				D_ptr[n] = thisScore;
 				E_ptr[n] |= 1;
 			} else {
@@ -209,7 +209,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 		
 		E_ptr -= (q_len + 1);
 		
-		if(k < 0 && Stat.score <= *D_ptr) {
+		if(k < 0 && Stat.score < *D_ptr) {
 			Stat.score = *D_ptr;
 			pos[0] = m;
 		}
@@ -229,7 +229,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 		pos[1] = 0;
 		if(k == -2) {
 			for(n = 0; n < q_len; ++n) {
-				if(D_prev[n] > Stat.score) {
+				if(Stat.score <= D_prev[n]) {
 					Stat.score = D_prev[n];
 					pos[0] = 0;
 					pos[1] = (aligned->start = n);
@@ -486,7 +486,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 			
 			/* Update D, match */
 			thisScore = D_prev[n] + d[t_nuc][query[q_pos]];
-			if(D_ptr[n] < thisScore) {
+			if(D_ptr[n] <= thisScore) {
 				D_ptr[n] = thisScore;
 				E_ptr[n] |= 1;
 			} else {
@@ -517,7 +517,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		D_ptr[n] = D_prev[n] + d[t_nuc][query[q_pos]];
 		
 		/* set D to max, and set E */
-		if(Q < D_ptr[n]) {
+		if(Q <= D_ptr[n]) {
 			E_ptr[n] |= 1;
 		} else {
 			D_ptr[n] = Q;
@@ -527,7 +527,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		/* continue as usual */
 		E_ptr -= (bq_len + 1);
 		
-		if(eq == 0 && k < 0 && Stat.score <= D_ptr[n]) {
+		if(eq == 0 && k < 0 && Stat.score < D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
 			pos[1] = n;
@@ -551,7 +551,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	}
 	if(k == -2) {
 		for(n = en; n < bq_len; ++n) {
-			if(D_prev[n] > Stat.score) {
+			if(Stat.score <= D_prev[n]) {
 				Stat.score = D_prev[n];
 				pos[0] = 0;
 				pos[1] = n;
@@ -776,7 +776,7 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 			
 			/* Update D, match */
 			thisScore = D_prev[n + 1] + d[t_nuc][query[n]];
-			if(D_ptr[n] < thisScore) {
+			if(D_ptr[n] <= thisScore) {
 				D_ptr[n] = thisScore;
 				E_ptr[n] |= 1;
 			} else {
@@ -788,7 +788,7 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 		
 		E_ptr -= (q_len + 1);
 		
-		if(k < 0 && Stat.score <= *D_ptr) {
+		if(k < 0 && Stat.score < *D_ptr) {
 			Stat.score = *D_ptr;
 			pos[0] = m;
 		}
@@ -808,7 +808,7 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 		pos[1] = 0;
 		if(k == -2) {
 			for(n = 0; n < q_len; ++n) {
-				if(D_prev[n] > Stat.score) {
+				if(Stat.score <= D_prev[n]) {
 					Stat.score = D_prev[n];
 					pos[0] = 0;
 					pos[1] = n;
@@ -1030,7 +1030,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 			
 			/* Update D, match */
 			thisScore = D_prev[n] + d[t_nuc][query[q_pos]];
-			if(D_ptr[n] < thisScore) {
+			if(D_ptr[n] <= thisScore) {
 				D_ptr[n] = thisScore;
 				E_ptr[n] |= 1;
 			} else {
@@ -1061,7 +1061,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 		D_ptr[n] = D_prev[n] + d[t_nuc][query[q_pos]];
 		
 		/* set D to max, and set E */
-		if(Q < D_ptr[n]) {
+		if(Q <= D_ptr[n]) {
 			E_ptr[n] |= 1;
 		} else {
 			D_ptr[n] = Q;
@@ -1071,7 +1071,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 		/* continue as usual */
 		E_ptr -= (bq_len + 1);
 		
-		if(eq == 0 && k < 0 && Stat.score <= D_ptr[n]) {
+		if(eq == 0 && k < 0 && Stat.score < D_ptr[n]) {
 			Stat.score = D_ptr[n];
 			pos[0] = m;
 			pos[1] = n;
@@ -1095,7 +1095,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	}
 	if(k == -2) {
 		for(n = en; n < bq_len; ++n) {
-			if(D_prev[n] > Stat.score) {
+			if(Stat.score <= D_prev[n]) {
 				Stat.score = D_prev[n];
 				pos[0] = 0;
 				pos[1] = n;

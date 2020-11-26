@@ -540,7 +540,7 @@ int kma_main(int argc, char *argv[]) {
 				if(++args < argc && *(argv[args]) != '-') {
 					ref_fsa = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-3p\".\n");
+						fprintf(stderr, "Invalid argument at \"-ref_fsa\".\n");
 						exit(4);
 					} else if(ref_fsa == 0) {
 						ref_fsa = 2;
@@ -785,7 +785,7 @@ int kma_main(int argc, char *argv[]) {
 					++args;
 					extendedFeatures = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
+						fprintf(stderr, "Invalid argument at \"-ef\".\n");
 						exit(1);
 					}
 				} else {
@@ -868,6 +868,50 @@ int kma_main(int argc, char *argv[]) {
 					verbose = 1;
 					--args;
 				}
+			} else if(strcmp(argv[args], "-mint2") == 0) {
+				/* equivalent to:
+				-1t1, -mem_mode, -ca, -cge, -mq 1, -ref_fsa 2, -dense, 
+				-bcg, -bcd 10, -bc 0.9 -vcf -ef */
+				kmerScan = &save_kmers;
+				one2one = 1;
+				mem_mode = 1;
+				alignLoadPtr = &alignLoad_fly_mem;
+				ankerPtr = &ankerAndClean_MEM;
+				chainSeedsPtr = &chainSeeds_circular;
+				scoreT = 0.75;
+				rewards->M = 1;
+				rewards->MM = -3;
+				rewards->W1 = -5;
+				rewards->U = -1;
+				rewards->PE = 17;
+				mq = 1;
+				ref_fsa = 2;
+				alnToMatPtr = alnToMatDense;
+				baseCall = &orgBaseCaller;
+				bcd = 10;
+				significantBase = &significantAndSupport;
+				significantAndSupport(0, 0, 0.9);
+				vcf = 1;
+				extendedFeatures = 1;
+			} else if(strcmp(argv[args], "-mint3") == 0) {
+				/* equivalent to:
+				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa, -dense, 
+				-bcNano, -bcd 10 -bc 0.7  -vcf -ef */
+				kmerScan = &save_kmers;
+				one2one = 1;
+				mem_mode = 1;
+				alignLoadPtr = &alignLoad_fly_mem;
+				ankerPtr = &ankerAndClean_MEM;
+				chainSeedsPtr = &chainSeeds_circular;
+				mq = 1;
+				ref_fsa = 2;
+				alnToMatPtr = alnToMatDense;
+				baseCall = &nanoCaller;
+				bcd = 10;
+				significantBase = &significantAndSupport;
+				significantAndSupport(0, 0, 0.7);
+				vcf = 1;
+				extendedFeatures = 1;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
