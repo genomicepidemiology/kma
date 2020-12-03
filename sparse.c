@@ -226,9 +226,9 @@ void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, C
 	}
 }
 
-void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int kmersize, char *trans, FILE *out) {
+void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int kmersize, char *trans, const double *prob, FILE *out) {
 	
-	int FASTQ, fileCounter, phredCut, start, end;
+	int FASTQ, fileCounter, phredScale, phredCut, start, end;
 	char *filename;
 	unsigned char *seq;
 	Qseqs *qseq, *qual;
@@ -254,9 +254,9 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 		Kmers->n = 0;
 		if(FASTQ & 1) {
 			/* get phred scale */
-			phredCut = getPhredFileBuff(inputfile);
-			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
-			phredCut += minPhred;
+			phredScale = getPhredFileBuff(inputfile);
+			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
+			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			while(FileBuffgetFqSeq(inputfile, qseq, qual, trans)) {
@@ -275,7 +275,7 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 				qseq->len = end - start;
 				
 				/* print */
-				if(qseq->len > kmersize) {
+				if(qseq->len > kmersize && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
 					/* translate to kmers */
 					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq + start, qseq->len, kmersize, templates->mask, templates->prefix, templates->prefix_len, out);
 				}

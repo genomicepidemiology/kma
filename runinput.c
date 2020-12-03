@@ -24,13 +24,14 @@
 #include "runinput.h"
 #include "qseqs.h"
 #include "seqparse.h"
+#include "stdstat.h"
 
 void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
 void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int minlen, char *trans, FILE *out) {
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
 	
-	int fileCounter, phredCut, start, end;
+	int fileCounter, phredScale, phredCut, start, end;
 	unsigned FASTQ;
 	long unsigned count;
 	char *filename;
@@ -58,9 +59,9 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 		/* parse the file */
 		if(FASTQ & 1) {
 			/* get phred scale */
-			phredCut = getPhredFileBuff(inputfile);
-			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
-			phredCut += minPhred;
+			phredScale = getPhredFileBuff(inputfile);
+			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
+			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			while(FileBuffgetFq(inputfile, header, qseq, qual, trans)) {
@@ -85,7 +86,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 				*/
 				qseq->len = end - start;
 				/* print */
-				if(qseq->len > minlen) {
+				if(qseq->len > minlen && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
 					/* dump seq */
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
@@ -134,13 +135,14 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int five
 	return count;
 }
 
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int minlen, char *trans, FILE *out) {
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
 	
-	int fileCounter, phredCut, start, start2, end;
+	int fileCounter, phredScale, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
 	long unsigned count;
 	char *filename;
 	unsigned char *seq;
+	double eq1, eq2;
 	Qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	FileBuff *inputfile, *inputfile2;
 	CompDNA *compressor;
@@ -179,12 +181,12 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 		/* parse the file */
 		if(FASTQ & 1) {
 			/* get phred scale */
-			phredCut = getPhredFileBuff(inputfile);
-			if(phredCut == 0) {
-				phredCut = getPhredFileBuff(inputfile2);
+			phredScale = getPhredFileBuff(inputfile);
+			if(phredScale == 0) {
+				phredScale = getPhredFileBuff(inputfile2);
 			}
-			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
-			phredCut += minPhred;
+			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
+			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			//while(FileBuffgetFq(inputfile, header, qseq, qual) && FileBuffgetFq(inputfile2, header2, qseq2, qual2)) {
@@ -210,6 +212,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				}
 				*/
 				qseq->len = end - start;
+				eq1 = eQual(seq + start, qseq->len, minQ, prob - phredScale);
 				
 				/* trim reverse */
 				seq = qual2->seq;
@@ -230,21 +233,22 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 				}
 				*/
 				qseq2->len = end - start2;
+				eq2 = eQual(seq + start2, qseq2->len, minQ, prob - phredScale);
 				
 				/* print */
-				if(qseq->len > minlen && qseq2->len > minlen) {
+				if(qseq->len > minlen && qseq2->len > minlen && minQ <= eq1 && minQ <= eq2) {
 					qseq->seq += start;
 					qseq2->seq += start2;
 					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
-				} else if(qseq->len > minlen) {
+				} else if(qseq->len > minlen && minQ <= eq1) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
-				} else if(qseq2->len > minlen) {
+				} else if(qseq2->len > minlen && minQ <= eq2) {
 					qseq2->seq += start2;
 					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;
@@ -328,13 +332,14 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int f
 	return count;
 }
 
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int fiveClip, int threeClip, int minlen, char *trans, FILE *out) {
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
 	
-	int fileCounter, phredCut, start, start2, end;
+	int fileCounter, phredScale, phredCut, start, start2, end;
 	unsigned FASTQ;
 	long unsigned count;
 	char *filename;
 	unsigned char *seq;
+	double eq1, eq2;
 	Qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	FileBuff *inputfile;
 	CompDNA *compressor;
@@ -365,9 +370,9 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 		/* parse the file */
 		if(FASTQ & 1) {
 			/* get phred scale */
-			phredCut = getPhredFileBuff(inputfile);
-			fprintf(stderr, "# Phred scale:\t%d\n", phredCut);
-			phredCut += minPhred;
+			phredScale = getPhredFileBuff(inputfile);
+			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
+			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile, header2, qseq2, qual2, trans))) {
@@ -391,6 +396,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				}
 				*/
 				qseq->len = end - start;
+				eq1 = eQual(seq + start, qseq->len, minQ, prob - phredScale);
 				
 				/* trim reverse */
 				seq = qual2->seq;
@@ -411,21 +417,22 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				}
 				*/
 				qseq2->len = end - start2;
+				eq2 = eQual(seq + start2, qseq2->len, minQ, prob - phredScale);
 				
 				/* print */
-				if(qseq->len > minlen && qseq2->len > minlen) {
+				if(qseq->len > minlen && qseq2->len > minlen && minQ <= eq1 && minQ <= eq2) {
 					qseq->seq += start;
 					qseq2->seq += start2;
 					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
 					qseq->seq -= start;
 					qseq2->seq -= start2;
 					++count;
-				} else if(qseq->len > minlen) {
+				} else if(qseq->len > minlen && minQ <= eq1) {
 					qseq->seq += start;
 					printFsa_ptr(header, qseq, compressor, out);
 					qseq->seq -= start;
 					++count;
-				} else if(qseq2->len > minlen) {
+				} else if(qseq2->len > minlen && minQ <= eq2) {
 					qseq2->seq += start2;
 					printFsa_ptr(header2, qseq2, compressor, out);
 					qseq2->seq -= start2;

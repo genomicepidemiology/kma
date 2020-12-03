@@ -132,6 +132,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-matrix\t\tPrint assembly matrix\t\tFalse\n");
 	fprintf(helpOut, "#\t-a\t\tPrint all best mappings\t\tFalse\n");
 	fprintf(helpOut, "#\t-mp\t\tMinimum phred score\t\t20\n");
+	fprintf(helpOut, "#\t-eq\t\tMinimum avg. quality score\t0\n");
 	fprintf(helpOut, "#\t-5p\t\tCut a constant number of\n#\t\t\tnucleotides from the 5 prime.\t0\n");
 	fprintf(helpOut, "#\t-3p\t\tCut a constant number of\n#\t\t\tnucleotides from the 3 prime.\t0\n");
 	fprintf(helpOut, "#\t-Sparse\t\tOnly count kmers\t\tFalse\n");
@@ -180,11 +181,28 @@ static void helpMessage(int exeStatus) {
 
 int kma_main(int argc, char *argv[]) {
 	
-	static int minPhred, fiveClip, threeClip, ConClave, mem_mode, sparse_run;
+	static const double prob[128] = {
+		1.0000000000000000, 0.7943282347242815, 0.6309573444801932, 0.5011872336272722, 0.3981071705534972, 0.3162277660168379, 0.2511886431509580, 0.1995262314968880,
+		0.1584893192461113, 0.1258925411794167, 0.1000000000000000, 0.0794328234724281, 0.0630957344480193, 0.0501187233627272, 0.0398107170553497, 0.0316227766016838,
+		0.0251188643150958, 0.0199526231496888, 0.0158489319246111, 0.0125892541179417, 0.0100000000000000, 0.0079432823472428, 0.0063095734448019, 0.0050118723362727,
+		0.0039810717055350, 0.0031622776601684, 0.0025118864315096, 0.0019952623149689, 0.0015848931924611, 0.0012589254117942, 0.0010000000000000, 0.0007943282347243,
+		0.0006309573444802, 0.0005011872336273, 0.0003981071705535, 0.0003162277660168, 0.0002511886431510, 0.0001995262314969, 0.0001584893192461, 0.0001258925411794,
+		0.0001000000000000, 0.0000794328234724, 0.0000630957344480, 0.0000501187233627, 0.0000398107170553, 0.0000316227766017, 0.0000251188643151, 0.0000199526231497,
+		0.0000158489319246, 0.0000125892541179, 0.0000100000000000, 0.0000079432823472, 0.0000063095734448, 0.0000050118723363, 0.0000039810717055, 0.0000031622776602,
+		0.0000025118864315, 0.0000019952623150, 0.0000015848931925, 0.0000012589254118, 0.0000010000000000, 0.0000007943282347, 0.0000006309573445, 0.0000005011872336,
+		0.0000003981071706, 0.0000003162277660, 0.0000002511886432, 0.0000001995262315, 0.0000001584893192, 0.0000001258925412, 0.0000001000000000, 0.0000000794328235,
+		0.0000000630957344, 0.0000000501187234, 0.0000000398107171, 0.0000000316227766, 0.0000000251188643, 0.0000000199526231, 0.0000000158489319, 0.0000000125892541,
+		0.0000000100000000, 0.0000000079432823, 0.0000000063095734, 0.0000000050118723, 0.0000000039810717, 0.0000000031622777, 0.0000000025118864, 0.0000000019952623,
+		0.0000000015848932, 0.0000000012589254, 0.0000000010000000, 0.0000000007943282, 0.0000000006309573, 0.0000000005011872, 0.0000000003981072, 0.0000000003162278,
+		0.0000000002511886, 0.0000000001995262, 0.0000000001584893, 0.0000000001258925, 0.0000000001000000, 0.0000000000794328, 0.0000000000630957, 0.0000000000501187,
+		0.0000000000398107, 0.0000000000316228, 0.0000000000251189, 0.0000000000199526, 0.0000000000158489, 0.0000000000125893, 0.0000000000100000, 0.0000000000079433,
+		0.0000000000063096, 0.0000000000050119, 0.0000000000039811, 0.0000000000031623, 0.0000000000025119, 0.0000000000019953, 0.0000000000015849, 0.0000000000012589,
+		0.0000000000010000, 0.0000000000007943, 0.0000000000006310, 0.0000000000005012, 0.0000000000003981, 0.0000000000003162, 0.0000000000002512, 0.0000000000001995};
+	static int minPhred, minQ, fiveClip, threeClip, ConClave, mem_mode;
 	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, minlen;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int **d, status = 0;
+	static int sparse_run, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
@@ -220,6 +238,7 @@ int kma_main(int argc, char *argv[]) {
 		spltDB = 0;
 		extendedFeatures = 0;
 		minPhred = 20;
+		minQ = 0;
 		fiveClip = 0;
 		threeClip = 0;
 		sparse_run = 0;
@@ -496,6 +515,15 @@ int kma_main(int argc, char *argv[]) {
 					minPhred = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid minimum phred score parsed\n");
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-eq") == 0) {
+				++args;
+				if(args < argc) {
+					minQ = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "# Invalid average quality score parsed\n");
 						exit(1);
 					}
 				}
@@ -896,7 +924,7 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-mint3") == 0) {
 				/* equivalent to:
 				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa, -dense, 
-				-bcNano, -bcd 10 -bc 0.7  -vcf -ef */
+				-bcNano, -bcd 10, -bc 0.7, -vcf -ef */
 				kmerScan = &save_kmers;
 				one2one = 1;
 				mem_mode = 1;
@@ -1193,7 +1221,7 @@ int kma_main(int argc, char *argv[]) {
 				fprintf(stderr, "Interleaved information is not considered in Sparse mode.\n");
 			}
 			
-			run_input_sparse(templates, inputfiles, fileCounter, minPhred, fiveClip, threeClip, kmersize, to2Bit, ioStream);
+			run_input_sparse(templates, inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, kmersize, to2Bit, prob, ioStream);
 			hashMapKMA_destroy(templates);
 			free(myTemplatefilename);
 		} else {
@@ -1215,17 +1243,17 @@ int kma_main(int argc, char *argv[]) {
 			
 			/* SE */
 			if(fileCounter > 0) {
-				totFrags += run_input(inputfiles, fileCounter, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
+				totFrags += run_input(inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
 			
 			/* PE */
 			if(fileCounter_PE > 0) {
-				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
+				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
 			
 			/* INT */
 			if(fileCounter_INT > 0) {
-				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, fiveClip, threeClip, minlen, to2Bit, ioStream);
+				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
 			
 			status |= errno;
