@@ -98,6 +98,7 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 
 void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size) {
 	
+	fprintf(stdout, "@HD\tVN:1.6\tGO:reference\n");
 	while(--DB_size) {
 		fprintf(stdout, "@SQ\tSN:%s\tLN:%d\n", nameLoad(template_name, name_file), *++template_lengths);
 	}
