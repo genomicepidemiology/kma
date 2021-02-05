@@ -200,6 +200,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	} else {
 		Stat.score = 0;
 		Stat.len = 1;
+		Stat.match = 0;
 		Stat.gaps = 0;
 		Stat.pos = 0;
 		aligned->s[0] = 0;
@@ -214,6 +215,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	if(aligned->mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
+		Stat.match = 0;
 		Stat.gaps = 0;
 		Stat.pos = 0;
 		aligned->s[0] = 0;
@@ -225,6 +227,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	/* initialize */
 	Stat.len = 0;
 	Stat.score = 0;
+	Stat.match = 0;
 	Stat.gaps = 0;
 	value = points->tStart[start] - 1;
 	Stat.pos = value;
@@ -278,6 +281,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 			Stat.pos -= (NWstat.len - NWstat.gaps);
 			Stat.score = NWstat.score;
 			Stat.len = NWstat.len;
+			Stat.match = NWstat.match;
 			Stat.gaps = NWstat.gaps;
 		} else {
 			aligned->start = q_s;
@@ -294,6 +298,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 		memset(aligned->s + Stat.len, '|', end);
 		memcpy(aligned->q + Stat.len, qseq + q_s, end);
 		Stat.len += end;
+		Stat.match += end;
 		end = points->qEnd[start];
 		for(i = points->qStart[start]; i < end; ++i) {
 			nuc = qseq[i];
@@ -334,6 +339,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 				/* gap is too big to give a positive score */
 				Stat.score = 0;
 				Stat.len = 1;
+				Stat.match = 0;
 				Stat.gaps = 0;
 				aligned->s[0] = 0;
 				aligned->len = 0;
@@ -354,6 +360,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 				memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
 				Stat.score += NWstat.score;
 				Stat.len += NWstat.len;
+				Stat.match += NWstat.match;
 				Stat.gaps += NWstat.gaps;
 			}
 		} else {
@@ -410,6 +417,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 		memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
+		Stat.match += NWstat.match;
 		Stat.gaps += NWstat.gaps;
 	} else {
 		Frag_align->end = 0;
@@ -560,6 +568,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	} else {
 		Stat.score = 0;
 		Stat.len = 1;
+		Stat.match = 0;
 		Stat.gaps = 0;
 		Stat.pos = 0;
 		points->len = 0;
@@ -574,6 +583,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	if(mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
+		Stat.match = 0;
 		Stat.gaps = 0;
 		Stat.pos = 0;
 		points->len = 0;
@@ -583,6 +593,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	/* initialize */
 	Stat.len = 0;
 	Stat.score = 0;
+	Stat.match = 0;
 	Stat.gaps = 0;
 	value = points->tStart[start] - 1;
 	Stat.pos = value;
@@ -615,6 +626,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 			Stat.pos -= (NWstat.len - NWstat.gaps);
 			Stat.score = NWstat.score;
 			Stat.len = NWstat.len;
+			Stat.match = NWstat.match;
 			Stat.gaps = NWstat.gaps;
 		}
 	}
@@ -626,6 +638,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		q_s = points->qStart[start];
 		end = points->qEnd[start] - q_s;
 		Stat.len += end;
+		Stat.match += end;
 		end = points->qEnd[start];
 		for(i = points->qStart[start]; i < end; ++i) {
 			nuc = qseq[i];
@@ -665,6 +678,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				/* gap is too big to give a positive score */
 				Stat.score = 0;
 				Stat.len = 1;
+				Stat.match = 0;
 				Stat.gaps = 0;
 				points->len = 0;
 				return Stat;
@@ -678,6 +692,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				}
 				Stat.score += NWstat.score;
 				Stat.len += NWstat.len;
+				Stat.match += NWstat.match;
 				Stat.gaps += NWstat.gaps;
 			}
 		} else {
@@ -711,6 +726,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		}
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
+		Stat.match += NWstat.match;
 		Stat.gaps += NWstat.gaps;
 	}
 	points->len = 0;

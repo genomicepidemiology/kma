@@ -158,7 +158,8 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
 	fprintf(helpOut, "#\t-mq\t\tMinimum mapping quality\t\t0\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t0.50\n");
-	fprintf(helpOut, "#\t-mct\t\tMax overlap between templates\t0.50\n");
+	fprintf(helpOut, "#\t-mrc\t\tMinimum read coverage\t\t0.10\n");
+	fprintf(helpOut, "#\t-mct\t\tMax overlap between templates\t0.10\n");
 	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t1\n");
 	fprintf(helpOut, "#\t-penalty\tPenalty for mismatch\t\t-2\n");
 	fprintf(helpOut, "#\t-gapopen\tPenalty for gap opening\t\t-3\n");
@@ -206,7 +207,7 @@ int kma_main(int argc, char *argv[]) {
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
-	static double ID_t, scoreT, coverT, evalue;
+	static double ID_t, scoreT, coverT, mrc, evalue;
 	static Penalties *rewards;
 	int i, j, args, exe_len, fileCount, size, escape, tmp, step1, step2;
 	unsigned totFrags;
@@ -258,7 +259,8 @@ int kma_main(int argc, char *argv[]) {
 		mq = 0;
 		bcd = 1;
 		scoreT = 0.5;
-		coverT = 0.5;
+		coverT = 0.1;
+		mrc = 0.1;
 		ID_t = 1.0;
 		one2one = 0;
 		ss = 'q';
@@ -683,6 +685,15 @@ int kma_main(int argc, char *argv[]) {
 					scoreT = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-mrs\".\n");
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-mrc") == 0) {
+				++args;
+				if(args < argc) {
+					mrc = strtod(argv[args], &exeBasic);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-mrc\".\n");
 						exit(1);
 					}
 				}
@@ -1274,7 +1285,7 @@ int kma_main(int argc, char *argv[]) {
 	} else if(Mt1) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, xml, sam, nc, nf, thread_num);
+		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, mrc, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, xml, sam, nc, nf, thread_num);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else if(step2) {
@@ -1293,11 +1304,11 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else if(mem_mode) {
-			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

@@ -283,7 +283,7 @@ void * assemble_KMA_threaded(void *arg) {
 	long unsigned depth, depthVar;
 	short unsigned *counts;
 	const char bases[6] = "ACGTN-";
-	double score, scoreT, evalue;
+	double score, scoreT, mrc, evalue;
 	unsigned char bestNuc;
 	FILE **files, *file, *xml_out;
 	AlnScore alnStat;
@@ -314,6 +314,7 @@ void * assemble_KMA_threaded(void *arg) {
 	mq = thread->mq;
 	minlen = thread->minlen;
 	scoreT = thread->scoreT;
+	mrc = thread->mrc;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
 	sam = thread->sam;
@@ -433,9 +434,9 @@ void * assemble_KMA_threaded(void *arg) {
 						start = alnStat.pos;
 						end = start + aln_len - alnStat.gaps;
 						
-						/* Get normed score */
+						/* Get normed score check read coverage */
 						read_score = alnStat.score;
-						if(minlen <= aln_len) {
+						if(minlen <= aln_len && ((t_len < qseq->len) ? mrc * t_len : mrc * qseq->len) <= alnStat.match) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							read_score = 0;
@@ -781,7 +782,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	long unsigned depth, depthVar;
 	short unsigned *counts;
 	const char bases[6] = "ACGTN-";
-	double score, scoreT, evalue;
+	double score, scoreT, mrc, evalue;
 	unsigned char bestNuc;
 	FILE **files, *file, *xml_out;
 	AlnScore alnStat;
@@ -812,6 +813,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 	mq = thread->mq;
 	minlen = thread->minlen;
 	scoreT = thread->scoreT;
+	mrc = thread->mrc;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
 	sam = thread->sam;
@@ -986,9 +988,9 @@ void * assemble_KMA_dense_threaded(void *arg) {
 						start = alnStat.pos;
 						end = start + aln_len - alnStat.gaps;
 						
-						/* Get normed score */
+						/* Get normed score check read coverage */
 						read_score = alnStat.score;
-						if(minlen <= aln_len) {
+						if(minlen <= aln_len && ((t_len < qseq->len) ? mrc * t_len : mrc * qseq->len) <= alnStat.match) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							read_score = 0;
@@ -1622,7 +1624,7 @@ void * assemble_KMA(void *arg) {
 	int thread_num, mq, bcd, start, end, q_start, q_end;
 	int stats[5], buffer[8], *qBoundPtr;
 	short unsigned *counts;
-	double score, scoreT, evalue;
+	double score, scoreT, mrc, evalue;
 	long double var, nucHighVar;
 	char *s, *s_next;
 	unsigned char *t, *q, *t_next, *q_next;
@@ -1654,6 +1656,7 @@ void * assemble_KMA(void *arg) {
 	delta = qseq->size;
 	mq = thread->mq;
 	minlen = thread->minlen;
+	mrc = thread->mrc;
 	scoreT = thread->scoreT;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
@@ -1857,9 +1860,9 @@ void * assemble_KMA(void *arg) {
 						start = alnStat.pos;
 						end = start + aln_len - alnStat.gaps;
 						
-						/* Get normed score */
+						/* Get normed score check read coverage */
 						read_score = alnStat.score;
-						if(minlen <= aln_len) {
+						if(minlen <= aln_len && ((t_len < qseq->len) ? mrc * t_len : mrc * qseq->len) <= alnStat.match) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							read_score = 0;

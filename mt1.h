@@ -24,4 +24,4 @@
 
 void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out);
 void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out);
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num);
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num);

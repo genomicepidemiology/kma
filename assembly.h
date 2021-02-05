@@ -79,6 +79,7 @@ struct assemble_thread {
 	int kmersize;
 	int thread_num;
 	double scoreT;
+	double mrc;
 	double evalue;
 	char *template_name;
 	FILE **files;

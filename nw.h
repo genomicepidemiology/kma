@@ -37,6 +37,7 @@ struct alnScore {
 	int score;
 	int len;
 	int pos;
+	int match;
 	int gaps;
 };
 

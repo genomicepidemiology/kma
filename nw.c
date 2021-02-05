@@ -49,11 +49,13 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
 			Stat.len = 0;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = 0;
 			aligned->s[0] = 0;
 		} else if(t_len == 0) {
 			Stat.len = q_len;
+			Stat.match = 0;
 			Stat.gaps = q_len;
 			Stat.score = W1 + (q_len - 1) * U;
 			memset(aligned->s, '_', q_len);
@@ -62,6 +64,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 			memcpy(aligned->q, query, q_len);
 		} else {
 			Stat.len = t_len;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = W1 + (t_len - 1) * U;
 			memset(aligned->s, '_', t_len);
@@ -248,6 +251,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	E_ptr = E + (m * (q_len + 1));
 	nuc_pos = m + t_s;
 	Stat.len = 0;
+	Stat.match = 0;
 	Stat.gaps = 0;
 	while(E_ptr[n] != 0) {
 		if(nuc_pos == template_length) {
@@ -257,6 +261,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 			aligned->t[Stat.len] = getNuc(template, nuc_pos);
 			aligned->q[Stat.len] = query[n];
 			aligned->s[Stat.len] = (aligned->t[Stat.len] == aligned->q[Stat.len]) ? '|' : '_';
+			++Stat.match;
 			++nuc_pos;
 			E_ptr += (q_len + 1);
 			++n;
@@ -324,11 +329,13 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
 			Stat.len = 0;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = 0;
 			aligned->s[0] = 0;
 		} else if(t_len == 0) {
 			Stat.len = q_len;
+			Stat.match = 0;
 			Stat.gaps = q_len;
 			Stat.score = W1 + (q_len - 1) * U;
 			memset(aligned->s, '_', q_len);
@@ -337,6 +344,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 			memcpy(aligned->q, query, q_len);
 		} else {
 			Stat.len = t_len;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = W1 + (t_len - 1) * U;
 			memset(aligned->s, '_', t_len);
@@ -567,6 +575,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	E_ptr = E + (m * (bq_len + 1));
 	nuc_pos = m + t_s;
 	Stat.len = 0;
+	Stat.match = 0;
 	Stat.gaps = 0;
 	while(E_ptr[n] != 0) {
 		if(nuc_pos == template_length) {
@@ -576,6 +585,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 			aligned->t[Stat.len] = getNuc(template, nuc_pos);
 			aligned->q[Stat.len] = query[q_pos];
 			aligned->s[Stat.len] = (aligned->t[Stat.len] == aligned->q[Stat.len]) ? '|' : '_';
+			++Stat.match;
 			++nuc_pos;
 			E_ptr += (bq_len + 1);
 			++q_pos;
@@ -643,14 +653,17 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
 			Stat.len = 0;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = 0;
 		} else if(t_len == 0) {
 			Stat.len = q_len;
+			Stat.match = 0;
 			Stat.gaps = q_len;
 			Stat.score = W1 + (q_len - 1) * U;
 		} else {
 			Stat.len = t_len;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = W1 + (t_len - 1) * U;
 		}
@@ -827,12 +840,14 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 	n = pos[1];
 	nuc_pos = m + t_s;
 	Stat.len = 0;
+	Stat.match = 0;
 	Stat.gaps = 0;
 	while(E_ptr[n] != 0) {
 		if(nuc_pos == template_length) {
 			nuc_pos = 0;
 		}
 		if((E_ptr[n] & 7) == 1) {
+			++Stat.match;
 			++nuc_pos;
 			E_ptr += (q_len + 1);
 			++n;
@@ -883,14 +898,17 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
 			Stat.len = 0;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = 0;
 		} else if(t_len == 0) {
 			Stat.len = q_len;
+			Stat.match = 0;
 			Stat.gaps = q_len;
 			Stat.score = W1 + (q_len - 1) * U;
 		} else {
 			Stat.len = t_len;
+			Stat.match = 0;
 			Stat.gaps = 0;
 			Stat.score = W1 + (t_len - 1) * U;
 		}
@@ -1110,12 +1128,14 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	E_ptr = E + (m * (bq_len + 1));
 	nuc_pos = m + t_s;
 	Stat.len = 0;
+	Stat.match = 0;
 	Stat.gaps = 0;
 	while(E_ptr[n] != 0) {
 		if(nuc_pos == template_length) {
 			nuc_pos = 0;
 		}
 		if((E_ptr[n] & 7) == 1) {
+			++Stat.match;
 			++nuc_pos;
 			E_ptr += (bq_len + 1);
 			++q_pos;
