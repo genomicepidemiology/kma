@@ -201,7 +201,8 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.match = 0;
-		Stat.gaps = 0;
+		Stat.tGaps = 0;
+		Stat.qGaps = 0;
 		Stat.pos = 0;
 		aligned->s[0] = 0;
 		aligned->len = 0;
@@ -216,7 +217,8 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.match = 0;
-		Stat.gaps = 0;
+		Stat.tGaps = 0;
+		Stat.qGaps = 0;
 		Stat.pos = 0;
 		aligned->s[0] = 0;
 		aligned->len = 0;
@@ -228,7 +230,8 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	Stat.len = 0;
 	Stat.score = 0;
 	Stat.match = 0;
-	Stat.gaps = 0;
+	Stat.tGaps = 0;
+	Stat.qGaps = 0;
 	value = points->tStart[start] - 1;
 	Stat.pos = value;
 	i = points->qStart[start];
@@ -263,8 +266,10 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 			if(t_s == 0) {
 				while(bias < NWstat.len && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
 					if(Frag_align->t[bias] == 5) {
-						--NWstat.gaps;
+						--NWstat.tGaps;
 						++(Frag_align->start);
+					} else {
+						--NWstat.qGaps;
 					}
 					++bias;
 				}
@@ -278,11 +283,12 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 			memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
 			memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
 			aligned->start = q_s + Frag_align->start;
-			Stat.pos -= (NWstat.len - NWstat.gaps);
+			Stat.pos -= (NWstat.len - NWstat.tGaps);
 			Stat.score = NWstat.score;
 			Stat.len = NWstat.len;
 			Stat.match = NWstat.match;
-			Stat.gaps = NWstat.gaps;
+			Stat.tGaps = NWstat.tGaps;
+			Stat.qGaps = NWstat.qGaps;
 		} else {
 			aligned->start = q_s;
 		}
@@ -340,7 +346,8 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 				Stat.score = 0;
 				Stat.len = 1;
 				Stat.match = 0;
-				Stat.gaps = 0;
+				Stat.tGaps = 0;
+				Stat.qGaps = 0;
 				aligned->s[0] = 0;
 				aligned->len = 0;
 				points->len = 0;
@@ -361,7 +368,8 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 				Stat.score += NWstat.score;
 				Stat.len += NWstat.len;
 				Stat.match += NWstat.match;
-				Stat.gaps += NWstat.gaps;
+				Stat.tGaps += NWstat.tGaps;
+				Stat.qGaps += NWstat.qGaps;
 			}
 		} else {
 			stop = 0;
@@ -398,8 +406,10 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 			bias = NWstat.len - 1;
 			while(bias && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
 				if(Frag_align->t[bias] == 5) {
-					--NWstat.gaps;
+					--NWstat.tGaps;
 					++(Frag_align->end);
+				} else {
+					--NWstat.qGaps;
 				}
 				--bias;
 			}
@@ -418,7 +428,8 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
 		Stat.match += NWstat.match;
-		Stat.gaps += NWstat.gaps;
+		Stat.tGaps += NWstat.tGaps;
+		Stat.qGaps += NWstat.qGaps;
 	} else {
 		Frag_align->end = 0;
 	}
@@ -569,7 +580,8 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.match = 0;
-		Stat.gaps = 0;
+		Stat.tGaps = 0;
+		Stat.qGaps = 0;
 		Stat.pos = 0;
 		points->len = 0;
 		return Stat;
@@ -584,7 +596,8 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		Stat.score = 0;
 		Stat.len = 1;
 		Stat.match = 0;
-		Stat.gaps = 0;
+		Stat.tGaps = 0;
+		Stat.qGaps = 0;
 		Stat.pos = 0;
 		points->len = 0;
 		return Stat;
@@ -594,7 +607,8 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	Stat.len = 0;
 	Stat.score = 0;
 	Stat.match = 0;
-	Stat.gaps = 0;
+	Stat.tGaps = 0;
+	Stat.qGaps = 0;
 	value = points->tStart[start] - 1;
 	Stat.pos = value;
 	i = points->qStart[start];
@@ -623,11 +637,12 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band, matrices, t_len);
 				//NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
 			}
-			Stat.pos -= (NWstat.len - NWstat.gaps);
+			Stat.pos -= (NWstat.len - NWstat.tGaps);
 			Stat.score = NWstat.score;
 			Stat.len = NWstat.len;
 			Stat.match = NWstat.match;
-			Stat.gaps = NWstat.gaps;
+			Stat.tGaps = NWstat.tGaps;
+			Stat.qGaps = NWstat.qGaps;
 		}
 	}
 	
@@ -679,7 +694,8 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				Stat.score = 0;
 				Stat.len = 1;
 				Stat.match = 0;
-				Stat.gaps = 0;
+				Stat.tGaps = 0;
+				Stat.qGaps = 0;
 				points->len = 0;
 				return Stat;
 			}
@@ -693,7 +709,8 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				Stat.score += NWstat.score;
 				Stat.len += NWstat.len;
 				Stat.match += NWstat.match;
-				Stat.gaps += NWstat.gaps;
+				Stat.tGaps += NWstat.tGaps;
+				Stat.qGaps += NWstat.qGaps;
 			}
 		} else {
 			stop = 0;
@@ -727,7 +744,8 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		Stat.score += NWstat.score;
 		Stat.len += NWstat.len;
 		Stat.match += NWstat.match;
-		Stat.gaps += NWstat.gaps;
+		Stat.tGaps += NWstat.tGaps;
+		Stat.qGaps += NWstat.qGaps;
 	}
 	points->len = 0;
 	

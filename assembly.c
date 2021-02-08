@@ -39,6 +39,7 @@
 #include "stdstat.h"
 #include "threader.h"
 #include "xml.h"
+#define mrcheck(mrc, Stat, q_len, t_len) ((mrc * q_len <= Stat.len - Stat.qGaps) || (mrc * t_len <= Stat.len - Stat.tGaps))
 
 void * (*assembly_KMA_Ptr)(void *) = &assemble_KMA;
 int (*significantBase)(int, int, double) = &significantNuc;
@@ -432,11 +433,11 @@ void * assemble_KMA_threaded(void *arg) {
 						/* get read score */
 						aln_len = alnStat.len;
 						start = alnStat.pos;
-						end = start + aln_len - alnStat.gaps;
+						end = start + aln_len - alnStat.tGaps;
 						
 						/* Get normed score check read coverage */
 						read_score = alnStat.score;
-						if(minlen <= aln_len && ((t_len < qseq->len) ? mrc * t_len : mrc * qseq->len) <= alnStat.match) {
+						if(minlen <= aln_len && mrcheck(mrc, alnStat, qseq->len, t_len)) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							read_score = 0;
@@ -986,11 +987,11 @@ void * assemble_KMA_dense_threaded(void *arg) {
 						/* get read score */
 						aln_len = alnStat.len;
 						start = alnStat.pos;
-						end = start + aln_len - alnStat.gaps;
+						end = start + aln_len - alnStat.tGaps;
 						
 						/* Get normed score check read coverage */
 						read_score = alnStat.score;
-						if(minlen <= aln_len && ((t_len < qseq->len) ? mrc * t_len : mrc * qseq->len) <= alnStat.match) {
+						if(minlen <= aln_len && mrcheck(mrc, alnStat, qseq->len, t_len)) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							read_score = 0;
@@ -1858,11 +1859,11 @@ void * assemble_KMA(void *arg) {
 						/* get read score */
 						aln_len = alnStat.len;
 						start = alnStat.pos;
-						end = start + aln_len - alnStat.gaps;
+						end = start + aln_len - alnStat.tGaps;
 						
 						/* Get normed score check read coverage */
 						read_score = alnStat.score;
-						if(minlen <= aln_len && ((t_len < qseq->len) ? mrc * t_len : mrc * qseq->len) <= alnStat.match) {
+						if(minlen <= aln_len && mrcheck(mrc, alnStat, qseq->len, t_len)) {
 							score = 1.0 * read_score / aln_len;
 						} else {
 							read_score = 0;

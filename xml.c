@@ -212,7 +212,7 @@ void hitXML(FILE *out, const int template, const char *template_name, const Aln 
 	fprintf(out, "\t\t\t<Hsp_query-from>%d</Hsp_query-from>\n", ((flag & 16) ? (aligned->end) : (aligned->start)) + 1);
 	fprintf(out, "\t\t\t<Hsp_query-to>%d</Hsp_query-to>\n", ((flag & 16) ? (aligned->start) : (aligned->end)) + 1);
 	fprintf(out, "\t\t\t<Hsp_hit-from>%d</Hsp_hit-from>\n", alnStat->pos + 1);
-	fprintf(out, "\t\t\t<Hsp_hit-to>%d</Hsp_hit-to>\n", alnStat->pos + alnStat->len - alnStat->gaps + 1);
+	fprintf(out, "\t\t\t<Hsp_hit-to>%d</Hsp_hit-to>\n", alnStat->pos + alnStat->len - alnStat->tGaps + 1);
 	fprintf(out, "\t\t\t<Hsp_query-frame>%d</Hsp_query-frame>\n", aligned->start % 3);
 	fprintf(out, "\t\t\t<Hsp_hit-frame>%d</Hsp_hit-frame>\n", alnStat->pos % 3);
 	fprintf(out, "\t\t\t<Hsp_identity>%d</Hsp_identity>\n", Ms);

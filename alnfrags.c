@@ -34,6 +34,7 @@
 #include "stdstat.h"
 #include "threader.h"
 #include "updatescores.h"
+#define mrcheck(mrc, Stat, q_len, t_len) ((mrc * q_len <= Stat.len - Stat.qGaps) || (mrc * t_len <= Stat.len - Stat.tGaps))
 
 int (*alnFragsPE)(HashMapCCI**, int*, int*, int, double, double, int, CompDNA*, CompDNA*, CompDNA*, CompDNA*, unsigned char*, unsigned char*, unsigned char*, unsigned char*, Qseqs*, Qseqs*, int, int*, int*, long unsigned*, long unsigned*, int*, int*, int*, int*, int*, int*, int, long*, FILE*, AlnPoints*, NWmat*, volatile int*, volatile int*) = alnFragsUnionPE;
 
@@ -103,7 +104,8 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 				alnStat.score = 0;
 				alnStat.pos = 0;
 				alnStat.len = 0;
-				alnStat.gaps = 0;
+				alnStat.tGaps = 0;
+				alnStat.qGaps = 0;
 				points->len = 0;
 			}
 		} else {
@@ -117,9 +119,9 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 		/* get read score */
 		aln_len = alnStat.len;
 		start = alnStat.pos;
-		end = start + aln_len - alnStat.gaps;
+		end = start + aln_len - alnStat.tGaps;
 		t_len = template_lengths[abs(template)];
-		if(template_lengths[abs(template)] < end && ((t_len < q_len) ? mrc * t_len : mrc * q_len) <= alnStat.match) {
+		if(template_lengths[abs(template)] < end && mrcheck(mrc, alnStat, q_len, t_len)) {
 			end -= template_lengths[abs(template)];
 		}
 		
@@ -247,7 +249,8 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 				alnStat.score = 0;
 				alnStat.pos = 0;
 				alnStat.len = 0;
-				alnStat.gaps = 0;
+				alnStat.tGaps = 0;
+				alnStat.qGaps = 0;
 				points->len = 0;
 			}
 		} else {
@@ -258,9 +261,9 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 		aln_len = alnStat.len;
 		read_score = alnStat.score;
 		t_len = template_lengths[abs(template)];
-		if(minlen <= aln_len && 0 < read_score && ((t_len < qseq_comp->seqlen) ? mrc * t_len : mrc * qseq_comp->seqlen) <= alnStat.match) {
+		if(minlen <= aln_len && 0 < read_score && mrcheck(mrc, alnStat, qseq_comp->seqlen, t_len)) {
 			start = alnStat.pos;
-			end = alnStat.pos + alnStat.len - alnStat.gaps;
+			end = alnStat.pos + alnStat.len - alnStat.tGaps;
 			if(start == 0 && end == t_len) {
 				read_score += abs(W1);
 			}
@@ -294,7 +297,8 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 				alnStat.score = 0;
 				alnStat.pos = 0;
 				alnStat.len = 0;
-				alnStat.gaps = 0;
+				alnStat.tGaps = 0;
+				alnStat.qGaps = 0;
 			}
 			rc = 1;
 		} else {
@@ -304,9 +308,9 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 		/* get read score */
 		aln_len = alnStat.len;
 		read_score = alnStat.score;
-		if(minlen <= aln_len && 0 < read_score && ((t_len < qseq_r_comp->seqlen) ? mrc * t_len : mrc * qseq_r_comp->seqlen) <= alnStat.match) {
+		if(minlen <= aln_len && 0 < read_score && mrcheck(mrc, alnStat, qseq_r_comp->seqlen, t_len)) {
 			start = alnStat.pos;
-			end = alnStat.pos + alnStat.len - alnStat.gaps;
+			end = alnStat.pos + alnStat.len - alnStat.tGaps;
 			
 			if(start == 0 && end == t_len) {
 				read_score += abs(W1);
@@ -576,7 +580,8 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 				alnStat.score = 0;
 				alnStat.pos = 0;
 				alnStat.len = 0;
-				alnStat.gaps = 0;
+				alnStat.tGaps = 0;
+				alnStat.qGaps = 0;
 				points->len = 0;
 			}
 		} else {
@@ -587,9 +592,9 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 		aln_len = alnStat.len;
 		read_score = alnStat.score;
 		t_len = template_lengths[abs(template)];
-		if(minlen <= aln_len && 0 < read_score && ((t_len < qseq_comp->seqlen) ? mrc * t_len : mrc * qseq_comp->seqlen) <= alnStat.match) {
+		if(minlen <= aln_len && 0 < read_score && mrcheck(mrc, alnStat, qseq_comp->seqlen, t_len)) {
 			start = alnStat.pos;
-			end = alnStat.pos + alnStat.len - alnStat.gaps;
+			end = alnStat.pos + alnStat.len - alnStat.tGaps;
 			
 			if(start == 0 && end == t_len) {
 				read_score += abs(W1);
@@ -622,7 +627,8 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 				alnStat.score = 0;
 				alnStat.pos = 0;
 				alnStat.len = 0;
-				alnStat.gaps = 0;
+				alnStat.tGaps = 0;
+				alnStat.qGaps = 0;
 			}
 			rc = 1;
 		} else {
@@ -632,9 +638,9 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 		/* get read score */
 		aln_len = alnStat.len;
 		read_score = alnStat.score;
-		if(minlen <= aln_len && 0 < read_score && ((t_len < qseq_r_comp->seqlen) ? mrc * t_len : mrc * qseq_r_comp->seqlen) <= alnStat.match) {
+		if(minlen <= aln_len && 0 < read_score && mrcheck(mrc, alnStat, qseq_r_comp->seqlen, t_len)) {
 			start = alnStat.pos;
-			end = alnStat.pos + alnStat.len - alnStat.gaps;
+			end = alnStat.pos + alnStat.len - alnStat.tGaps;
 			
 			if(start == 0 && end == t_len) {
 				read_score += abs(W1);
@@ -899,7 +905,8 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 				alnStat.score = 0;
 				alnStat.pos = 0;
 				alnStat.len = 0;
-				alnStat.gaps = 0;
+				alnStat.tGaps = 0;
+				alnStat.qGaps = 0;
 				points->len = 0;
 			}
 		} else {
@@ -907,7 +914,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 		}
 		
 		t_len = template_lengths[abs(template)];
-		if(0 < alnStat.score && minlen <= alnStat.len && ((t_len < qseq_comp->seqlen) ? mrc * t_len : mrc * qseq_comp->seqlen) <= alnStat.match) {
+		if(0 < alnStat.score && minlen <= alnStat.len && mrcheck(mrc, alnStat, qseq_comp->seqlen, t_len)) {
 			if(arc) {
 				if(rc < 0) {
 					/* rc */
@@ -919,7 +926,8 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 					alnStat_r.score = 0;
 					alnStat_r.pos = 0;
 					alnStat_r.len = 0;
-					alnStat_r.gaps = 0;
+					alnStat_r.tGaps = 0;
+					alnStat_r.qGaps = 0;
 				}
 				rc = 1;
 			} else {
@@ -934,10 +942,10 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 				user stupidity or sample error. */
 				if(alnStat.pos < alnStat_r.pos) {
 					start = alnStat.pos;
-					end = alnStat_r.pos + alnStat_r.len - alnStat_r.gaps;
+					end = alnStat_r.pos + alnStat_r.len - alnStat_r.tGaps;
 				} else {
 					start = alnStat_r.pos;
-					end = alnStat.pos + alnStat.len - alnStat.gaps;
+					end = alnStat.pos + alnStat.len - alnStat.tGaps;
 				}
 				
 				read_score = alnStat.score + alnStat_r.score;
@@ -953,7 +961,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 		}
 		
 		/* save best match(es) */
-		if(read_score > kmersize && score >= scoreT && ((t_len < qseq_r_comp->seqlen) ? mrc * t_len : mrc * qseq_r_comp->seqlen) <= alnStat.match) {
+		if(read_score > kmersize && score >= scoreT && mrcheck(mrc, alnStat_r, qseq_r_comp->seqlen, t_len)) {
 			if(score > bestScore) { // save as best match
 				bestScore = score;
 				*best_read_score = read_score;
