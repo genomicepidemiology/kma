@@ -153,8 +153,12 @@ char ** load_DBs_Sparse(char *templatefilename, unsigned **template_lengths, uns
 		
 		/* load lengths */
 		fseek(DB_file, DB_size * sizeof(int), SEEK_CUR);
-		fread(*template_lengths, sizeof(int), DB_size, DB_file);
-		fread(*template_ulengths, sizeof(int), DB_size, DB_file);	
+		i = fread(*template_lengths, sizeof(int), DB_size, DB_file);
+		i += fread(*template_ulengths, sizeof(int), DB_size, DB_file);	
+		if(!i) {
+			fprintf(stderr, "DB needs to sparse indexed, to run a sparse mapping.\n");
+			exit(1);
+		}
 	}
 	templatefilename[file_len] = 0;
 	fclose(DB_file);

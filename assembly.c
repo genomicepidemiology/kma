@@ -1294,7 +1294,7 @@ void * skip_assemble_KMA(void *arg) {
 	}
 	
 	aligned_assem->cover = 0; 
-	aligned_assem->aln_len = (1 - exp((-1.0) * aligned_assem->depth / t_len)) * t_len; // expected coverage from depth
+	aligned_assem->aln_len = 0;//(1 - exp((-1.0) * aligned_assem->depth / t_len)) * t_len; // expected coverage from depth
 	
 	return NULL;
 }
