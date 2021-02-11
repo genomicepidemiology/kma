@@ -335,7 +335,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->template_lengths = template_lengths;
 		alnThread->templates_index = templates_index;
 		alnThread->mq = mq;
-		alnThread->sam = (sam == 1) ? 1 : 0;
+		alnThread->sam = sam;//(sam == 1) ? 1 : 0;
 		alnThread->scoreT = scoreT;
 		alnThread->next = alnThreads;
 		alnThreads = alnThread;
@@ -405,7 +405,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->kmersize = kmersize;
 	alnThread->minlen = minlen;
 	alnThread->mq = mq;
-	alnThread->sam = (sam == 1) ? 1 : 0;
+	alnThread->sam = sam;//(sam == 1) ? 1 : 0;
 	alnThread->scoreT = scoreT;
 	alnThread->template_lengths = template_lengths;
 	alnThread->templates_index = templates_index;
@@ -1258,11 +1258,11 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					}
 				}
 			} else {
-				if(sam || ID_t == 0.0) {
+				if((sam && !(sam & 2096)) || ID_t == 0.0) {
 					thread->template_index = templates_index[template];
 					thread->template_name = nameLoad(template_name, name_file);
 					thread->template = template;
-					assembly_KMA_Ptr(thread);
+					skip_assemble_KMA(thread);
 					//skip_assemble_KMA(template, sam, t_len, thread->template_name, fileCount, template_fragments, aligned_assem, qseq, header);
 					if(ID_t == 0.0) {
 						depth = aligned_assem->depth;
@@ -2424,7 +2424,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					}
 				}
 			} else {
-				if(sam || ID_t == 0.0) {
+				if((sam && !(sam & 2096)) || ID_t == 0.0) {
 					/* load DB */
 					seq_seeker *= sizeof(long unsigned);
 					lseek(seq_in_no, seq_seeker, SEEK_CUR);

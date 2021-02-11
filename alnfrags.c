@@ -935,7 +935,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 			}
 			
 			/* get read score */
-			if(0 < alnStat_r.score && minlen <= alnStat_r.len) {
+			if(0 < alnStat_r.score && minlen <= alnStat_r.len && mrcheck(mrc, alnStat_r, qseq_r_comp->seqlen, t_len)) {
 				aln_len = alnStat.len + alnStat_r.len;
 				
 				/* Handle negative insertsizes caused by trimming,
@@ -961,7 +961,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 		}
 		
 		/* save best match(es) */
-		if(read_score > kmersize && score >= scoreT && mrcheck(mrc, alnStat_r, qseq_r_comp->seqlen, t_len)) {
+		if(read_score > kmersize && score >= scoreT) {
 			if(score > bestScore) { // save as best match
 				bestScore = score;
 				*best_read_score = read_score;
@@ -1125,7 +1125,7 @@ void * alnFrags_threaded(void * arg) {
 			unmapped = 0;
 		}
 		
-		if(sam && unmapped) {
+		if(sam && !(sam & 2096) && unmapped) {
 			if(unmapped & 1) {
 				stats[1] = flag;
 				nibble2base(qseq->seq, qseq->len);

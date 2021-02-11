@@ -142,7 +142,6 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	2048	supplementary alignment
 	*/
 	
-	
 	qname = (char *) header->seq;
 	seq = qseq->seq;
 	if(Qual) {
@@ -150,6 +149,7 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	} else {
 		qual = "*";
 	}
+	
 	if(aligned) {
 		mapQ = 254 < aligned->mapQ ? 254 : aligned->mapQ;
 		et = *stats;
@@ -172,11 +172,11 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	}
 	rnext = "*";
 	pnext = 0;
-	
 	tab = 0;
 	if(qname) {
 		while(*qname) {
 			if(*qname == '\t') {
+				tab = -tab;
 				*qname = 0;
 			} else {
 				++qname;
@@ -192,15 +192,16 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	}
 	if(aligned) {
 		cigar = makeCigar(Cigar, aligned);
-	} else if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
-		cigar = (char *) Cigar->seq;
-		sprintf(cigar, "%dS", *((int*) (header->seq + (header->len - 2 * sizeof(int)))));
+		if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+			cigar = (char *) Cigar->seq;
+			sprintf(cigar, "%dS", *((int*) (header->seq + (header->len - 2 * sizeof(int)))));
+		}
 	}
 	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);
 	unlock(lock);
 	
-	if(tab) {
-		qname[tab] = '\t';
+	if(tab < 0) {
+		qname[-tab] = '\t';
 	}
 	
 	return size;
