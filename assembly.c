@@ -719,14 +719,20 @@ void * assemble_KMA_threaded(void *arg) {
 				bestNuc = tolower(bestNuc);
 			}
 			bestScore = depthUpdate - assembly[pos].counts[5];
+		} else if(depthUpdate < bcd) {
+			/* too low depth */
+			bestNuc = tolower(bestNuc);
 		}
 		
 		/* determine base at current position */
+		/*
 		if(bcd <= depthUpdate) {
 			bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[pos]);
 		} else {
 			bestNuc = baseCall('-', aligned_assem->t[i], 0, 0, evalue, &assembly[pos]);
 		}
+		*/
+		bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[pos]);
 		aligned_assem->q[i] = bestNuc;
 		
 		if(bestNuc != '-') {
@@ -1156,14 +1162,20 @@ void * assemble_KMA_dense_threaded(void *arg) {
 				bestNuc = tolower(bestNuc);
 			}
 			bestScore = depthUpdate - assembly[i].counts[5];
+		} else if(depthUpdate < bcd) {
+			/* too low depth */
+			bestNuc = tolower(bestNuc);
 		}
 		
 		/* determine base at current position */
+		/*
 		if(bcd <= depthUpdate) {
 			bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[i]);
 		} else {
 			bestNuc = baseCall('-', aligned_assem->t[i], 0, 0, evalue, &assembly[i]);
 		}
+		*/
+		bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[i]);
 		aligned_assem->q[i] = bestNuc;
 		
 		if(bestNuc != '-') {
@@ -1510,14 +1522,20 @@ void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, 
 						bestNuc = tolower(bestNuc);
 					}
 					bestScore = depthUpdate - assembly[pos].counts[5];
+				} else if(depthUpdate < bcd) {
+					/* too low depth */
+					bestNuc = tolower(bestNuc);
 				}
 				
 				/* determine base at current position */
+				/*
 				if(bcd <= depthUpdate) {
 					bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[pos]);
 				} else {
 					bestNuc = baseCall('-', aligned_assem->t[i], 0, 0, evalue, &assembly[pos]);
 				}
+				*/
+				bestNuc = baseCall(bestNuc, aligned_assem->t[i], bestScore, depthUpdate, evalue, &assembly[pos]);
 				aligned_assem->q[i] = bestNuc;
 				
 				if(bestNuc != '-') {

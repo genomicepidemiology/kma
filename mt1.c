@@ -80,7 +80,7 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r
 	
 }
 
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
 	
 	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta;
 	int *template_lengths;
@@ -427,7 +427,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 				updateMatrix(matrix_out, thread->template_name, template_index->seq, matrix, t_len);
 			}
 			if(vcf) {
-				updateVcf(thread->template_name, template_index->seq, evalue, t_len, matrix, vcf, vcf_out);
+				updateVcf(thread->template_name, aligned_assem->t, evalue, support, bcd, t_len, matrix, vcf, vcf_out);
 			}
 		}
 		/* destroy this DB index */

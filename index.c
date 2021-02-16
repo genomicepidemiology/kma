@@ -231,8 +231,9 @@ int index_main(int argc, char *argv[]) {
 				} else if(kmersize == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmersize = 16;
-				} else if(kmersize > 32) {
-					kmersize = 32;
+				} else if(kmersize > 31) {
+					fprintf(stderr, "# Invalid kmersize parsed, max size is 31\n");
+					exit(1);
 				}
 				kmerindex = kmersize;
 			}
@@ -246,8 +247,9 @@ int index_main(int argc, char *argv[]) {
 				} else if(kmersize == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmersize = 16;
-				} else if(kmersize > 32) {
-					kmersize = 32;
+				} else if(kmersize > 31) {
+					fprintf(stderr, "# Invalid kmersize parsed, max size is 31\n");
+					exit(1);
 				}
 			}
 		} else if(strcmp(argv[args], "-k_i") == 0) {
@@ -260,8 +262,9 @@ int index_main(int argc, char *argv[]) {
 				} else if(kmerindex == 0) {
 					fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 					kmerindex = 16;
-				} else if(kmerindex > 32) {
-					kmerindex = 32;
+				} else if(kmerindex > 31) {
+					fprintf(stderr, "# Invalid kmersize parsed, max size is 31\n");
+					exit(1);
 				}
 			}
 		} else if(strcmp(argv[args], "-CS") == 0) {

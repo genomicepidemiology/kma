@@ -207,12 +207,11 @@ int kma_main(int argc, char *argv[]) {
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
-	static double ID_t, scoreT, coverT, mrc, evalue;
+	static double ID_t, scoreT, coverT, mrc, evalue, minFrac, support;
 	static Penalties *rewards;
 	int i, j, args, exe_len, fileCount, size, escape, tmp, step1, step2;
 	unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
-	double support;
 	FILE *templatefile, *ioStream;
 	time_t t0, t1;
 	Qseqs qseq;
@@ -254,6 +253,8 @@ int kma_main(int argc, char *argv[]) {
 		kmersize = 0;
 		minlen = 16;
 		evalue = 0.05;
+		support = 0.0;
+		minFrac = 1.0;
 		exhaustive = 0;
 		shm = 0;
 		mq = 0;
@@ -498,8 +499,9 @@ int kma_main(int argc, char *argv[]) {
 					} else if(kmersize == 0) {
 						fprintf(stderr, "# Invalid kmersize parsed, using default\n");
 						kmersize = 16;
-					} else if(kmersize > 32) {
-						kmersize = 32;
+					} else if(kmersize > 31) {
+						fprintf(stderr, "# Invalid kmersize parsed, max size is 31\n");
+						exit(1);
 					}
 				}
 			} else if(strcmp(argv[args], "-ml") == 0) {
@@ -590,8 +592,8 @@ int kma_main(int argc, char *argv[]) {
 				one2one = 0;
 			} else if(strcmp(argv[args], "-proxi") == 0) {
 				if(++args < argc) {
-					support = strtod(argv[args], &exeBasic);
-					if(*exeBasic != 0 || support < 0 || 1 < support) {
+					minFrac = strtod(argv[args], &exeBasic);
+					if(*exeBasic != 0 || minFrac < 0 || 1 < minFrac) {
 						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
 						exit(1);
 					} else {
@@ -603,13 +605,13 @@ int kma_main(int argc, char *argv[]) {
 						getF = &getF_Proxi;
 						getR = &getR_Proxi;
 						getChainTemplates = &getProxiChainTemplates;
-						getMatch((int *)(&support), 0);
-						getMatchSparse((int *)(&support), 0, 0, 0, 0, 0);
-						getSecondPen((int *)(&support), 0, 0, 0, 0, 0, 0, 0);
-						getF((int *)(&support), 0, 0, 0, 0);
-						ankerAndClean((int *)(&support), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-						ankerAndClean_MEM((int *)(&support), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-						getProxiChainTemplates(0, (const Penalties *)(&support), 0, 0, 0, 0, 0);
+						getMatch((int *)(&minFrac), 0);
+						getMatchSparse((int *)(&minFrac), 0, 0, 0, 0, 0);
+						getSecondPen((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0);
+						getF((int *)(&minFrac), 0, 0, 0, 0);
+						ankerAndClean((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+						ankerAndClean_MEM((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+						getProxiChainTemplates(0, (const Penalties *)(&minFrac), 0, 0, 0, 0, 0);
 					}
 				} else {
 					fprintf(stderr, "Need argument at: \"-proxi\".\n");
@@ -633,7 +635,7 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-p") == 0 || strcmp(argv[args], "-e") == 0) {
 				if(++args < argc) {
 					evalue = strtod(argv[args], &exeBasic);
-					if(*exeBasic != 0) {
+					if(*exeBasic != 0 || evalue < 0 || 1.0 < evalue) {
 						fprintf(stderr, "Invalid argument at \"%s\".\n", argv[--args]);
 						exit(1);
 					}
@@ -642,7 +644,7 @@ int kma_main(int argc, char *argv[]) {
 				if(++args < argc && argv[args][0] != '-') {
 					significantBase = &significantAndSupport;
 					support = strtod(argv[args], &exeBasic);
-					if(*exeBasic != 0 || 1 < support) {
+					if(*exeBasic != 0 || support < 0 || 1 < support) {
 						fprintf(stderr, "Invalid argument at \"-bc\".\n");
 						exit(1);
 					} else {
@@ -1285,7 +1287,7 @@ int kma_main(int argc, char *argv[]) {
 	} else if(Mt1) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, mrc, evalue, bcd, Mt1, ref_fsa, print_matrix, vcf, xml, sam, nc, nf, thread_num);
+		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, mrc, evalue, support, bcd, Mt1, ref_fsa, print_matrix, vcf, xml, sam, nc, nf, thread_num);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else if(step2) {
@@ -1304,11 +1306,11 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else if(mem_mode) {
-			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

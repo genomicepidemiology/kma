@@ -94,10 +94,19 @@ void initialiseVcf(FileBuff *fileP, char *templateFilename) {
 	
 }
 
-void updateVcf(char *template_name, long unsigned *template_seq, double evalue, int t_len, AssemInfo *matrix, int filter, FileBuff *fileP) {
+void updateVcf(char *template_name, unsigned char *template_seq, double evalue, double support, int bcd, int t_len, AssemInfo *matrix, int filter, FileBuff *fileP) {
 	
-	static const char *PASS = "PASS", *FAIL = "FAIL", *LowQual = "LowQual", *UNKNOWN = ".";
-	int i, j, pos, bestScore, depthUpdate, bestBaseScore, nucNum;
+	static const char nuc2num[256] = {
+		8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 5, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 0, 8, 1, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 4, 8, 8, 8, 8, 8, 3, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 0, 8, 1, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 4, 8, 8, 8, 8, 8, 3, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+		8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
+	const char *PASS = "PASS", *FAIL = "FAIL", *LowQual = "LowQual", *UNKNOWN = ".";
+	int i, pos, nextPos, bestScore, depthUpdate, bestBaseScore, nucNum;
 	int template_name_length, check, avail, DP, AD, DEL, QUAL;
 	double AF, RAF, Q, P;
 	const double lnConst = -10 / log(10);
@@ -115,33 +124,32 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 	update = (char *) fileP->next;
 	avail = fileP->bytes;
 	assembly = matrix->assmb;
-	pos = 0;
-	i = 0;
+	nextPos = 0;
 	do {
-		/* does not handle insertions yet */
+		pos = nextPos;
+		nextPos = assembly[pos].next;
+		
+		/* handle insertions now */
+		nuc = *template_seq++;
 		if(pos < t_len) {
-			nuc = bases[getNuc(template_seq, pos)];
 			++i;
-		} else {
+		} else if(nuc != '-') {
+			--template_seq;
 			nuc = '-';
 		}
+		
 		/* call base */
 		nucNum = 0;
-		bestNuc = 5;
+		bestNuc = 0;
 		bestScore = 0;
 		depthUpdate = 0;
-		for(j = 0; j < 5; ++j) {
-			if(bestScore < assembly[pos].counts[j]) {
-				bestScore = assembly[pos].counts[j];
-				bestNuc = j;
+		for(i = 0; i < 6; ++i) {
+			if(bestScore < assembly[pos].counts[i]) {
+				bestScore = assembly[pos].counts[i];
+				bestNuc = i;
 			}
-			depthUpdate += assembly[pos].counts[j];
+			depthUpdate += assembly[pos].counts[i];
 		}
-		if(bestScore < assembly[pos].counts[j]) {
-			bestScore = assembly[pos].counts[j];
-			bestNuc = j;
-		}
-		depthUpdate += assembly[pos].counts[j];
 		nucNum = bestNuc;
 		bestNuc = bases[bestNuc];
 		
@@ -150,25 +158,30 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 			if(bestNuc == '-') {
 				bestBaseScore = 0;
 				bestNuc = 4;
-				for(j = 0; j < 5; ++j) {
-					if(bestBaseScore < assembly[pos].counts[j]) {
-						bestBaseScore = assembly[pos].counts[j];
-						bestNuc = j;
+				for(i = 0; i < 5; ++i) {
+					if(bestBaseScore < assembly[pos].counts[i]) {
+						bestBaseScore = assembly[pos].counts[i];
+						bestNuc = i;
 					}
 				}
+				nucNum = bestNuc;
 				bestNuc = tolower(bases[bestNuc]);
 			} else {
 				bestNuc = tolower(bestNuc);
 			}
 			bestScore = depthUpdate - assembly[pos].counts[5];
+		} else if(depthUpdate < bcd) {
+			/* too low depth */
+			bestNuc = tolower(bestNuc);
 		}
 		
 		if(bestScore) {
 			/* determine base at current position */
 			bestNuc = baseCall(bestNuc, nuc, bestScore, depthUpdate, evalue, &assembly[pos]);
+			nucNum = nuc2num[bestNuc];
 			
 			/* discard unimportant changes */
-			if(nuc != toupper(bestNuc)) {
+			if(nuc != bestNuc || (t_len <= nextPos && *template_seq == '-')) {
 				/* INFO */
 				DP = depthUpdate;
 				AD = assembly[pos].counts[nucNum];
@@ -185,9 +198,9 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				QUAL = (QUAL < 0 || 3079 < QUAL) ? 3079 : QUAL;
 				
 				/* FILTER */
-				if(isupper(bestNuc)) {
+				if(bcd <= DP && P <= evalue && support * DP <= AD) {
 					FILTER = (char *) PASS;
-				} else if(P <= evalue || (9 * depthUpdate) <= (10 * bestScore)) {
+				} else if(bcd <= DP || P <= evalue || support * DP <= AD) {
 					FILTER = (char *) LowQual;
 				} else {
 					FILTER = (char *) FAIL;
@@ -204,8 +217,8 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				update += template_name_length; avail -= template_name_length;
 				*update++ = '\t'; --avail;
 				
-				if(nuc != '-') {
-					check = sprintf(update, "%d", i);
+				if(pos < t_len) {
+					check = sprintf(update, "%d", pos + 1);
 					update += check; avail -= check;
 				} else {
 					*update++ = '0';
@@ -227,7 +240,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				}
 				*update++ = '\t';
 				--avail;
-				if(nuc != '-' && bestNuc == '-') {
+				if(bestNuc == '-') {
 					*update++ = '<';
 					*update++ = bestNuc;
 					*update++ = '>';
@@ -244,7 +257,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				check = sprintf(update, "Q:P:FT\t%.2f:%4.1e:%s\n", Q, P, FILTER);
 				update += check; avail -= check;
 			}
-		} else if(nuc != '-') {
+		} else if(pos < t_len) {
 			FILTER = (char *) FAIL;
 			if(avail < template_name_length + 105) {
 				fileP->bytes = avail;
@@ -252,7 +265,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 				avail = fileP->bytes;
 				update = (char *) fileP->next;
 			}
-			check = sprintf(update, "%s\t%d\t.\t%c\t%c\t%d\t%s\t", template_name, i, nuc, '.', 0, *FILTER_ptr);
+			check = sprintf(update, "%s\t%d\t.\t%c\t%c\t%d\t%s\t", template_name, pos + 1, nuc, '.', 0, *FILTER_ptr);
 			update += check; avail -= check;
 			check = sprintf(update, "DP=%d;AD=%d;AF=%.2f;RAF=%.2f;DEL=%d;AD6=%d,%d,%d,%d,%d,%d\t", 0, 0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0);
 			update += check; avail -= check;
@@ -260,7 +273,7 @@ void updateVcf(char *template_name, long unsigned *template_seq, double evalue, 
 			update += check; avail -= check;
 		
 		}
-	} while((pos = assembly[pos].next) != 0);
+	} while(nextPos != 0);
 	
 	fileP->next = (unsigned char *) update;
 	fileP->bytes = avail;

@@ -22,4 +22,4 @@
 
 char * noFolder(const char *src);
 void initialiseVcf(FileBuff *fileP, char *templateFilename);
-void updateVcf(char *template_name, long unsigned *template_seq, double evalue, int t_len, AssemInfo *matrix, int filter, FileBuff *fileP);
+void updateVcf(char *template_name, unsigned char *template_seq, double evalue, double support, int bcd, int t_len, AssemInfo *matrix, int filter, FileBuff *fileP);
