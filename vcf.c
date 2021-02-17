@@ -139,9 +139,8 @@ void updateVcf(char *template_name, unsigned char *template_seq, double evalue, 
 		}
 		
 		/* call base */
-		nucNum = 0;
-		bestNuc = 0;
-		bestScore = 0;
+		bestNuc = nuc2num[nuc];
+		bestScore = assembly[pos].counts[bestNuc];
 		depthUpdate = 0;
 		for(i = 0; i < 6; ++i) {
 			if(bestScore < assembly[pos].counts[i]) {
@@ -154,7 +153,10 @@ void updateVcf(char *template_name, unsigned char *template_seq, double evalue, 
 		bestNuc = bases[bestNuc];
 		
 		/* Check for minor base call */
-		if((bestScore << 1) < depthUpdate) {
+		if(!depthUpdate) {
+			nucNum = 5;
+			bestNuc = '-';
+		} else if((bestScore << 1) < depthUpdate) {
 			if(bestNuc == '-') {
 				bestBaseScore = 0;
 				bestNuc = 4;

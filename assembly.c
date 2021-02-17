@@ -685,16 +685,16 @@ void * assemble_KMA_threaded(void *arg) {
 	while(i < asm_len) {
 		/* call template */
 		if(pos < t_len) {
-			aligned_assem->t[i] = bases[getNuc(template_index->seq, pos)]; 
+			bestNuc = getNuc(template_index->seq, pos);
 		} else {
-			aligned_assem->t[i] = '-';
+			bestNuc = 5;
 		}
+		aligned_assem->t[i] = bases[bestNuc];
 		
 		/* call query */
-		bestNuc = 0;
-		bestScore = assembly[pos].counts[0];
-		depthUpdate = bestScore;
-		for(j = 1; j < 6; ++j) {
+		bestScore = assembly[pos].counts[bestNuc];
+		depthUpdate = 0;
+		for(j = 0; j < 6; ++j) {
 			if(bestScore < assembly[pos].counts[j]) {
 				bestScore = assembly[pos].counts[j];
 				bestNuc = j;
@@ -704,7 +704,9 @@ void * assemble_KMA_threaded(void *arg) {
 		bestNuc = bases[bestNuc];
 		
 		/* check for minor base call */
-		if((bestScore << 1) < depthUpdate) {
+		if(!depthUpdate) {
+			bestNuc = '-';
+		} else if((bestScore << 1) < depthUpdate) {
 			if(bestNuc == '-') {
 				bestBaseScore = assembly[pos].counts[4];
 				bestNuc = 4;
@@ -1134,8 +1136,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		aligned_assem->t[i] = bases[bestNuc];
 		
 		/* call query */
-		bestNuc = 5;
-		bestScore = 0;
+		bestScore = assembly[pos].counts[bestNuc];
 		depthUpdate = 0;
 		for(j = 0; j < 6; ++j) {
 			if(bestScore < assembly[i].counts[j]) {
@@ -1147,7 +1148,9 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		bestNuc = bases[bestNuc];
 		
 		/* Check for minor base call */
-		if((bestScore << 1) < depthUpdate) {
+		if(!depthUpdate) {
+			bestNuc = '-';
+		} else if((bestScore << 1) < depthUpdate) {
 			if(bestNuc == '-') {
 				bestBaseScore = 0;
 				bestNuc = 4;
@@ -1488,16 +1491,16 @@ void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, 
 			while(i < end) {
 				/* call template */
 				if(pos < t_len) {
-					aligned_assem->t[i] = bases[getNuc(seq, pos)]; 
+					bestNuc = getNuc(seq, pos);
 				} else {
-					aligned_assem->t[i] = '-';
+					bestNuc = 5;
 				}
+				aligned_assem->t[i] = bases[bestNuc];
 				
 				/* call query */
-				bestNuc = 0;
-				bestScore = assembly[pos].counts[0];
-				depthUpdate = bestScore;
-				for(j = 1; j < 6; ++j) {
+				bestScore = assembly[pos].counts[bestNuc];
+				depthUpdate = 0;
+				for(j = 0; j < 6; ++j) {
 					if(bestScore < assembly[pos].counts[j]) {
 						bestScore = assembly[pos].counts[j];
 						bestNuc = j;
@@ -1507,7 +1510,9 @@ void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, 
 				bestNuc = bases[bestNuc];
 				
 				/* check for minor base call */
-				if((bestScore << 1) < depthUpdate) {
+				if(!depthUpdate) {
+					bestNuc = '-';
+				} else if((bestScore << 1) < depthUpdate) {
 					if(bestNuc == '-') {
 						bestBaseScore = assembly[pos].counts[4];
 						bestNuc = 4;
