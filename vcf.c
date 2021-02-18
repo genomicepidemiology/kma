@@ -182,15 +182,15 @@ void updateVcf(char *template_name, unsigned char *template_seq, double evalue, 
 			bestNuc = baseCall(bestNuc, nuc, bestScore, depthUpdate, evalue, &assembly[pos]);
 			nucNum = nuc2num[bestNuc];
 			
+			/* INFO */
+			DP = depthUpdate;
+			AD = assembly[pos].counts[nucNum];
+			AF = (double) AD / DP;
+			RAF = (double) bestScore / DP;
+			DEL = assembly[pos].counts[5];
+			
 			/* discard unimportant changes */
-			if(nuc != bestNuc || (t_len <= nextPos && *template_seq == '-')) {
-				/* INFO */
-				DP = depthUpdate;
-				AD = assembly[pos].counts[nucNum];
-				AF = (double) AD / DP;
-				RAF = (double) bestScore / DP;
-				DEL = assembly[pos].counts[5];
-				
+			if(nuc != bestNuc || (t_len <= nextPos && *template_seq == '-') || DP < bcd || evalue < P || AD < support * DP) {
 				/* FORMAT */
 				Q = pow(depthUpdate - (bestScore << 1), 2) / depthUpdate;
 				P = p_chisqr(Q);
