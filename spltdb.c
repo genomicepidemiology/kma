@@ -17,6 +17,7 @@
  * limitations under the License.
 */
 #define _XOPEN_SOURCE 600
+#include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -414,7 +415,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
 	char *templatefilename, Date[11];
-	FILE **inputfiles, *inputfile, *frag_in_raw, *seq_in;
+	FILE **inputfiles, *inputfile, *frag_in_raw;
 	FILE *res_out, *alignment_out, *consensus_out, *frag_out_raw, *xml_out;
 	FILE *extendedFeatures_out, *name_file, **template_fragments;
 	time_t t0, t1;
@@ -1376,7 +1377,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		templatefilename = 0;
 		initialiseVcf(vcf_out, templatefilename);
 	}
-	seq_in = 0;
+	seq_in_no = 0;
 	
 	/* preallocate assembly matrices */
 	matrix = smalloc(sizeof(AssemInfo));
@@ -1434,7 +1435,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		thread->bcd = bcd;
 		thread->sam = sam;
 		thread->ef = extendedFeatures;
-		thread->seq_in = fileno(seq_in);
+		thread->seq_in = seq_in_no;
 		thread->kmersize = kmersize;
 		thread->template = -2;
 		thread->file_count = fileCount;
@@ -1499,7 +1500,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->bcd = bcd;
 	thread->sam = sam;
 	thread->ef = extendedFeatures;
-	thread->seq_in = fileno(seq_in);
+	thread->seq_in = seq_in_no;
 	thread->kmersize = kmersize;
 	thread->template = 0;
 	thread->file_count = fileCount;
@@ -1538,11 +1539,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	templatefilename = *templatefilenames++;
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".seq.b");
-	seq_in = sfopen(templatefilename, "rb");
-	fseek(seq_in, 0, SEEK_END);
-	seqin_size = 4 * ftell(seq_in);
-	fseek(seq_in, 0, SEEK_SET);
-	seq_in_no = fileno(seq_in);
+	seq_in_no = open(templatefilename, O_RDONLY);
+	if(seq_in_no == -1) {
+		ERROR();
+	}
+	seqin_size = 4 * lseek(seq_in_no, 0, SEEK_END);
 	if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
 		ERROR();
 	}
@@ -1573,12 +1574,16 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			name_file = sfopen(templatefilename, "rb");
 			templatefilename[file_len] = 0;
 			strcat(templatefilename, ".seq.b");
-			fclose(seq_in);
-			seq_in = sfopen(templatefilename, "rb");
-			fseek(seq_in, 0, SEEK_END);
-			seqin_size = 4 * ftell(seq_in);
-			fseek(seq_in, 0, SEEK_SET);
-			seq_in_no = fileno(seq_in);
+			close(seq_in_no);
+			seq_in_no = open(templatefilename, O_RDONLY);
+			if(seq_in_no == -1) {
+				ERROR();
+			}
+			seqin_size = 4 * lseek(seq_in_no, 0, SEEK_END);
+			if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
+				ERROR();
+			}
+			thread->seq_in = seq_in_no;
 			templatefilename[file_len] = 0;
 			seq_seeker = 0;
 			if(extendedFeatures == 2) {
@@ -1714,7 +1719,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	hashMapCCI_destroy(thread->template_index);
 	
 	/* Close files */
-	fclose(seq_in);
+	close(seq_in_no);
 	fclose(res_out);
 	if(alignment_out) {
 		fclose(alignment_out);

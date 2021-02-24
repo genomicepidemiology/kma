@@ -1885,7 +1885,8 @@ int save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, int
 		}
 		
 		/* get best match(es) */
-		if(hitCounter * kmersize > (n_kmers - hitCounter)) {
+		/*if(hitCounter * kmersize > (n_kmers - hitCounter)) {*/
+		if(hitCounter) {
 			bestScore = getMatchSparse(bestTemplates, Score, kmersize, n_kmers, M, MM);
 			
 			/*
@@ -2007,7 +2008,8 @@ int save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, int
 		qseq->N[0]--;
 		
 		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+		/*if(hitCounter * kmersize > (end - hitCounter + kmersize)) {*/
+		if(hitCounter) {
 			bestScore = getMatch(bestTemplates, Score);
 		} else {
 			*bestTemplates = clearScore(bestTemplates, Score);
@@ -2258,8 +2260,9 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 	qseq->N[0]--;
 	
 	/* get best match(es) */
-	//clearScore(bestTemplates, extendScore);
-	if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+	/*clearScore(bestTemplates, extendScore);*/
+	/*if(hitCounter * kmersize > (end - hitCounter + kmersize)) {*/
+	if(hitCounter) {
 		bestScore = getMatch(bestTemplates, Score);
 		/*
 		bestHits = 0;
@@ -2549,8 +2552,9 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 		}
 		
 		/* get best match(es) */
-		//clearScore(bestTemplates, extendScore);
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+		/* clearScore(bestTemplates, extendScore); */
+		/* if(hitCounter * kmersize > (end - hitCounter - kmersize)) { */
+		if(hitCounter) {
 			bestScore = getMatch(bestTemplates, Score);
 			/*
 			bestHits = 0;
@@ -2791,8 +2795,9 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 		}
 		
 		/* get best match(es) */
-		//clearScore(bestTemplates_r, extendScore);
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+		/*clearScore(bestTemplates_r, extendScore);*/
+		/*if(hitCounter * kmersize > (end - hitCounter + kmersize)) {*/
+		if(hitCounter) {
 			bestScore_r = getMatch(bestTemplates_r, Score_r);
 			
 			/*
@@ -2953,7 +2958,8 @@ int save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int 
 		reps = 0;
 		
 		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+		/*if(hitCounter * kmersize > (end - hitCounter + kmersize)) {*/
+		if(hitCounter) {
 			
 			bestScore = getMatch(bestTemplates, Score);
 			
@@ -3064,7 +3070,8 @@ int save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int 
 		reps = 0;
 		
 		/* get best match(es) */
-		if(hitCounter * kmersize > (end - hitCounter + kmersize)) {
+		/*if(hitCounter * kmersize > (end - hitCounter + kmersize)) {*/
+		if(hitCounter) {
 			bestScore_r = getMatch(bestTemplates_r, Score_r);
 			
 			/*
@@ -3135,7 +3142,8 @@ int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, 
 	}
 	
 	/* get forward */
-	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, extendScore, exhaustive)) && (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
+	/*if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, extendScore, exhaustive)) && (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {*/
+	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq, extendScore, exhaustive))) {
 		/* got hits */
 		bestScore = getF(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates);
 		
@@ -3160,7 +3168,8 @@ int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, 
 	*extendScore = 1;
 	
 	/* get reverse */
-	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq_r, extendScore, exhaustive)) && (qseq_r->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
+	/*if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq_r, extendScore, exhaustive)) && (qseq_r->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {*/
+	if((hitCounter = get_kmers_for_pair_ptr(templates, rewards, bestTemplates, bestTemplates_r, Score, Score_r, qseq_r, extendScore, exhaustive))) {
 		if(bestScore) {
 			bestScore_r = getR(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates);
 		} else {
@@ -3562,8 +3571,10 @@ int save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards, 
 	*extendScore = 1;
 	
 	/* get reverse */
-	if((hitCounter_r = get_kmers_for_pair_ptr(templates, rewards, bestTemplates_r, bestTemplates, Score_r, Score, qseq_r, extendScore, exhaustive)) && 
+	/*if((hitCounter_r = get_kmers_for_pair_ptr(templates, rewards, bestTemplates_r, bestTemplates, Score_r, Score, qseq_r, extendScore, exhaustive)) && 
 		(qseq->seqlen + qseq_r->seqlen - hitCounter - hitCounter_r - (kmersize << 1)) < (hitCounter + hitCounter_r) * kmersize && 
+	(bestScore = getSecondForce(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores))) {*/
+	if((hitCounter_r = get_kmers_for_pair_ptr(templates, rewards, bestTemplates_r, bestTemplates, Score_r, Score, qseq_r, extendScore, exhaustive)) && 
 	(bestScore = getSecondForce(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores))) {
 		
 		if((qseq->seqlen + qseq_r->seqlen - bestScore) < bestScore * kmersize) {
@@ -3952,8 +3963,9 @@ int save_kmers_HMM(const HashMapKMA *templates, const Penalties *rewards, int *b
 			stop = j + kmersize - 1;
 			
 			/* evaluate hit */
-			if(hitCounter > 0 && (hitCounter * kmersize > (stop - start - hitCounter + kmersize)) 
-				&& ((stop - start) > minLen || start == 0 || stop == seqlen)) {
+			/*if(hitCounter > 0 && (hitCounter * kmersize > (stop - start - hitCounter + kmersize)) 
+				&& ((stop - start) > minLen || start == 0 || stop == seqlen)) {*/
+			if(hitCounter > 0 && ((stop - start) > minLen || start == 0 || stop == seqlen)) {
 				if(deCon) {
 					if(SU) {
 						for(k = start; k < j; ++k) {

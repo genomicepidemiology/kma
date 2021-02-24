@@ -17,6 +17,7 @@
  * limitations under the License.
 */
 #define _XOPEN_SOURCE 600
+#include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -149,7 +150,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, q_id, cover, q_cover, p_value;
 	long double depth, expected, q_value;
-	FILE *inputfile, *frag_in_raw, *seq_in, *res_out, *name_file;
+	FILE *inputfile, *frag_in_raw, *res_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
 	FILE *extendedFeatures_out, *xml_out;
 	time_t t0, t1;
@@ -191,11 +192,14 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	
 	/* load databases */
 	strcat(templatefilename, ".seq.b");
-	seq_in = sfopen(templatefilename, "rb");
-	fseek(seq_in, 0, SEEK_END);
-	seqin_size = 4 * ftell(seq_in);
-	fseek(seq_in, 0, SEEK_SET);
-	seq_in_no = fileno(seq_in);
+	seq_in_no = open(templatefilename, O_RDONLY);
+	if(seq_in_no == -1) {
+		ERROR();
+	}
+	seqin_size = 4 * lseek(seq_in_no, 0, SEEK_END);
+	if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
+		ERROR();
+	}
 	templatefilename[file_len] = 0;
 	templates_index = calloc(DB_size, sizeof(HashMapCCI*));
 	if(!templates_index) {
@@ -1344,7 +1348,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
-	FILE *inputfile, *frag_in_raw, *seq_in, *res_out, *name_file;
+	FILE *inputfile, *frag_in_raw, *res_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
 	FILE *extendedFeatures_out, *xml_out;
 	time_t t0, t1;
@@ -1395,11 +1399,11 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		kmersize = 16;
 	}
 	strcat(templatefilename, ".seq.b");
-	seq_in = sfopen(templatefilename, "rb");
-	fseek(seq_in, 0, SEEK_END);
-	seqin_size = 4 * ftell(seq_in);
-	fseek(seq_in, 0, SEEK_SET);
-	seq_in_no = fileno(seq_in);
+	seq_in_no = open(templatefilename, O_RDONLY);
+	if(seq_in_no == -1) {
+		ERROR();
+	}
+	seqin_size = 4 * lseek(seq_in_no, 0, SEEK_END);
 	if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
 		ERROR();
 	}
@@ -1502,6 +1506,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	while((rc_flag = get_ankers(matched_templates, qseq_comp, header, &flag, inputfile)) != 0) {
 		if(*matched_templates) { // SE
 			read_score = 0;
+			qseq_r->len = 0;
 		} else { // PE
 			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, &flag_r, inputfile);
 			read_score = labs(read_score);
@@ -1536,7 +1541,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			if(rc_flag < 0 && 0 < matched_templates[*matched_templates]) {
 				bestHits = -bestHits;
 			}
-			
 			if(read_score && kmersize <= qseq_r->len) {
 				unCompDNA(qseq_r_comp, qseq_r->seq);
 				update_Scores_pe(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, flag, flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
@@ -2475,7 +2479,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	}
 	
 	/* Close files */
-	fclose(seq_in);
+	close(seq_in_no);
 	fclose(res_out);
 	if(alignment_out) {
 		fclose(alignment_out);

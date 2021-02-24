@@ -45,6 +45,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 		t_len += aligned->pos;
 	}
 	query = (unsigned char*)(queryOrg + q_s);
+	Stat.pos = 0;
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -109,7 +110,6 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	Stat.pos = 0;
 	if(0 < k) {
 		E_ptr = E;
 		for(m = 0; m < t_len; ++m) {
@@ -331,6 +331,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		t_len += template_length;
 	}
 	query = (unsigned char*)(queryOrg + q_s);
+	Stat.pos = 0;
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -402,7 +403,6 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	Stat.pos = 0;
 	E_ptr = E + (t_len * (bq_len + 1));
 	c_pos = (t_len + q_len) >> 1;
 	
@@ -661,6 +661,7 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 		t_len += template_length;
 	}
 	query = (unsigned char*)(queryOrg + q_s);
+	Stat.pos = 0;
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -709,7 +710,6 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	Stat.pos = 0;
 	if(0 < k) {
 		E_ptr = E;
 		for(m = 0; m < t_len; ++m) {
@@ -912,6 +912,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 		t_len += template_length;
 	}
 	query = (unsigned char*)(queryOrg + q_s);
+	Stat.pos = 0;
 	
 	if(t_len == 0 || q_len == 0) {
 		if(t_len == q_len) {
@@ -967,7 +968,6 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	Stat.pos = 0;
 	E_ptr = E + (t_len * (bq_len + 1));
 	c_pos = (t_len + q_len) >> 1;
 	

@@ -17,6 +17,7 @@
  * limitations under the License.
 */
 #define _XOPEN_SOURCE 600
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,7 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r
 
 void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
 	
-	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta;
+	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta, seq_in;
 	int *template_lengths;
 	long unsigned read_score, seeker;
 	double p_value, id, q_id, cover, q_cover;
@@ -213,10 +214,13 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	}
 	
 	strcat(templatefilename, ".seq.b");
-	DB_file = sfopen(templatefilename, "rb");
+	seq_in = open(templatefilename, O_RDONLY);
+	if(seq_in == -1) {
+		ERROR();
+	}
 	templatefilename[file_len] = 0;
-	template_index = alignLoad_fly(0, fileno(DB_file), *template_lengths, kmersize, seeker);
-	fclose(DB_file);
+	template_index = alignLoad_fly(0, seq_in, *template_lengths, kmersize, seeker);
+	close(seq_in);
 	
 	/* get name */
 	strcat(templatefilename, ".name");

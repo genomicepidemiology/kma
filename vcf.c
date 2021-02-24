@@ -188,12 +188,11 @@ void updateVcf(char *template_name, unsigned char *template_seq, double evalue, 
 			AF = (double) AD / DP;
 			RAF = (double) bestScore / DP;
 			DEL = assembly[pos].counts[5];
+			Q = pow(depthUpdate - (bestScore << 1), 2) / depthUpdate;
+			P = p_chisqr(Q);
 			
 			/* discard unimportant changes */
 			if(nuc != bestNuc || (t_len <= nextPos && *template_seq == '-') || DP < bcd || evalue < P || AD < support * DP) {
-				/* FORMAT */
-				Q = pow(depthUpdate - (bestScore << 1), 2) / depthUpdate;
-				P = p_chisqr(Q);
 				/* QUAL */
 				//QUAL = lnConst * log(P);
 				QUAL = lnConst * log(binP(DP, AD, 0.25));

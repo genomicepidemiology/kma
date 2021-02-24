@@ -1136,7 +1136,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 		aligned_assem->t[i] = bases[bestNuc];
 		
 		/* call query */
-		bestScore = assembly[pos].counts[bestNuc];
+		bestScore = assembly[i].counts[bestNuc];
 		depthUpdate = 0;
 		for(j = 0; j < 6; ++j) {
 			if(bestScore < assembly[i].counts[j]) {
@@ -1639,11 +1639,11 @@ void * assemble_KMA(void *arg) {
 	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeMatrix[1] = {0};
 	static volatile int thread_wait = 0, thread_init = 0, thread_begin = 0;
 	static volatile int mainTemplate = -2, next;
-	static int t_len, load;
+	static int t_len, load, seq_in;
 	static char *template_name;
 	static HashMapCCI *template_index;
 	Assemble_thread *thread = arg;
-	int i, minlen, aln_len, kmersize, sam, chunk, seq_in, ef, template;
+	int i, minlen, aln_len, kmersize, sam, chunk, ef, template;
 	int read_score, asm_len, nextTemplate, file_i, file_count, delta, status;
 	int thread_num, mq, bcd, start, end, q_start, q_end;
 	int stats[5], buffer[8], *qBoundPtr;

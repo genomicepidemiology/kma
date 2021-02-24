@@ -85,13 +85,15 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	/* copy seq */
 	update = (char *) dest->next;
 	++q_len;
+	--qseq;
 	while(--q_len) {
-		*update++ = bases[*qseq++];
+		*update++ = bases[*++qseq];
 	}
 	avail -= check;
 	
 	check = 33;
 	if(avail < check) {
+		dest->bytes = avail;
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
 		update = (char *) dest->next;
@@ -102,6 +104,7 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	
 	for(i = 1; i < bestHits; ++i) {
 		if(avail < 11) {
+			dest->bytes = avail;
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
 			update = (char *) dest->next;
@@ -112,6 +115,7 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	}
 	
 	if(avail < 11) {
+		dest->bytes = avail;
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
 		update = (char *) dest->next;
@@ -121,6 +125,7 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	update += check;
 	for(i = 1; i < bestHits; ++i) {
 		if(avail < 11) {
+			dest->bytes = avail;
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
 			update = (char *) dest->next;
@@ -131,6 +136,7 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	}
 	
 	if(avail < 11) {
+		dest->bytes = avail;
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
 		update = (char *) dest->next;
@@ -139,7 +145,8 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	avail -= check;
 	update += check;
 	for(i = 1; i < bestHits; ++i) {
-		if(avail < 11) {
+		if(avail < 12) {
+			dest->bytes = avail;
 			writeGzFileBuff(dest);
 			avail = dest->bytes;
 			update = (char *) dest->next;
@@ -151,6 +158,7 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	
 	check = header->len + 1;
 	if(avail < check) {
+		dest->bytes = avail;
 		writeGzFileBuff(dest);
 		avail = dest->bytes;
 		update = (char *) dest->next;
