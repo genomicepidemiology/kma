@@ -113,6 +113,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-ipe\t\tInput paired end file name(s)\n");
 	fprintf(helpOut, "#\t-int\t\tInput interleaved file name(s)\n");
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%s\n", "DB defined");
+	fprintf(helpOut, "#\t-ts\t\tTrim front of seeds with ts\t%d\n", 0);
 	fprintf(helpOut, "#\t-ml\t\tMinimum alignment length\t%d\n", 16);
 	fprintf(helpOut, "#\t-p\t\tp-value\t\t\t\t0.05\n");
 	fprintf(helpOut, "#\t-ConClave\tConClave version\t\t1\n");
@@ -203,7 +204,7 @@ int kma_main(int argc, char *argv[]) {
 	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, minlen;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int sparse_run, **d, status = 0;
+	static int sparse_run, ts, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
@@ -251,6 +252,7 @@ int kma_main(int argc, char *argv[]) {
 		print_all = 0;
 		ref_fsa = 0;
 		kmersize = 0;
+		ts = 0;
 		minlen = 16;
 		evalue = 0.05;
 		support = 0.0;
@@ -501,6 +503,15 @@ int kma_main(int argc, char *argv[]) {
 						kmersize = 16;
 					} else if(kmersize > 31) {
 						fprintf(stderr, "# Invalid kmersize parsed, max size is 31\n");
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-ts") == 0) {
+				++args;
+				if(args < argc) {
+					ts = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0 || ts < 0 || ts > 30) {
+						fprintf(stderr, "# Invalid seed trim parsed\n");
 						exit(1);
 					}
 				}
@@ -969,6 +980,7 @@ int kma_main(int argc, char *argv[]) {
 			++args;
 		}
 		preseed(0, 0, exhaustive);
+		trimSeeds(0, ts);
 		
 		if(sam && kmaPipe != &kmaPipeThread) {
 			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");

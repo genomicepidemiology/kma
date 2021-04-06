@@ -45,3 +45,4 @@ void seedPoint_realloc(AlnPoints *dest, int size);
 void seedPoint_free(AlnPoints *src);
 int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ);
 int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ);
+void trimSeeds(AlnPoints *points, int start);

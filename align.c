@@ -226,6 +226,9 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 		return Stat;
 	}
 	
+	/* trim seeds */
+	trimSeeds(points, start);
+	
 	/* initialize */
 	Stat.len = 0;
 	Stat.score = 0;

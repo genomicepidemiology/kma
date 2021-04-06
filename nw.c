@@ -183,8 +183,8 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 			thisScore = Q_prev + U;
 			if(Q < thisScore) {
 				Q = thisScore;
-				if(e == 2) {
-					D_ptr[n] = Q;
+				if(D_ptr[n] <= thisScore) {
+					D_ptr[n] = thisScore;
 					e = 3;
 				}
 			} else {
@@ -193,7 +193,7 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 			thisScore = P_prev[n] + U;
 			if(P_ptr[n] < thisScore) {
 				P_ptr[n] = thisScore;
-				if(D_ptr[n] < thisScore) {
+				if(D_ptr[n] <= thisScore) {
 					D_ptr[n] = thisScore;
 					e = 5;
 				}
@@ -483,8 +483,8 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 			thisScore = Q_prev + U;
 			if(Q < thisScore) {
 				Q = thisScore;
-				if(e == 2) {
-					D_ptr[n] = Q;
+				if(D_ptr[n] <= thisScore) {
+					D_ptr[n] = thisScore;
 					e = 3;
 				}
 			} else {
@@ -493,7 +493,7 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 			thisScore = P_prev[n - 1] + U;
 			if(P_ptr[n] < thisScore) {
 				P_ptr[n] = thisScore;
-				if(D_ptr[n] < thisScore) {
+				if(D_ptr[n] <= thisScore) {
 					D_ptr[n] = thisScore;
 					e = 5;
 				}
@@ -784,8 +784,8 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 			thisScore = Q_prev + U;
 			if(Q < thisScore) {
 				Q = thisScore;
-				if(e == 2) {
-					D_ptr[n] = Q;
+				if(D_ptr[n] <= thisScore) {
+					D_ptr[n] = thisScore;
 					e = 3;
 				}
 			} else {
@@ -794,7 +794,7 @@ AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, 
 			thisScore = P_prev[n] + U;
 			if(P_ptr[n] < thisScore) {
 				P_ptr[n] = thisScore;
-				if(D_ptr[n] < thisScore) {
+				if(D_ptr[n] <= thisScore) {
 					D_ptr[n] = thisScore;
 					e = 5;
 				}
@@ -1049,8 +1049,8 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 			thisScore = Q_prev + U;
 			if(Q < thisScore) {
 				Q = thisScore;
-				if(e == 2) {
-					D_ptr[n] = Q;
+				if(D_ptr[n] <= thisScore) {
+					D_ptr[n] = thisScore;
 					e = 3;
 				}
 			} else {
@@ -1059,7 +1059,7 @@ AlnScore NW_band_score(const long unsigned *template, const unsigned char *query
 			thisScore = P_prev[n - 1] + U;
 			if(P_ptr[n] < thisScore) {
 				P_ptr[n] = thisScore;
-				if(D_ptr[n] < thisScore) {
+				if(D_ptr[n] <= thisScore) {
 					D_ptr[n] = thisScore;
 					e = 5;
 				}

@@ -137,12 +137,13 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 						MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
 						MMs = MAX(2, MMs);
 						Ms = MIN(Ms - MMs, kmersize);
+						Ms = MIN(Ms, MMs);
 					}
 					
 					gap += weight + points->score[j] + Ms * M + MMs * MM;
 					
 					/* check if score is max */
-					if(score < gap) {
+					if(score <= gap) {
 						score = gap;
 						points->next[i] = j;
 					}
@@ -194,14 +195,12 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 		points->score[i] = score;
 		
 		/* update bestScore */
-		if(bestScore < score) {
+		if(bestScore <= score) {
 			if(points->next[i] != bestPos) {
 				secondScore = bestScore;
 			}
 			bestScore = score;
 			bestPos = i;
-		} else if(bestScore == score && points->next[i] != bestPos) {
-			secondScore = bestScore;
 		}
 	}
 	/* calculate mapping quality */
@@ -284,12 +283,13 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
 						MMs = MAX(2, MMs);
 						Ms = MIN(Ms - MMs, kmersize);
+						Ms = MIN(Ms, MMs);
 					}
 					
 					gap += weight + points->score[j] + Ms * M + MMs * MM;
 					
 					/* check if score is max */
-					if(score < gap) {
+					if(score <= gap) {
 						score = gap;
 						points->next[i] = j;
 					}
@@ -327,6 +327,7 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 						MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
 						MMs = MAX(2, MMs);
 						Ms = MIN(Ms - MMs, kmersize);
+						Ms = MIN(Ms, MMs);
 					}
 					
 					gap += weight + points->score[j] + Ms * M + MMs * MM;
@@ -353,7 +354,7 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 					gap += (weight + points->score[j] - (tStart - tEnd) * M);
 					
 					/* check if score is max */
-					if(score < gap) {
+					if(score <= gap) {
 						score = gap;
 						points->next[i] = j;
 					}
@@ -390,14 +391,12 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 		points->score[i] = score;
 		
 		/* update bestScore */
-		if(bestScore < score) {
+		if(bestScore <= score) {
 			if(points->next[i] != bestPos) {
 				secondScore = bestScore;
 			}
 			bestScore = score;
 			bestPos = i;
-		} else if(bestScore == score && points->next[i] != bestPos) {
-			secondScore = bestScore;
 		}
 	}
 	/* calculate mapping quality */
@@ -416,4 +415,32 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 	*/
 	
 	return bestPos;
+}
+
+void trimSeeds(AlnPoints *points, int start) {
+	
+	/* trim the start of each seed */
+	static int ts = 0;
+	int len;
+	
+	if(!points) {
+		ts = start;
+		return;
+	} else if(!ts) {
+		return;
+	}
+	
+	/* iterate seeds on best chain */
+	do {
+		/* trim seed */
+		len = points->qEnd[start] - points->qStart[start];
+		if(len < ts) {
+			/* ensure at least one nucleotide remains in seed */
+			points->tStart[start] += --len;
+			points->qStart[start] += len;
+		} else {
+			points->tStart[start] += ts;
+			points->qStart[start] += ts;
+		}
+	} while((start = points->next[start]));
 }
