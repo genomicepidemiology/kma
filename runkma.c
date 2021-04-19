@@ -805,7 +805,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				t_len = template_lengths[template];
 				//expected = (Nhits - read_score) * (1.0 * t_len) / (template_tot_ulen - t_len + etta);
 				expected = t_len;
-				expected /= (template_tot_ulen - t_len);
+				expected /= MAX(1,(template_tot_ulen - t_len));
 				expected *= (Nhits - read_score);
 				//q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
 				q_value = read_score - expected;
@@ -1202,7 +1202,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			read_score = w_scores[template];
 			t_len = template_lengths[template];
 			expected = t_len;
-			expected /= (template_tot_ulen - t_len);
+			expected /= MAX(1, (template_tot_ulen - t_len));
 			expected *= (Nhits - read_score);
 			if(0 < expected) {
 				q_value = read_score - expected;
@@ -1896,7 +1896,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				t_len = template_lengths[template];
 				//expected = (Nhits - read_score) * (t_len / (template_tot_ulen - t_len + etta));
 				expected = t_len;
-				expected /= (template_tot_ulen - t_len);
+				expected /= MAX(1, (template_tot_ulen - t_len));
 				expected *= (Nhits - read_score);
 				//q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
 				q_value = read_score - expected;
@@ -2357,7 +2357,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			read_score = w_scores[template];
 			t_len = template_lengths[template];
 			expected = t_len;
-			expected /= (template_tot_ulen - t_len);
+			expected /= MAX(1, (template_tot_ulen - t_len));
 			expected *= (Nhits - read_score);
 			if(0 < expected) {
 				q_value = read_score - expected;
