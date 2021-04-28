@@ -23,6 +23,7 @@
 extern int (*cmp)(int, int);
 int cmp_or(int t, int q);
 int cmp_and(int t, int q);
+int cmp_true(int t, int q);
 double fastp(long double q);
 double p_chisqr(long double q);
 double power(double x, unsigned n);

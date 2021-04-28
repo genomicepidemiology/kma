@@ -30,6 +30,10 @@ int cmp_and(int t, int q) {
 	return (t && q);
 }
 
+int cmp_true(int t, int q) {
+	return 1;
+}
+
 double fastp(long double q) {
 	/* P-value from quantile in a chi-square distribution */
 	double p = 1.0;

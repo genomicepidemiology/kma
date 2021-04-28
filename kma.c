@@ -157,6 +157,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-bcd\t\tMinimum depth at base\t\t1\n");
 	fprintf(helpOut, "#\t-bcg\t\tMaintain insignificant gaps\n");
 	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
+	fprintf(helpOut, "#\t-oa\t\tOutput all, disregard mrs and p-value\n#\t\t\twhen reporting a template hit\tFalse\n");
 	fprintf(helpOut, "#\t-mq\t\tMinimum mapping quality\t\t0\n");
 	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t0.50\n");
 	fprintf(helpOut, "#\t-mrc\t\tMinimum read coverage\t\t0.10\n");
@@ -815,6 +816,9 @@ int kma_main(int argc, char *argv[]) {
 				}
 			} else if(strcmp(argv[args], "-and") == 0) {
 				cmp = &cmp_and;
+			} else if(strcmp(argv[args], "-oa") == 0) {
+				cmp = &cmp_true;
+				ID_t = 0.0;
 			} else if(strcmp(argv[args], "-boot") == 0) {
 				printFsa_ptr = &bootFsa;
 			} else if(strcmp(argv[args], "-Mt1") == 0) {
