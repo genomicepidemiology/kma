@@ -150,7 +150,7 @@ HashMapKMA * loadValues(const char *filename) {
 		fclose(file);
 		return 0;
 	}
-	dest->exist_l = (long unsigned *)(dest->value_index);
+	dest->exist_l = (long unsigned *)(dest->exist);
 	
 	fclose(file);
 	return dest;

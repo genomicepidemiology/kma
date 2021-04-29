@@ -30,13 +30,17 @@
 Matrix * matrix_init(unsigned size) {
 	
 	int i, **ptr, *src;
+	long unsigned Size;
 	Matrix *dest;
 	
 	dest = smalloc(sizeof(Matrix));
 	dest->n = 0;
 	dest->size = size;
 	dest->mat = smalloc(size * sizeof(int *));
-	*(dest->mat) = smalloc(size * size * sizeof(int));
+	Size = size;
+	Size *= size;
+	Size *= sizeof(int);
+	*(dest->mat) = smalloc(Size);
 	
 	/* set matrix rows */
 	ptr = dest->mat;
@@ -54,13 +58,17 @@ Matrix * matrix_init(unsigned size) {
 Matrix * ltdMatrix_init(unsigned size) {
 	
 	int i, **ptr, *src;
+	long unsigned Size;
 	Matrix *dest;
 	
 	dest = smalloc(sizeof(Matrix));
 	dest->n = 0;
 	dest->size = size;
 	dest->mat = smalloc(size * sizeof(int *));
-	*(dest->mat) = calloc(size * (size - 1) / 2, sizeof(int));
+	Size = size;
+	Size *= (size - 1);
+	Size *= (sizeof(int) / 2);
+	*(dest->mat) = calloc(Size, 1);
 	if(!*(dest->mat)) {
 		ERROR();
 	}
@@ -120,8 +128,12 @@ Matrix * ltdMatrix_minit(long unsigned size) {
 void ltdMatrix_realloc(Matrix *src, unsigned size) {
 	
 	int i, **ptr, *mat;
+	long unsigned Size;
 	
-	*(src->mat) = realloc(*(src->mat), size * (size - 1) * sizeof(int) / 2);
+	Size = size;
+	Size *= (size - 1);
+	Size *= (sizeof(int) / 2);
+	*(src->mat) = realloc(*(src->mat), Size);
 	src->mat = realloc(src->mat, size * sizeof(int *));
 	if(!src->mat || !*(src->mat)) {
 		ERROR();
@@ -150,7 +162,9 @@ void Matrix_mdestroy(Matrix *src) {
 	
 	long unsigned size;
 	
-	size = src->size * (src->size - 1) * sizeof(int) / 2;
+	size = src->size;
+	size *= (src->size - 1);
+	size *= sizeof(int) / 2;
 	msync(*(src->mat), size, MS_SYNC);
 	munmap(*(src->mat), size);
 	free(src->mat);
