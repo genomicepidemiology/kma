@@ -23,7 +23,7 @@
 /* pointers determining how to deliver the input */
 extern void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*);
 extern void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*);
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out);
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, FILE *out);
 long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out);
 long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out);
 void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out);

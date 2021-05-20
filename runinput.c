@@ -29,7 +29,7 @@
 void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
 void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, FILE *out) {
 	
 	int fileCounter, phredScale, phredCut, start, end;
 	unsigned FASTQ;
@@ -65,55 +65,59 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 			
 			/* parse reads */
 			while(FileBuffgetFq(inputfile, header, qseq, qual, trans)) {
-				/* trim */
-				seq = qual->seq;
-				start = fiveClip;
-				end = qseq->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				while(end >= 0 && seq[end] < phredCut) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] < phredCut) {
-					++start;
-				}
-				/*
-				for(i = start; i < end; ++i) {
-					if(seq[i] < phredCut) {
-						seq[i] = 4;
+				if(qseq->len <= maxlen) {
+					/* trim */
+					seq = qual->seq;
+					start = fiveClip;
+					end = qseq->len - 1 - threeClip;
+					end = end < 0 ? 0 : end;
+					while(end >= 0 && seq[end] < phredCut) {
+						--end;
 					}
-				}
-				*/
-				qseq->len = end - start;
-				/* print */
-				if(qseq->len > minlen && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
-					/* dump seq */
-					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor, out);
-					qseq->seq -= start;
-					++count;
+					++end;
+					while(start < end && seq[start] < phredCut) {
+						++start;
+					}
+					/*
+					for(i = start; i < end; ++i) {
+						if(seq[i] < phredCut) {
+							seq[i] = 4;
+						}
+					}
+					*/
+					qseq->len = end - start;
+					/* print */
+					if(qseq->len > minlen && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
+						/* dump seq */
+						qseq->seq += start;
+						printFsa_ptr(header, qseq, compressor, out);
+						qseq->seq -= start;
+						++count;
+					}
 				}
 			}
 		} else if(FASTQ & 2) {
 			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
-				/* remove leading and trailing N's */
-				start = 0;
-				end = qseq->len - 1;
-				seq = qseq->seq;
-				while(end >= 0 && seq[end] == 4) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] == 4) {
-					++start;
-				}
-				qseq->len = end - start;
-				if(qseq->len > minlen) {
-					/* dump seq */
-					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor, out);
-					qseq->seq -= start;
-					++count;
+				if(qseq->len <= maxlen) {
+					/* remove leading and trailing N's */
+					start = 0;
+					end = qseq->len - 1;
+					seq = qseq->seq;
+					while(end >= 0 && seq[end] == 4) {
+						--end;
+					}
+					++end;
+					while(start < end && seq[start] == 4) {
+						++start;
+					}
+					qseq->len = end - start;
+					if(qseq->len > minlen) {
+						/* dump seq */
+						qseq->seq += start;
+						printFsa_ptr(header, qseq, compressor, out);
+						qseq->seq -= start;
+						++count;
+					}
 				}
 			}
 		}

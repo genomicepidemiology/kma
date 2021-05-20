@@ -187,6 +187,8 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-eq", "Minimum avg. quality score", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-5p", "Trim 5 prime", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-3p", "Trim 3 prime", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ml", "Minimum length", "16");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-xl", "Maximum length on se", "2147483647");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-boot", "Bootstrap sub-sequence", "False");
 	
 	fprintf(out, "#\n# Presets:\n");
@@ -223,7 +225,7 @@ int kma_main(int argc, char *argv[]) {
 	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, minlen;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int sparse_run, ts, **d, status = 0;
+	static int sparse_run, ts, maxlen, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
@@ -273,6 +275,7 @@ int kma_main(int argc, char *argv[]) {
 		kmersize = 0;
 		ts = 0;
 		minlen = 16;
+		maxlen = 2147483647;
 		evalue = 0.05;
 		support = 0.0;
 		minFrac = 1.0;
@@ -544,6 +547,15 @@ int kma_main(int argc, char *argv[]) {
 					minlen = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid kmersize parsed\n");
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-xl") == 0) {
+				++args;
+				if(args < argc) {
+					maxlen = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "# Invalid minimum length parsed\n");
 						exit(1);
 					}
 				}
@@ -1294,7 +1306,7 @@ int kma_main(int argc, char *argv[]) {
 			
 			/* SE */
 			if(fileCounter > 0) {
-				totFrags += run_input(inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
+				totFrags += run_input(inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, ioStream);
 			}
 			
 			/* PE */
