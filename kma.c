@@ -97,90 +97,107 @@ char * strjoin(char **strings, int len) {
 	return newStr;
 }
 
-static void helpMessage(int exeStatus) {
-	FILE *helpOut;
-	if(exeStatus == 0) {
-		helpOut = stdout;
-	} else {
-		helpOut = stderr;
-	}
-	fprintf(helpOut, "# KMA-%s mapps raw reads to a template database.\n", KMA_VERSION);
-	fprintf(helpOut, "# Options are:\t\tDesc:\t\t\t\tDefault:\tRequirements:\n");
-	fprintf(helpOut, "#\n");
-	fprintf(helpOut, "#\t-o\t\tOutput file\t\t\tNone\t\tREQUIRED\n");
-	fprintf(helpOut, "#\t-t_db\t\tTemplate DB\t\t\tNone\t\tREQUIRED\n");
-	fprintf(helpOut, "#\t-i\t\tInput file name(s)\t\tSTDIN\n");
-	fprintf(helpOut, "#\t-ipe\t\tInput paired end file name(s)\n");
-	fprintf(helpOut, "#\t-int\t\tInput interleaved file name(s)\n");
-	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%s\n", "DB defined");
-	fprintf(helpOut, "#\t-ts\t\tTrim front of seeds with ts\t%d\n", 0);
-	fprintf(helpOut, "#\t-ssa\t\tSeeds soround alignments\tFalse\n");
-	fprintf(helpOut, "#\t-ml\t\tMinimum alignment length\t%d\n", 16);
-	fprintf(helpOut, "#\t-p\t\tp-value\t\t\t\t0.05\n");
-	fprintf(helpOut, "#\t-ConClave\tConClave version\t\t1\n");
-	fprintf(helpOut, "#\t-mem_mode\tUse kmers to choose best\n#\t\t\ttemplate, and save memory\tFalse\n");
-	fprintf(helpOut, "#\t-proxi\t\tUse proximity scoring under\n#\t\t\ttemplate mapping\t\tFalse/1.0\n");
-	fprintf(helpOut, "#\t-ex_mode\tSearh kmers exhaustively\tFalse\n");
-	fprintf(helpOut, "#\t-ef\t\tPrint additional features\tFalse\n");
-	fprintf(helpOut, "#\t-vcf\t\tMake vcf file, 2 to apply FT\tFalse/0\n");
-	fprintf(helpOut, "#\t-sam\t\tOutput sam to stdout, 4 to \n#\t\t\tonly output mapped reads, \n#\t\t\t2096 for aligned\t\tFalse/0\n");
-	fprintf(helpOut, "#\t-nc\t\tNo consensus file\t\tFalse\n");
-	fprintf(helpOut, "#\t-na\t\tNo aln file\t\tFalse\n");
-	fprintf(helpOut, "#\t-nf\t\tNo frag file\t\t\tFalse\n");
-	fprintf(helpOut, "#\t-deCon\t\tRemove contamination\t\tFalse\n");
-	fprintf(helpOut, "#\t-dense\t\tDo not allow insertions\n#\t\t\tin assembly\t\t\tFalse\n");
-	fprintf(helpOut, "#\t-sasm\t\tSkip alignment and assembly\tFalse\n");
-	fprintf(helpOut, "#\t-ref_fsa\tConsensus sequnce will\n#\t\t\thave \"n\" instead of gaps\tFalse / 0\n");
-	fprintf(helpOut, "#\t-matrix\t\tPrint assembly matrix\t\tFalse\n");
-	fprintf(helpOut, "#\t-a\t\tPrint all best mappings\t\tFalse\n");
-	fprintf(helpOut, "#\t-mp\t\tMinimum phred score\t\t20\n");
-	fprintf(helpOut, "#\t-eq\t\tMinimum avg. quality score\t0\n");
-	fprintf(helpOut, "#\t-5p\t\tCut a constant number of\n#\t\t\tnucleotides from the 5 prime.\t0\n");
-	fprintf(helpOut, "#\t-3p\t\tCut a constant number of\n#\t\t\tnucleotides from the 3 prime.\t0\n");
-	fprintf(helpOut, "#\t-Sparse\t\tOnly count kmers\t\tFalse\n");
-	fprintf(helpOut, "#\t-Mt1\t\tMap only to \"num\" template.\t0 / False\n");
-	fprintf(helpOut, "#\t-ID\t\tMinimum ID\t\t\t1.0%%\n");
-	fprintf(helpOut, "#\t-ss\t\tSparse sorting (q,c,d)\t\tq\n");
-	fprintf(helpOut, "#\t-pm\t\tPairing method (p,u,f)\t\tu\n");
-	fprintf(helpOut, "#\t-fpm\t\tFine Pairing method (p,u,f)\tu\n");
-	fprintf(helpOut, "#\t-apm\t\tSets both pm and fpm\t\tu\n");
-	fprintf(helpOut, "#\t-shm\t\tUse shared DB made by kma_shm\t0 (lvl)\n");
-	fprintf(helpOut, "#\t-mmap\t\tMemory map *.comp.by\n");
-	fprintf(helpOut, "#\t-tmp\t\tSet directory for temporary files.\n");
-	fprintf(helpOut, "#\t-1t1\t\tForce end to end mapping\tFalse\n");
-	fprintf(helpOut, "#\t-hmm\t\tUse a HMM to assign template(s)\n#\t\t\tto query sequences\t\tTrue\n");
-	fprintf(helpOut, "#\t-ck\t\tCount kmers instead of\n#\t\t\tpseudo alignment\t\tFalse\n");
-	fprintf(helpOut, "#\t-ca\t\tMake circular alignments\tFalse\n");
-	fprintf(helpOut, "#\t-boot\t\tBootstrap sequence\t\tFalse\n");
-	fprintf(helpOut, "#\t-bc\t\tBase calls should be\n#\t\t\tsignificantly overrepresented.\t[True]\n");
-	fprintf(helpOut, "#\t-bc90\t\tBase calls should be both\n#\t\t\tsignificantly overrepresented,\n#\t\t\tand have 90%% agreement.\t\tFalse\n");
-	fprintf(helpOut, "#\t-bcNano\t\tCall bases at suspicious\n#\t\t\tdeletions, made for nanopore.\tFalse\n");
-	fprintf(helpOut, "#\t-bcd\t\tMinimum depth at base\t\t1\n");
-	fprintf(helpOut, "#\t-bcg\t\tMaintain insignificant gaps\n");
-	fprintf(helpOut, "#\t-and\t\tBoth mrs and p_value thresholds\n#\t\t\thas to reached to in order to\n#\t\t\treport a template hit.\t\tor\n");
-	fprintf(helpOut, "#\t-oa\t\tOutput all, disregard mrs and p-value\n#\t\t\twhen reporting a template hit\tFalse\n");
-	fprintf(helpOut, "#\t-mq\t\tMinimum mapping quality\t\t0\n");
-	fprintf(helpOut, "#\t-mrs\t\tMinimum alignment score,\n#\t\t\tnormalized to alignment length\t0.50\n");
-	fprintf(helpOut, "#\t-mrc\t\tMinimum read coverage\t\t0.10\n");
-	fprintf(helpOut, "#\t-mct\t\tMax overlap between templates\t0.10\n");
-	fprintf(helpOut, "#\t-reward\t\tScore for match\t\t\t1\n");
-	fprintf(helpOut, "#\t-penalty\tPenalty for mismatch\t\t-2\n");
-	fprintf(helpOut, "#\t-gapopen\tPenalty for gap opening\t\t-3\n");
-	fprintf(helpOut, "#\t-gapextend\tPenalty for gap extension\t-1\n");
-	fprintf(helpOut, "#\t-per\t\tReward for pairing reads\t7\n");
-	fprintf(helpOut, "#\t-localopen\tPenalty for openning a local chain\t-6\n");
-	fprintf(helpOut, "#\t-Npenalty\tPenalty matching N\t\t0\n");
-	fprintf(helpOut, "#\t-transition\tPenalty for transition\t\t-2\n");
-	fprintf(helpOut, "#\t-transversion\tPenalty for transversion\t-2\n");
-	fprintf(helpOut, "#\t-cge\t\tSet CGE penalties and rewards\tFalse\n");
-	fprintf(helpOut, "#\t-t\t\tNumber of threads\t\t1\n");
-	fprintf(helpOut, "#\t-status\t\tExtra status\n");
-	fprintf(helpOut, "#\t-verbose\tExtra verbose\n");
-	fprintf(helpOut, "#\t-c\t\tCitation\n");
-	fprintf(helpOut, "#\t-v\t\tVersion\n");
-	fprintf(helpOut, "#\t-h\t\tShows this help message\n");
-	fprintf(helpOut, "#\n");
-	exit(exeStatus);
+static void helpMessage(int exitStatus) {
+	
+	FILE *out = exitStatus ? stderr : stdout;
+	
+	fprintf(out, "# KMA-%s maps and/or aligns raw reads to a template database.\n", KMA_VERSION);
+	
+	fprintf(out, "# %16s\t%-32s\t%s\n", "Options:", "Desc:", "Default:");
+	
+	fprintf(out, "#\n# Input:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-i", "Single end input(s)", "stdin");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ipe", "Paired end input(s)", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-int", "Interleaved input(s)", "");
+	
+	fprintf(out, "#\n# Output:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-o", "Output prefix", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ef", "Output additional features", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-vcf", "Output vcf file, 2 to apply FT", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-sam", "Output sam, 4/2096 for mapped/aligned", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-nc", "No consensus file", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-nc", "No aln file", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-nf", "No frag file", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-matrix", "Output assembly matrix", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-a", "Output all template mappings", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-and", "Use both mrs and p-value on consensus", "or");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-oa", "Use neither mrs or p-value on consensus", "False");
+	
+	fprintf(out, "#\n# Consensus:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-bc", "Minimum support to call bases", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-bcNano", "Altered indel calling for ONT data", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-bcd", "Minimum depth to cal bases", "1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-bcg", "Maintain insignificant gaps", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ID", "Minimum consensus ID", "1.0%");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-dense", "Skip insertion in consensus", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ref_fsa", "Use n's on indels", "False");
+	
+	fprintf(out, "#\n# General:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-t_db", "Template DB", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-p", "P-value", "0.05");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-shm", "Use DB in shared memory", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mmap", "Memory map *.comp.b", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-tmp", "Set directory for temporary files", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-t", "Number of threads", "1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-status", "Extra status", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-verbose", "Extra verbose", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-c", "Citation", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-v", "Version", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-h", "Shows this help message", "");
+	
+	fprintf(out, "#\n# Template mapping:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ConClave", "ConClave version", "1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mem_mode", "Base ConClave on template mappings", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-proxi", "Proximity scoring (negative for soft)", "False/1.0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ex_mode", "Searh kmers exhaustively", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-deCon", "Remove contamination", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-Sparse", "Only count kmers", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ss", "Sparse sorting (q,c,d)", "q");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-Mt1", "Map everything to one template", "False/0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-pm", "Pairing method (p,u,f)", "u");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-1t1", "One query to one template", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-hmm", "Use a HMM to assign template(s)", "True");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ck", "Count k-mers over pseudo alignment", "False");
+	
+	fprintf(out, "#\n# Chaining:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-k", "K-mersize", "DB defined");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ts", "Trim front of seeds", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ssa", "Seeds soround alignments", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ex_mode", "Searh kmers exhaustively", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-fpm", "Pairing method (p,u,f)", "u");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mq", "Minimum mapping quality", "0");
+	
+	fprintf(out, "#\n# Alignment:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ca", "Circular alignments", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mrs", "Minimum relative alignment score", "0.5");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mrc", "Minimum query coverage", "0.0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ml", "Minimum alignment length", "16");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-reward", "Score for match", "1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-penalty", "Penalty for mismatch", "2");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-gapopen", "Penalty for gap opening", "3");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-gapextend", "Penalty for gap extension", "1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-per", "Reward for pairing reads", "7");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-Npenalty", "Penalty matching N", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-transition", "Penalty for transition", "2");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-transversion", "Penalty for transversion", "2");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-sasm", "Skip alignment", "False");
+	
+	fprintf(out, "#\n# Trimming:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mp", "Minimum phred score", "20");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-eq", "Minimum avg. quality score", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-5p", "Trim 5 prime", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-3p", "Trim 3 prime", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-boot", "Bootstrap sub-sequence", "False");
+	
+	fprintf(out, "#\n# Presets:\n");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-apm", "Sets both pm and fpm", "u");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-cge", "Set CGE penalties and rewards", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mint2", "Set 2ng gen Mintyper preset", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mint3", "Set 3rd gen Mintyper preset", "False");
+	
+	fprintf(out, "#\n");
+	
+	exit(exitStatus);
 }
 
 int kma_main(int argc, char *argv[]) {
