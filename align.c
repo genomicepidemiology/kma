@@ -127,7 +127,8 @@ AlnScore leadTailAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, c
 }
 
 void skipTrailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsigned *tseq, const unsigned char *qseq, int t_s, int t_len, int q_s, int q_len, const int bandwidth, NWmat *matrices) {
-	if(Frag_align) {
+	if(aligned) {
+		aligned->end = 0;
 		Frag_align->end = 0;
 	}
 }
@@ -199,6 +200,10 @@ void trailTailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsi
 		Stat->qGaps += NWstat.qGaps;
 	} else if(Frag_align) {
 		Frag_align->end = 0;
+	}
+	
+	if(aligned) {
+		aligned->end = q_len - q_e + Frag_align->end;
 	}
 }
 
@@ -492,7 +497,6 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	trailTailAlnPtr(aligned, Frag_align, &Stat, template_index->seq, qseq, points->tEnd[start] - 1, t_len, points->qEnd[start], q_len, bandwidth, matrices);
 	aligned->s[Stat.len] = 0;
 	aligned->len = Stat.len;
-	aligned->end = q_len - q_e + Frag_align->end;
 	points->len = 0;
 	
 	return Stat;
