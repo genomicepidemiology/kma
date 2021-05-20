@@ -28,6 +28,180 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 
+AlnScore (*leadTailAlnPtr)(Aln *, Aln *, const long unsigned*, const unsigned char*, int, int, int, const int, NWmat *) = &leadTailAln;
+void (*trailTailAlnPtr)(Aln *, Aln *, AlnScore *, const long unsigned *, const unsigned char *, int, int, int, int, const int, NWmat *) = &trailTailAln;
+
+AlnScore skipLeadAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, const unsigned char *qseq, int t_e, int t_len, int q_e, const int bandwidth, NWmat *matrices) {
+	
+	AlnScore Stat;
+	
+	/* initialize */
+	Stat.len = 0;
+	Stat.score = 0;
+	Stat.match = 0;
+	Stat.tGaps = 0;
+	Stat.qGaps = 0;
+	Stat.pos = t_e;
+	
+	return Stat;
+}
+
+AlnScore leadTailAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, const unsigned char *qseq, int t_e, int t_len, int q_e, const int bandwidth, NWmat *matrices) {
+	
+	int bias, band, t_s, q_s;
+	AlnScore Stat, NWstat;
+	
+	/* initialize */
+	Stat.len = 0;
+	Stat.score = 0;
+	Stat.match = 0;
+	Stat.tGaps = 0;
+	Stat.qGaps = 0;
+	Stat.pos = t_e;
+	
+	if(q_e) {
+		/* get boundaries */
+		t_s = 0;
+		q_s = 0;
+		if((q_e << 1) < t_e || (q_e + bandwidth) < t_e) { // big leading template gap, cut down
+			//t_s = t_e - MIN(bandwidth, (q_e << 1));
+			t_s = t_e - (q_e + (q_e < bandwidth ? q_e : bandwidth));
+		} else if((t_e << 1) < q_e || (t_e + bandwidth) < q_e) { // big leading query gap, cut down
+			//q_s = q_e - MIN(bandwidth, (t_e << 1));
+			q_s = q_e - (t_e + (t_e < bandwidth ? t_e : bandwidth));
+		}
+		
+		/* align */
+		if(t_e - t_s > 0 && q_e - q_s > 0) {
+			band = abs(t_e - t_s - q_e + q_s) + bandwidth;
+			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
+				if(Frag_align) {
+					NWstat = NW(tseq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
+				} else {
+					NWstat = NW_score(tseq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
+				}
+			} else if(Frag_align) {
+				NWstat = NW_band(tseq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices, t_len);
+				//NWstat = NW(tseq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
+			} else {
+				NWstat = NW_band_score(tseq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band, matrices, t_len);
+				//NWstat = NW_score(tseq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
+			}
+			
+			if(Frag_align) {
+				/* trim leading gaps */
+				bias = 0;
+				if(t_s == 0) {
+					while(bias < NWstat.len && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
+						if(Frag_align->t[bias] == 5) {
+							--NWstat.tGaps;
+							++(Frag_align->start);
+						} else {
+							--NWstat.qGaps;
+						}
+						++bias;
+					}
+					NWstat.len -= bias;
+					/*if(bias) {
+						NWstat.score -= (W1 + (bias - 1) * U);
+					}*/
+				}
+				
+				memcpy(aligned->t, Frag_align->t + bias, NWstat.len);
+				memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
+				memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
+				aligned->start = q_s + Frag_align->start;
+			}	
+			Stat.pos -= (NWstat.len - NWstat.tGaps);
+			Stat.score = NWstat.score;
+			Stat.len = NWstat.len;
+			Stat.match = NWstat.match;
+			Stat.tGaps = NWstat.tGaps;
+			Stat.qGaps = NWstat.qGaps;
+		} else if(aligned) {
+			aligned->start = q_s;
+		}
+	}
+	
+	return Stat;
+}
+
+void skipTrailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsigned *tseq, const unsigned char *qseq, int t_s, int t_len, int q_s, int q_len, const int bandwidth, NWmat *matrices) {
+	if(Frag_align) {
+		Frag_align->end = 0;
+	}
+}
+
+void trailTailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsigned *tseq, const unsigned char *qseq, int t_s, int t_len, int q_s, int q_len, const int bandwidth, NWmat *matrices) {
+	
+	int band, bias, q_e, t_e;
+	AlnScore NWstat;
+	
+	/* Get intervals in query and template to align */
+	q_e = q_len;
+	t_e = t_len;
+	if(((q_len - q_s) << 1) < (t_len - t_s) || (q_len - q_s + bandwidth) < (t_len - t_s)) { // big trailing template gap, cut down
+		//t_e = t_s + MIN(bandwidth, ((q_len - q_s) << 1));
+		t_e = q_len - q_s;
+		t_e = t_s + (t_e + (t_e < bandwidth ? t_e : bandwidth));
+	} else if(((t_len - t_s) << 1) < (q_len - q_s) || (t_len - t_s + bandwidth) < (q_len - q_s)) { // big leading query gap, cut down
+		//q_e = q_s + MIN(bandwidth, ((t_len - t_s) << 1));
+		q_e = t_len - t_s;
+		q_e = q_s + (q_e + (q_e < bandwidth ? q_e : bandwidth));
+	}
+	
+	/* align trailing gap */
+	if(t_e - t_s > 0 && q_e - q_s > 0) {
+		band = abs(t_e - t_s - q_e + q_s) + bandwidth;
+		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
+			if(Frag_align) {
+				NWstat = NW(tseq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
+			} else {
+				NWstat = NW_score(tseq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, matrices, t_len);
+			}
+		} else if(Frag_align) {
+			NWstat = NW_band(tseq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, band, matrices, t_len);
+			//NWstat = NW(tseq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
+		} else {
+			NWstat = NW_band_score(tseq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, band, matrices, t_len);
+		}
+		
+		if(Frag_align) {
+			/* trim trailing gaps */
+			if(t_e == t_len) {
+				bias = NWstat.len - 1;
+				while(bias && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
+					if(Frag_align->t[bias] == 5) {
+						--NWstat.tGaps;
+						++(Frag_align->end);
+					} else {
+						--NWstat.qGaps;
+					}
+					--bias;
+				}
+				++bias;
+				
+				if(bias != NWstat.len) {
+					//NWstat.score -= (W1 + (NWstat.len - bias) * U);
+					NWstat.len = bias;
+				}
+			}
+			
+			memcpy(aligned->t + Stat->len, Frag_align->t, NWstat.len);
+			memcpy(aligned->s + Stat->len, Frag_align->s, NWstat.len);
+			memcpy(aligned->q + Stat->len, Frag_align->q, NWstat.len);
+		}
+		
+		Stat->score += NWstat.score;
+		Stat->len += NWstat.len;
+		Stat->match += NWstat.match;
+		Stat->tGaps += NWstat.tGaps;
+		Stat->qGaps += NWstat.qGaps;
+	} else if(Frag_align) {
+		Frag_align->end = 0;
+	}
+}
+
 AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, Aln *aligned, Aln *Frag_align, int min, int max, int mq, double scoreT, AlnPoints *points, NWmat *matrices) {
 	
 	const int bandwidth = 64;
@@ -227,75 +401,10 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	}
 	
 	/* trim seeds */
-	trimSeeds(points, start);
-	
-	/* initialize */
-	Stat.len = 0;
-	Stat.score = 0;
-	Stat.match = 0;
-	Stat.tGaps = 0;
-	Stat.qGaps = 0;
-	value = points->tStart[start] - 1;
-	Stat.pos = value;
-	i = points->qStart[start];
+	trimSeedsPtr(points, start);
 	
 	/* align leading tail */
-	if(i != 0) {
-		/* get boundaries */
-		t_s = 0;
-		t_e = value;
-		q_s = 0;
-		q_e = i;
-		if((q_e << 1) < t_e || (q_e + bandwidth) < t_e) { // big leading template gap, cut down
-			//t_s = t_e - MIN(bandwidth, (q_e << 1));
-			t_s = t_e - (q_e + (q_e < bandwidth ? q_e : bandwidth));
-		} else if((t_e << 1) < q_e || (t_e + bandwidth) < q_e) { // big leading query gap, cut down
-			//q_s = q_e - MIN(bandwidth, (t_e << 1));
-			q_s = q_e - (t_e + (t_e < bandwidth ? t_e : bandwidth));
-		}
-		
-		/* align */
-		if(t_e - t_s > 0 && q_e - q_s > 0) {
-			band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
-			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-				NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
-			} else {
-				NWstat = NW_band(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
-				//NWstat = NW(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, Frag_align, matrices);
-			}
-			
-			/* trim leading gaps */
-			bias = 0;
-			if(t_s == 0) {
-				while(bias < NWstat.len && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
-					if(Frag_align->t[bias] == 5) {
-						--NWstat.tGaps;
-						++(Frag_align->start);
-					} else {
-						--NWstat.qGaps;
-					}
-					++bias;
-				}
-				NWstat.len -= bias;
-				/*if(bias) {
-					NWstat.score -= (W1 + (bias - 1) * U);
-				}*/
-			}
-			
-			memcpy(aligned->t, Frag_align->t + bias, NWstat.len);
-			memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
-			memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
-			aligned->start = q_s + Frag_align->start;
-			Stat.pos -= (NWstat.len - NWstat.tGaps);
-			Stat.score = NWstat.score;
-			Stat.len = NWstat.len;
-			Stat.match = NWstat.match;
-			Stat.tGaps = NWstat.tGaps;
-			Stat.qGaps = NWstat.qGaps;
-		} else {
-			aligned->start = q_s;
-		}
-	}
+	Stat = leadTailAlnPtr(aligned, Frag_align, template_index->seq, qseq, points->tStart[start] - 1, t_len, points->qStart[start], bandwidth, matrices);
 	
 	/* piece seeds together */
 	stop = 1;
@@ -357,11 +466,11 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 				return Stat;
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
-				band = 4 * abs(t_l - q_e + q_s) + bandwidth;
+				band = abs(t_l - q_e + q_s) + bandwidth;
 				if(q_e - q_s <= band || t_l <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
+					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
 				} else {
-					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band, matrices);
+					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band, matrices, t_len);
 					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
 				}
 				
@@ -380,63 +489,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 	}
 	
 	/* align trailing tail */
-	/* Get intervals in query and template to align */
-	q_s = points->qEnd[start];
-	t_s = points->tEnd[start] - 1;
-	q_e = q_len;
-	t_e = t_len;
-	if(((q_len - q_s) << 1) < (t_len - t_s) || (q_len - q_s + bandwidth) < (t_len - t_s)) { // big trailing template gap, cut down
-		//t_e = t_s + MIN(bandwidth, ((q_len - q_s) << 1));
-		t_e = q_len - q_s;
-		t_e = t_s + (t_e + (t_e < bandwidth ? t_e : bandwidth));
-	} else if(((t_len - t_s) << 1) < (q_len - q_s) || (t_len - t_s + bandwidth) < (q_len - q_s)) { // big leading query gap, cut down
-		//q_e = q_s + MIN(bandwidth, ((t_len - t_s) << 1));
-		q_e = t_len - t_s;
-		q_e = q_s + (q_e + (q_e < bandwidth ? q_e : bandwidth));
-	}
-	
-	/* align trailing gap */
-	if(t_e - t_s > 0 && q_e - q_s > 0) {
-		band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
-		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
-			NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices);
-		} else {
-			NWstat = NW_band(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, band, matrices);
-			//NWstat = NW(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, Frag_align, matrices);
-		}
-		/* trim trailing gaps */
-		if(t_e == t_len) {
-			bias = NWstat.len - 1;
-			while(bias && (Frag_align->t[bias] == 5 || Frag_align->q[bias] == 5)) {
-				if(Frag_align->t[bias] == 5) {
-					--NWstat.tGaps;
-					++(Frag_align->end);
-				} else {
-					--NWstat.qGaps;
-				}
-				--bias;
-			}
-			++bias;
-			
-			
-			if(bias != NWstat.len) {
-				//NWstat.score -= (W1 + (NWstat.len - bias) * U);
-				NWstat.len = bias;
-			}
-		}
-		
-		memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);
-		memcpy(aligned->s + Stat.len, Frag_align->s, NWstat.len);
-		memcpy(aligned->q + Stat.len, Frag_align->q, NWstat.len);
-		Stat.score += NWstat.score;
-		Stat.len += NWstat.len;
-		Stat.match += NWstat.match;
-		Stat.tGaps += NWstat.tGaps;
-		Stat.qGaps += NWstat.qGaps;
-	} else {
-		Frag_align->end = 0;
-	}
-	
+	trailTailAlnPtr(aligned, Frag_align, &Stat, template_index->seq, qseq, points->tEnd[start] - 1, t_len, points->qEnd[start], q_len, bandwidth, matrices);
 	aligned->s[Stat.len] = 0;
 	aligned->len = Stat.len;
 	aligned->end = q_len - q_e + Frag_align->end;
@@ -450,7 +503,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	const int bandwidth = 64;
 	int i, j, k, l, bias, prev, start, stop, t_len, value, end, band, U, M;
 	int t_l, t_s, t_e, q_s, q_e, mem_count, score, kmersize, *seeds, **d;
-	unsigned mapQ, shifter;
+	unsigned mapQ, shifter, cPos, iPos;
 	long unsigned key;
 	unsigned char nuc;
 	AlnScore Stat, NWstat;
@@ -478,7 +531,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				end = q_end - kmersize + 1;
 			}
 			while(j < end) {
-				key = getKmer(qseq_comp->seq, j, shifter);
+				getKmer_macro(key, qseq_comp->seq, j, cPos, iPos, shifter);
 				value = hashMapCCI_get(template_index, key, shifter);
 				
 				if(value == 0) {
@@ -576,6 +629,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 			j = qseq_comp->N[i] + 1;
 		}
 	}
+	mapQ = 0;
 	
 	if(mem_count) {
 		points->len = mem_count;
@@ -593,8 +647,6 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	/* get best seed chain, returns best starting point */
 	start = chainSeedsPtr(points, q_len, t_len, kmersize, &mapQ);
 	score = points->score[start];
-	
-	//if(score < (q_len >> 5)) {
 	if(mapQ < mq || score < kmersize) {
 		Stat.score = 0;
 		Stat.len = 1;
@@ -606,48 +658,10 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		return Stat;
 	}
 	
-	/* initialize */
-	Stat.len = 0;
-	Stat.score = 0;
-	Stat.match = 0;
-	Stat.tGaps = 0;
-	Stat.qGaps = 0;
-	value = points->tStart[start] - 1;
-	Stat.pos = value;
-	i = points->qStart[start];
-	
 	/* align leading tail */
-	if(i != 0) {
-		/* get boundaries */
-		t_s = 0;
-		t_e = value;
-		q_s = 0;
-		q_e = i;
-		if((q_e << 1) < t_e || (q_e + bandwidth) < t_e) { // big leading template gap, cut down
-			//t_s = t_e - MIN(bandwidth, (q_e << 1));
-			t_s = t_e - (q_e + (q_e < bandwidth ? q_e : bandwidth));
-		} else if((t_e << 1) < q_e || (t_e + bandwidth) < q_e) { // big leading query gap, cut down
-			//q_s = q_e - MIN(bandwidth, (t_e << 1));
-			q_s = q_e - (t_e + (t_e < bandwidth ? t_e : bandwidth));
-		}
-		
-		/* align */
-		if(t_e - t_s > 0 && q_e - q_s > 0) {
-			band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
-			if(q_e - q_s <= band || t_e - t_s <= band) {// || abs(t_e - t_s - q_e - q_s) >= 32) {
-				NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
-			} else {
-				NWstat = NW_band_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, band, matrices, t_len);
-				//NWstat = NW_score(template_index->seq, qseq, -1 - (t_s == 0), t_s, t_e, q_s, q_e, matrices, t_len);
-			}
-			Stat.pos -= (NWstat.len - NWstat.tGaps);
-			Stat.score = NWstat.score;
-			Stat.len = NWstat.len;
-			Stat.match = NWstat.match;
-			Stat.tGaps = NWstat.tGaps;
-			Stat.qGaps = NWstat.qGaps;
-		}
-	}
+	/* new one does not */
+	leadTailAlnPtr = &leadTailAln;
+	Stat = leadTailAlnPtr(0, 0, template_index->seq, qseq, points->tStart[start] - 1, t_len, points->qStart[start], bandwidth, matrices);
 	
 	/* piece seeds together */
 	stop = 1;
@@ -703,7 +717,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 				return Stat;
 			}
 			if((t_l > 0 || q_e - q_s > 0)) {
-				band = 4 * abs(t_l - q_e + q_s) + bandwidth;
+				band = abs(t_l - q_e + q_s) + bandwidth;
 				if(q_e - q_s <= band || t_l <= band) {
 					NWstat = NW_score(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, matrices, t_len);
 				} else {
@@ -721,35 +735,7 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	}
 	
 	/* align trailing tail */
-	/* Get intervals in query and template to align */
-	q_s = points->qEnd[start];
-	t_s = points->tEnd[start] - 1;
-	q_e = q_len;
-	t_e = t_len;
-	if((t_len - t_s) > (q_len - q_s + bandwidth) || (t_len - t_s) > ((q_len - q_s) << 1)) { // big trailing template gap, cut down
-		//t_e = t_s + MIN(bandwidth, ((q_len - q_s) << 1));
-		t_e = q_len - q_s;
-		t_e = t_s + (t_e + (t_e < bandwidth ? t_e : bandwidth));
-	} else if ((q_len - q_s) > (t_len - t_s + bandwidth) || (q_len - q_s) > ((t_len - t_s) << 1)) { // big leading query gap, cut down
-		//q_e = q_s + MIN(bandwidth, ((t_len - t_s) << 1));
-		q_e = t_len - t_s;
-		q_e = q_s + (q_e + (q_e < bandwidth ? q_e : bandwidth));
-	}
-	
-	/* align trailing gap */
-	if(t_e - t_s > 0 && q_e - q_s > 0) {
-		band = 4 * abs(t_e - t_s - q_e + q_s) + bandwidth;
-		if(q_e - q_s <= band || t_e - t_s <= band) {//|| abs(t_e - t_s - q_e - q_s) >= 32) {
-			NWstat = NW_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, matrices, t_len);
-		} else {
-			NWstat = NW_band_score(template_index->seq, qseq, 1 + (t_e == t_len), t_s, t_e, q_s, q_e, band, matrices, t_len);
-		}
-		Stat.score += NWstat.score;
-		Stat.len += NWstat.len;
-		Stat.match += NWstat.match;
-		Stat.tGaps += NWstat.tGaps;
-		Stat.qGaps += NWstat.qGaps;
-	}
+	trailTailAlnPtr(0, 0, &Stat, template_index->seq, qseq, points->tEnd[start] - 1, t_len, points->qEnd[start], q_len, bandwidth, matrices);
 	points->len = 0;
 	
 	return Stat;
@@ -819,14 +805,15 @@ int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, i
 			i = q_len - q_start;
 			q_start = q_len - q_end;
 			q_end = i;
-		}
-		score_r = 0;
-		mem_count = 0;
-		if(q_start) {
+			i = q_start;
+		} else if(q_start) {
 			i = q_start;
 		} else {
 			i = preseed(template_index, qseq, q_end - q_start);
 		}
+		score_r = 0;
+		mem_count = 0;
+		
 		while(i < q_end) {
 			end = charpos(qseq, 4, i, q_len);
 			if(end == -1) {
@@ -993,6 +980,7 @@ int anker_rc_comp(const HashMapCCI *template_index, unsigned char *qseq, unsigne
 	static int one2one = 0;
 	int i, j, k, rc, end, score, score_r, value, t_len, q_len, prev;
 	int bestScore, mem_count, totMems, shifter, kmersize, bias, *Ns, *seeds;
+	unsigned cPos, iPos;
 	long unsigned key, mask, *seq;
 	
 	if(!template_index) {
@@ -1026,14 +1014,22 @@ int anker_rc_comp(const HashMapCCI *template_index, unsigned char *qseq, unsigne
 			points->len = mem_count;
 			Ns = qseq_r_comp->N;
 			Ns[*Ns] = q_len;
+			i = q_len - q_start;
+			q_start = q_len - q_end;
+			q_end = i;
+			i = q_start;
+		} else if(q_start) {
+			i = q_start;
+		} else {
+			i = preseed(template_index, qseq, q_end - q_start);
 		}
 		score_r = 0;
 		mem_count = 0;
-		i = 0;
-		while(i < q_len) {
+		
+		while(i < q_end) {
 			end = *++Ns - kmersize + 1;
 			while(i < end) {
-				key = getKmer(seq, i, shifter);
+				getKmer_macro(key, seq, i, cPos, iPos, shifter);
 				value = hashMapCCI_get(template_index, key, shifter);
 				
 				if(value == 0) {

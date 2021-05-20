@@ -38,6 +38,7 @@ struct alnPoints {
 
 /* pointer to chaining method */
 extern int (*chainSeedsPtr)(AlnPoints *, int, int, int, unsigned *);
+extern void (*trimSeedsPtr)(AlnPoints *points, int start);
 
 /* FUNCTIONS */
 AlnPoints * seedPoint_init(int size, Penalties *rewards);
@@ -46,3 +47,4 @@ void seedPoint_free(AlnPoints *src);
 int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ);
 int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ);
 void trimSeeds(AlnPoints *points, int start);
+void trimSeedsNoLead(AlnPoints *points, int start);

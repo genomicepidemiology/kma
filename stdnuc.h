@@ -21,6 +21,10 @@
 #define setEx(src, pos)(src[pos >> 3] |= (1 << (pos & 7)))
 #define unsetEx(src, pos)(src[pos >> 3] ^= (1 << (pos & 7)))
 #define getEx(src, pos)((src[pos >> 3] >> (pos & 7)) & 1)
+#define getKmer_macro(kmer, Comp, pos, cPos, iPos, shifter) \
+		iPos = (pos & 31) << 1;\
+		cPos = pos >> 5;\
+		kmer = (iPos <= shifter) ? ((Comp[cPos] << iPos) >> shifter) : (((Comp[cPos] << iPos) | (Comp[cPos + 1] >> (64-iPos))) >> shifter);
 
 long unsigned getKmer(long unsigned *compressor, unsigned cPos, const unsigned shifter);
 long unsigned makeKmer(const unsigned char *qseq, unsigned pos, unsigned size);

@@ -114,6 +114,7 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-int\t\tInput interleaved file name(s)\n");
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t%s\n", "DB defined");
 	fprintf(helpOut, "#\t-ts\t\tTrim front of seeds with ts\t%d\n", 0);
+	fprintf(helpOut, "#\t-ssa\t\tSeeds soround alignments\tFalse\n");
 	fprintf(helpOut, "#\t-ml\t\tMinimum alignment length\t%d\n", 16);
 	fprintf(helpOut, "#\t-p\t\tp-value\t\t\t\t0.05\n");
 	fprintf(helpOut, "#\t-ConClave\tConClave version\t\t1\n");
@@ -516,6 +517,10 @@ int kma_main(int argc, char *argv[]) {
 						exit(1);
 					}
 				}
+			} else if(strcmp(argv[args], "-ssa") == 0) {
+				trimSeedsPtr = &trimSeedsNoLead;
+				leadTailAlnPtr = &skipLeadAln;
+				trailTailAlnPtr = &skipTrailAln;
 			} else if(strcmp(argv[args], "-ml") == 0) {
 				++args;
 				if(args < argc) {
@@ -984,7 +989,7 @@ int kma_main(int argc, char *argv[]) {
 			++args;
 		}
 		preseed(0, 0, exhaustive);
-		trimSeeds(0, ts);
+		trimSeedsPtr(0, ts);
 		
 		if(sam && kmaPipe != &kmaPipeThread) {
 			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");

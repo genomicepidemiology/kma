@@ -25,6 +25,7 @@
 #include "stdstat.h"
 
 int (*chainSeedsPtr)(AlnPoints *, int, int, int, unsigned *) = &chainSeeds;
+void (*trimSeedsPtr)(AlnPoints *points, int start) = &trimSeeds;
 
 AlnPoints * seedPoint_init(int size, Penalties *rewards) {
 	
@@ -78,7 +79,7 @@ void seedPoint_free(AlnPoints *src) {
 int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ) {
 	
 	int i, j, nMems, weight, gap, score, bestScore, secondScore, bestPos;
-	int tStart, tEnd, qEnd, tGap, qGap, nMin, W1, U, M, MM, Ms, MMs;
+	int tStart, tEnd, qStart, qEnd, tGap, qGap, nMin, W1, U, M, MM, Ms, MMs;
 	Penalties *rewards;
 	
 	rewards = points->rewards;
@@ -87,29 +88,45 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 	M = rewards->M;
 	MM = rewards->MM;
 	nMems = points->len;
-	i = nMems - 1;
-	bestPos = i;
-	bestScore = points->weight[i] * M;
+	i = nMems;
+	bestPos = i - 1;
+	bestScore = 0;
 	secondScore = 0;
-	points->score[i] = bestScore;
+	points->score[i] = 0;
 	points->next[i] = 0;
-	points->weight[i] -= (kmersize - 1);
 	
 	while(i--) {
 		weight = points->weight[i] * M;
 		points->next[i] = 0;
 		tEnd = points->tEnd[i];
 		qEnd = points->qEnd[i];
-		score = MIN(t_len - tEnd, q_len - qEnd);
-		if(0 < --score) {
-			score *= U;
-			score += W1;
-		} else if(score == 0) {
-			score = W1;
+		
+		/* get stop score */
+		gap = MIN(t_len - tEnd, q_len - qEnd);
+		Ms = gap;
+		
+		/* gap */
+		if(--gap) {
+			gap *= U;
+			gap += W1;
+		} else if(gap == 0) {
+			gap = W1;
 		} else {
-			score = 0;
+			gap = 0;
 		}
-		score += weight;
+		
+		/* match */
+		if(Ms == 2) {
+			MMs = 2;
+			Ms = 0;
+		} else {
+			MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+			MMs = MAX(2, MMs);
+			Ms = MIN(Ms - MMs, kmersize);
+			Ms = MIN(Ms, MMs);
+		}
+		Ms = Ms * M + MMs * MM;
+		score = weight + (Ms < gap ? gap : Ms);
 		
 		/* 128 is the bandwidth */
 		nMin = MIN(nMems, i + 128);
@@ -194,6 +211,35 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 		}
 		points->score[i] = score;
 		
+		/* penalize start */
+		tStart = points->tStart[i];
+		qStart = points->qStart[i];
+		gap = MIN(tStart, qStart);
+		Ms = gap;
+		
+		/* gap */
+		if(0 < --gap) {
+			gap *= U;
+			gap += W1;
+		} else if(gap == 0) {
+			gap = W1;
+		} else {
+			gap = 0;
+		}
+		
+		/* match */
+		if(Ms == 2) {
+			MMs = 2;
+			Ms = 0;
+		} else {
+			MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+			MMs = MAX(2, MMs);
+			Ms = MIN(Ms - MMs, kmersize);
+			Ms = MIN(Ms, MMs);
+		}
+		Ms = Ms * M + MMs * MM;
+		score += Ms < gap ? gap : Ms;
+		
 		/* update bestScore */
 		if(bestScore <= score) {
 			if(points->next[i] != bestPos) {
@@ -201,29 +247,22 @@ int chainSeeds(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *
 			}
 			bestScore = score;
 			bestPos = i;
+		} else if(secondScore <= score && points->next[i] != bestPos) {
+			secondScore = bestScore;
 		}
 	}
+	
 	/* calculate mapping quality */
 	*mapQ = 0 < bestScore ? (ceil(40 * (1 - 1.0 * secondScore / bestScore) * MIN(1, points->weight[bestPos] / 10.0) * log(bestScore))) : 0;
+	points->score[bestPos] = bestScore;
 	
-	/* penalize start */
-	/*
-	if(bestPos != 0) {
-		score = (MIN(points->qStart[bestPos], points->tStart[bestPos])) * pM;
-		bestScore += MAX(W1, score);
-		if(points->qStart[0] == 0 && bestScore < points->score[0]) {
-			bestScore = points->score[0];
-			bestPos = 0;
-		}
-	}
-	*/
 	return bestPos;
 }
 
 int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, unsigned *mapQ) {
 	
 	int i, j, nMems, weight, gap, score, bestScore, secondScore, bestPos;
-	int tStart, tEnd, qEnd, tGap, qGap, nMin, W1, U, M, MM, Ms, MMs;
+	int tStart, tEnd, qStart, qEnd, tGap, qGap, nMin, W1, U, M, MM, Ms, MMs;
 	Penalties *rewards;
 	
 	rewards = points->rewards;
@@ -232,29 +271,45 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 	M = rewards->M;
 	MM = rewards->MM;
 	nMems = points->len;
-	i = nMems - 1;
-	bestPos = i;
-	bestScore = points->weight[i] * M;
+	i = nMems;
+	bestPos = i - 1;
+	bestScore = 0;
 	secondScore = 0;
-	points->score[i] = bestScore;
+	points->score[i] = 0;
 	points->next[i] = 0;
-	points->weight[i] -= (kmersize - 1);
 	
 	while(i--) {
 		weight = points->weight[i] * M;
 		points->next[i] = 0;
 		tEnd = points->tEnd[i];
 		qEnd = points->qEnd[i];
-		score = MIN(t_len - tEnd, q_len - qEnd);
-		if(0 < --score) {
-			score *= U;
-			score += W1;
-		} else if(score == 0) {
-			score = W1;
+		
+		/* get stop score */
+		gap = MIN(t_len - tEnd, q_len - qEnd);
+		Ms = gap;
+		
+		/* gap */
+		if(--gap) {
+			gap *= U;
+			gap += W1;
+		} else if(gap == 0) {
+			gap = W1;
 		} else {
-			score = 0;
+			gap = 0;
 		}
-		score += weight;
+		
+		/* match */
+		if(Ms == 2) {
+			MMs = 2;
+			Ms = 0;
+		} else {
+			MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+			MMs = MAX(2, MMs);
+			Ms = MIN(Ms - MMs, kmersize);
+			Ms = MIN(Ms, MMs);
+		}
+		Ms = Ms * M + MMs * MM;
+		score = weight + (Ms < gap ? gap : Ms);
 		
 		/* 128 is the bandwidth */
 		nMin = MIN(nMems, i + 128);
@@ -390,6 +445,35 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 		}
 		points->score[i] = score;
 		
+		/* penalize start */
+		tStart = points->tStart[i];
+		qStart = points->qStart[i];
+		gap = MIN(tStart, qStart);
+		Ms = gap;
+		
+		/* gap */
+		if(0 < --gap) {
+			gap *= U;
+			gap += W1;
+		} else if(gap == 0) {
+			gap = W1;
+		} else {
+			gap = 0;
+		}
+		
+		/* match */
+		if(Ms == 2) {
+			MMs = 2;
+			Ms = 0;
+		} else {
+			MMs = Ms / kmersize + (Ms % kmersize ? 1 : 0);
+			MMs = MAX(2, MMs);
+			Ms = MIN(Ms - MMs, kmersize);
+			Ms = MIN(Ms, MMs);
+		}
+		Ms = Ms * M + MMs * MM;
+		score += Ms < gap ? gap : Ms;
+		
 		/* update bestScore */
 		if(bestScore <= score) {
 			if(points->next[i] != bestPos) {
@@ -397,22 +481,14 @@ int chainSeeds_circular(AlnPoints *points, int q_len, int t_len, int kmersize, u
 			}
 			bestScore = score;
 			bestPos = i;
+		} else if(secondScore <= score && points->next[i] != bestPos) {
+			secondScore = bestScore;
 		}
 	}
-	/* calculate mapping quality */
-	*mapQ = ceil(40 * (1 - 1.0 * secondScore / bestScore) * MIN(1, points->weight[bestPos] / 10.0) * log(bestScore));
 	
-	/* penalize start */
-	/*
-	if(bestPos != 0) {
-		score = (MIN(points->qStart[bestPos], points->tStart[bestPos])) * pM;
-		bestScore += MAX(W1, score);
-		if(points->qStart[0] == 0 && bestScore < points->score[0]) {
-			bestScore = points->score[0];
-			bestPos = 0;
-		}
-	}
-	*/
+	/* calculate mapping quality */
+	*mapQ = 0 < bestScore ? ceil(40 * (1 - 1.0 * secondScore / bestScore) * MIN(1, points->weight[bestPos] / 10.0) * log(bestScore)) : 0;
+	points->score[bestPos] = bestScore;
 	
 	return bestPos;
 }
@@ -430,8 +506,52 @@ void trimSeeds(AlnPoints *points, int start) {
 		return;
 	}
 	
+	if(points->qStart[start]) {
+		/* iterate seeds on best chain */
+		do {
+			/* trim seed */
+			len = points->qEnd[start] - points->qStart[start];
+			if(len < ts) {
+				/* ensure at least one nucleotide remains in seed */
+				points->tStart[start] += --len;
+				points->qStart[start] += len;
+			} else {
+				points->tStart[start] += ts;
+				points->qStart[start] += ts;
+			}
+		} while((start = points->next[start]));
+	} else {
+		/* iterate seeds on best chain */
+		while((start = points->next[start])) {
+			/* trim seed */
+			len = points->qEnd[start] - points->qStart[start];
+			if(len < ts) {
+				/* ensure at least one nucleotide remains in seed */
+				points->tStart[start] += --len;
+				points->qStart[start] += len;
+			} else {
+				points->tStart[start] += ts;
+				points->qStart[start] += ts;
+			}
+		}
+	}
+}
+
+void trimSeedsNoLead(AlnPoints *points, int start) {
+	
+	/* trim the start of each seed */
+	static int ts = 0;
+	int len;
+	
+	if(!points) {
+		ts = start;
+		return;
+	} else if(!ts) {
+		return;
+	}
+	
 	/* iterate seeds on best chain */
-	do {
+	while((start = points->next[start])) {
 		/* trim seed */
 		len = points->qEnd[start] - points->qStart[start];
 		if(len < ts) {
@@ -442,5 +562,5 @@ void trimSeeds(AlnPoints *points, int start) {
 			points->tStart[start] += ts;
 			points->qStart[start] += ts;
 		}
-	} while((start = points->next[start]));
+	}
 }

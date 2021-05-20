@@ -56,7 +56,7 @@ struct aln {
 #define NWLOAD 1
 #endif
 
-AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, NWmat *matrices);
-AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, int band, NWmat *matrices);
+AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, NWmat *matrices, int template_length);
+AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, int band, NWmat *matrices, int template_length);
 AlnScore NW_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, NWmat *matrices, int template_length);
 AlnScore NW_band_score(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, int band, NWmat *matrices, int template_length);

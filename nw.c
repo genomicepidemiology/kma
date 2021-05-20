@@ -23,9 +23,9 @@
 #include "pherror.h"
 #include "stdnuc.h"
 
-AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, NWmat *matrices) {
+AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, NWmat *matrices, int template_length) {
 	
-	int m, n, t_len, q_len, thisScore, nuc_pos, template_length, W1, U, MM;
+	int m, n, t_len, q_len, thisScore, nuc_pos, W1, U, MM;
 	int pos[2], *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp, **d;
 	unsigned char *query, t_nuc, *E, *E_ptr, e;
 	AlnScore Stat;
@@ -40,9 +40,8 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	t_len = t_e - t_s;
 	aligned->start = 0;
 	aligned->end = 0;
-	template_length = aligned->pos;
 	if(t_len < 0) {
-		t_len += aligned->pos;
+		t_len += template_length;
 	}
 	query = (unsigned char*)(queryOrg + q_s);
 	Stat.pos = 0;
@@ -308,9 +307,9 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 	return Stat;
 }
 
-AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, int band, NWmat *matrices) {
+AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, int k, int t_s, int t_e, int q_s, int q_e, Aln *aligned, int band, NWmat *matrices, int template_length) {
 	
-	int m, n, t_len, q_len, thisScore, nuc_pos, template_length, pos[2];
+	int m, n, t_len, q_len, thisScore, nuc_pos, pos[2];
 	int bq_len, halfBand, sn, en, sq, eq, q_pos, c_pos, W1, U, MM;
 	int *D_ptr, *D_prev, Q, Q_prev, *P_ptr, *P_prev, *tmp, **d;
 	unsigned char *query, t_nuc, *E, *E_ptr, e;
@@ -326,7 +325,6 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	t_len = t_e - t_s;
 	aligned->start = 0;
 	aligned->end = 0;
-	template_length = aligned->pos;
 	if(t_len < 0) {
 		t_len += template_length;
 	}

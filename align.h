@@ -22,6 +22,13 @@
 #include "hashmapcci.h"
 #include "nw.h"
 
+extern AlnScore (*leadTailAlnPtr)(Aln *, Aln *, const long unsigned*, const unsigned char*, int, int, int, const int, NWmat *);
+extern void (*trailTailAlnPtr)(Aln *, Aln *, AlnScore *, const long unsigned *, const unsigned char *, int, int, int, int, const int, NWmat *);
+
+AlnScore skipLeadAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, const unsigned char *qseq, int t_e, int t_len, int q_e, const int bandwidth, NWmat *matrices);
+AlnScore leadTailAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, const unsigned char *qseq, int t_e, int t_len, int q_e, const int bandwidth, NWmat *matrices);
+void skipTrailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsigned *tseq, const unsigned char *qseq, int t_s, int t_len, int q_s, int q_len, const int bandwidth, NWmat *matrices);
+void trailTailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsigned *tseq, const unsigned char *qseq, int t_s, int t_len, int q_s, int q_len, const int bandwidth, NWmat *matrices);
 AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, Aln *aligned, Aln *Frag_align, int min, int max, int mq, double scoreT, AlnPoints *points, NWmat *matrices);
 AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, int q_len, int q_start, int q_end, const CompDNA *qseq_comp, int mq, double scoreT, AlnPoints *points, NWmat *matrices);
 int preseed(const HashMapCCI *template_index, unsigned char *qseq, int q_len);
