@@ -659,8 +659,6 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 	}
 	
 	/* align leading tail */
-	/* new one does not */
-	leadTailAlnPtr = &leadTailAln;
 	Stat = leadTailAlnPtr(0, 0, template_index->seq, qseq, points->tStart[start] - 1, t_len, points->qStart[start], bandwidth, matrices);
 	
 	/* piece seeds together */
