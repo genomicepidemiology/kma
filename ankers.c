@@ -199,10 +199,10 @@ int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inpu
 			}
 		}
 		
-		fread(qseq->seq, sizeof(long unsigned), qseq->complen, inputfile);
-		fread(qseq->N + 1, sizeof(int), qseq->N[0], inputfile);
-		fread(out_Tem + 1, sizeof(int), *out_Tem, inputfile);
-		fread(header->seq, 1, header->len, inputfile);
+		sfread(qseq->seq, sizeof(long unsigned), qseq->complen, inputfile);
+		sfread(qseq->N + 1, sizeof(int), qseq->N[0], inputfile);
+		sfread(out_Tem + 1, sizeof(int), *out_Tem, inputfile);
+		sfread(header->seq, 1, header->len, inputfile);
 	} else {
 		*out_Tem = infoSize[0];
 		return 0;

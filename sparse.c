@@ -198,7 +198,7 @@ char ** load_DBs_Sparse(char *templatefilename, unsigned **template_lengths, uns
 		if(!template_names[0]) {
 			ERROR();
 		}
-		fread(template_names[0], 1, file_size, DB_file);
+		sfread(template_names[0], 1, file_size, DB_file);
 		template_names[0][file_size - 1] = 0;
 		
 		template_names[1] = template_names[0];

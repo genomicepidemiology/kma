@@ -340,7 +340,7 @@ int index_main(int argc, char *argv[]) {
 				}
 				
 				/* get number of file */
-				fread(inputfiles[filecount - 1], 1, size - 1, inputfile);
+				sfread(inputfiles[filecount - 1], 1, size - 1, inputfile);
 				fclose(inputfile);
 				
 				i = size;
@@ -390,7 +390,7 @@ int index_main(int argc, char *argv[]) {
 				}
 				
 				/* get number of file */
-				fread(deconfiles[deconcount - 1], 1, size - 1, inputfile);
+				sfread(deconfiles[deconcount - 1], 1, size - 1, inputfile);
 				fclose(inputfile);
 				
 				i = size;

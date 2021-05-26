@@ -319,8 +319,7 @@ int loadComp(CompDNA *compressor, FILE* file) {
 int getComp(CompDNA *compressor, FILE* file) {
 	
 	compressor->seqlen = 0;
-	fread(&compressor->seqlen, sizeof(int), 1, file);
-	if(!compressor->seqlen) {
+	if(!fread(&compressor->seqlen, sizeof(int), 1, file)) {
 		return 0;
 	}
 	

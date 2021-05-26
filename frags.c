@@ -63,7 +63,7 @@ FILE * printFrags(Frag **alignFrags, int DB_size) {
 
 void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_score, int *best_start_pos, int *best_end_pos, int *bestTemplates, Qseqs *header, FileBuff *dest) {
 	
-	static volatile int lock[1] = {0};
+	static volatile int *lock = {0};
 	int i, check, avail;
 	char *update;
 	const char bases[6] = "ACGTN-";

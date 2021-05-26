@@ -459,7 +459,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		if(!template_lengths) {
 			ERROR();
 		}
-		fread(template_lengths + dbBiases[i], sizeof(int), bias, inputfile);
+		sfread(template_lengths + dbBiases[i], sizeof(int), bias, inputfile);
 		templatefilename[file_len] = 0;
 		fclose(inputfile);
 		if(sam) {
@@ -878,11 +878,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			header->len = stats[3];
 			flag = stats[4];
 			
-			fread(qseq->seq, 1, qseq->len, frag_in_raw);
-			fread(header->seq, 1, header->len, frag_in_raw);
-			fread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-			fread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
+			sfread(qseq->seq, 1, qseq->len, frag_in_raw);
+			sfread(header->seq, 1, header->len, frag_in_raw);
+			sfread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
+			sfread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
+			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			/* Several mapped templates, choose best */
 			if(bestHits > 1) {
 				bestTemplate = -1;
@@ -977,12 +977,12 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				if(extendedFeatures) {
 					readCounts[bestTemplate]++;
 				}
-				fread(stats, sizeof(int), 3, frag_in_raw);
+				sfread(stats, sizeof(int), 3, frag_in_raw);
 				qseq->len = stats[0];
 				header->len = stats[1];
 				flag = stats[2];
-				fread(qseq->seq, 1, qseq->len, frag_in_raw);
-				fread(header->seq, 1, header->len, frag_in_raw);
+				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
+				sfread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
 				alignFrag = smalloc(sizeof(Frag));
 				alignFrag->buffer[0] = qseq->len;
@@ -1026,7 +1026,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			/* best templates, skip rest */
 			fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
-			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
+			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			
 			/* Several mapped templates, choose best */
 			if(bestHits > 1) {
@@ -1079,7 +1079,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			w_scores[abs(bestTemplate)] += read_score;
 			
 			if(stats[2] < 0) {
-				fread(stats, sizeof(int), 2, frag_in_raw);
+				sfread(stats, sizeof(int), 2, frag_in_raw);
 				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
@@ -1122,7 +1122,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			if(bestHits != 1) {
 				/* best templates, skip rest */
 				fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
-				fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
+				sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 				bestTemplate = 0;
 				i = bestHits;
 				while(i--) {
@@ -1146,7 +1146,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			}
 			
 			if(stats[2] < 0) {
-				fread(stats, sizeof(int), 2, frag_in_raw);
+				sfread(stats, sizeof(int), 2, frag_in_raw);
 				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
@@ -1162,11 +1162,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			header->len = stats[3];
 			flag = stats[4];
 			
-			fread(qseq->seq, 1, qseq->len, frag_in_raw);
-			fread(header->seq, 1, header->len, frag_in_raw);
-			fread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-			fread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-			fread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
+			sfread(qseq->seq, 1, qseq->len, frag_in_raw);
+			sfread(header->seq, 1, header->len, frag_in_raw);
+			sfread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
+			sfread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
+			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			
 			/* Several mapped templates, choose best according to sorting keys */
 			if(bestHits != 1) {
@@ -1310,12 +1310,12 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				if(extendedFeatures) {
 					readCounts[bestTemplate]++;
 				}
-				fread(stats, sizeof(int), 3, frag_in_raw);
+				sfread(stats, sizeof(int), 3, frag_in_raw);
 				qseq->len = stats[0];
 				header->len = stats[1];
 				flag = stats[2];
-				fread(qseq->seq, 1, qseq->len, frag_in_raw);
-				fread(header->seq, 1, header->len, frag_in_raw);
+				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
+				sfread(header->seq, 1, header->len, frag_in_raw);
 				/* dump frag info */
 				alignFrag = smalloc(sizeof(Frag));
 				alignFrag->buffer[0] = qseq->len;

@@ -92,7 +92,7 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 		status = 1;
 	} else {
 		dest->exist = shmat(shmid, NULL, 0);
-		fread(dest->exist, 1, size, file);
+		sfread(dest->exist, 1, size, file);
 	}
 	
 	/* values */
@@ -112,7 +112,7 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	} else {
 		/* found */
 		dest->values = shmat(shmid, NULL, 0);
-		fread(dest->values, 1, size, file);
+		sfread(dest->values, 1, size, file);
 	}
 	if((dest->size - 1) == mask) {
 		return status;
@@ -135,7 +135,7 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	} else {
 		/* found */
 		dest->key_index = shmat(shmid, NULL, 0);
-		fread(dest->key_index, 1, size, file);
+		sfread(dest->key_index, 1, size, file);
 	}
 	
 	/* value indexes */
@@ -155,7 +155,7 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	} else {
 		/* found */
 		dest->value_index = shmat(shmid, NULL, 0);
-		fread(dest->value_index, 1, size, file);
+		sfread(dest->value_index, 1, size, file);
 	}
 	
 	return status;
@@ -260,7 +260,7 @@ int * length_setupSHM(FILE *file, const char *filename) {
 		template_lengths = 0;
 	} else {
 		template_lengths = shmat(shmid, NULL, 0);
-		fread(template_lengths, sizeof(unsigned), size / sizeof(unsigned), file);
+		sfread(template_lengths, sizeof(unsigned), size / sizeof(unsigned), file);
 	}
 	
 	return template_lengths;
@@ -302,7 +302,7 @@ long unsigned * seq_setupSHM(FILE *file, const char *filename) {
 		seq = 0;
 	} else {
 		seq = shmat(shmid, NULL, 0);
-		fread(seq, sizeof(long unsigned), size / sizeof(long unsigned), file);
+		sfread(seq, sizeof(long unsigned), size / sizeof(long unsigned), file);
 	}
 	
 	return seq;
@@ -344,7 +344,7 @@ char * name_setupSHM(FILE *file, const char *filename) {
 		template_names = 0;
 	} else {
 		template_names = shmat(shmid, NULL, 0);
-		fread(template_names, 1, size, file);
+		sfread(template_names, 1, size, file);
 		for(i = 0; i < size; ++i) {
 			if(template_names[i] == '\n') {
 				template_names[i] = 0;

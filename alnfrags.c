@@ -1020,7 +1020,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 
 void * alnFrags_threaded(void * arg) {
 	
-	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeDB[1] = {0};
+	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeDB = {0};
 	Aln_thread *thread = arg;
 	int rc_flag, read_score, delta, seq_in, kmersize, minlen;
 	int flag, flag_r, mq, sam, unmapped, best_read_score, stats[2];

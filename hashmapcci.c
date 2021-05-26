@@ -422,7 +422,7 @@ void hashMapCCI_add(HashMapCCI *dest, long unsigned key, int newpos, unsigned sh
 
 void hashMapCCI_add_thread(HashMapCCI *dest, long unsigned key, int newpos, unsigned shifter) {
 	
-	static volatile int indexLock[1] = {0}, cciLock[1] = {0};
+	static volatile int *indexLock = {0}, *cciLock = {0};
 	int pos, *index_ptr;
 	long unsigned index;
 	
@@ -491,7 +491,7 @@ HashMapCCI * hashMapCCI_load(HashMapCCI *src, int seq, int len, int kmersize) {
 
 HashMapCCI * hashMapCCI_load_thread(HashMapCCI *src, int seq, int len, int kmersize, int thread_num) {
 	
-	static volatile int lock[1] = {0}, next = 1, thread_wait = 0;
+	static volatile int *lock = {0}, next = 1, thread_wait = 0;
 	static long unsigned size;
 	int i, end, shifter, chunk;
 	long check;

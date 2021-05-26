@@ -29,6 +29,7 @@
 /* succes or exit */
 #define sfwrite(ptr, size, nmemb, stream) if(fwrite(ptr, size, nmemb, stream) != nmemb) {if(errno) {ERROR();} else {fprintf(stderr, "Writing error.\n"); exit(1);}}
 #define sfread(ptr, size, nmemb, stream) if(fread(ptr, size, nmemb, stream) != nmemb) {if(errno) {ERROR();} else {fprintf(stderr, "Reading error.\n"); exit(1);}}
+#define sfseek(stream, offset, whence) if(fseek(stream, offset, whence)) {if(errno) {ERROR();} else {fprintf(stderr, "fseek error.\n"); exit(1);}}
 void * smalloc(const size_t size);
 FILE * sfopen(const char *filename, const char *mode);
 
