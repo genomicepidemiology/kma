@@ -73,7 +73,7 @@ static void rmemcpy(unsigned char *dst, unsigned char *src, size_t n) {
 
 HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	
-	void *data;
+	unsigned char *data;
 	long unsigned i, j, check, size, v_size;
 	long unsigned index, t_index, v_index, new_index, null_index;
 	unsigned swap, *values, *finalV;
@@ -358,12 +358,12 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 			/* dump arrays */
 			if(finalDB->n <= UINT_MAX) {
 				memcpy(finalDB->exist, values, finalDB->size * sizeof(unsigned));
-				data = (finalDB->exist + finalDB->size);
+				data = (unsigned char *)(finalDB->exist + finalDB->size);
 				getExistPtr = &getExist;
 				hashMapKMA_addExist_ptr = &hashMapKMA_addExist;
 			} else {
 				memcpy(finalDB->exist_l, values, finalDB->size * sizeof(long unsigned));
-				data = (finalDB->exist_l + finalDB->size);
+				data = (unsigned char *)(finalDB->exist_l + finalDB->size);
 				getExistPtr = &getExistL;
 				hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 			}
@@ -841,7 +841,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 			ERROR();
 		}
 		posix_madvise(finalDB->values, size, POSIX_MADV_SEQUENTIAL);
-		finalDB->values = ((void *) finalDB->values) + v_size;
+		finalDB->values = (unsigned *)(((unsigned char *) finalDB->values) + v_size);
 		if(finalDB->DB_size < USHRT_MAX) {
 			finalDB->values_s = (short unsigned *) finalDB->values;
 		}
@@ -900,7 +900,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 	} else {
 		/* dump values */
 		if(swap & 4) {
-			finalDB->values = ((void *) finalDB->values) - v_size;
+			finalDB->values = (unsigned *)(((unsigned char *) finalDB->values) - v_size);
 			finalDB->exist_l = (long unsigned *)(finalDB->values + 3);
 			finalDB->exist_l[3] = finalDB->v_index;
 			msync(finalDB->values, size, MS_ASYNC);

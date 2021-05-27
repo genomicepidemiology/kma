@@ -34,7 +34,7 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	int fd;
 	unsigned *uptr;
 	long unsigned size, *luptr;
-	void *data;
+	unsigned char *data;
 	
 	/* mmap data */
 	fd = fileno(file);
@@ -56,7 +56,7 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	dest->n = *luptr++;
 	dest->v_index = *luptr++;
 	dest->null_index = *luptr++;
-	data = luptr;
+	data = (unsigned char *) luptr;
 	dest->mask = 0;
 	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
 	dest->shmFlag = 16;
@@ -80,8 +80,8 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 			getExistPtr = &getExistL;
 		}
 	}
-	dest->exist = data;
-	dest->exist_l = data;
+	dest->exist = (unsigned *) data;
+	dest->exist_l = (long unsigned *) data;
 	data += size;
 	
 	/* values */
@@ -96,8 +96,8 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 		intpos_bin_contaminationPtr = &intpos_bin_contamination;
 	}
 	
-	dest->values = data;
-	dest->values_s = data;
+	dest->values = (unsigned *) data;
+	dest->values_s = (short unsigned *) data;
 	dest->shmFlag |= 2;
 	data += size;
 	
@@ -123,8 +123,8 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 		getKeyPtr = &getKeyL;
 	}
 	
-	dest->key_index = data;
-	dest->key_index_l = data;
+	dest->key_index = (unsigned *) data;
+	dest->key_index_l = (long unsigned *) data;
 	dest->shmFlag |= 4;
 	data += size;
 	
@@ -137,8 +137,8 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 		size *= sizeof(long unsigned);
 		getValueIndexPtr = &getValueIndexL;
 	}
-	dest->value_index = data;
-	dest->value_index_l = data;
+	dest->value_index = (unsigned *) data;
+	dest->value_index_l = (long unsigned *) data;
 	dest->shmFlag |= 8;
 	
 	/* make indexing a masking problem */
@@ -151,10 +151,10 @@ void hashMapKMA_munmap(HashMapKMA *dest) {
 	
 	int unit;
 	long unsigned size;
-	void *data;
+	unsigned char *data;
 	
 	if(dest && dest->shmFlag & 16) {
-		data = dest->exist;
+		data = (unsigned char *) dest->exist;
 		size = 3 * sizeof(unsigned) + 5 * sizeof(long unsigned);
 		data -= size;
 		if((dest->size - 1) == dest->mask) {
