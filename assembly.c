@@ -272,7 +272,7 @@ unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestS
 
 void * assemble_KMA_threaded(void *arg) {
 	
-	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeMatrix[1] = {0}, mainTemplate = -2, thread_wait = 0;
+	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeMatrix = {0}, mainTemplate = -2, thread_wait = 0;
 	static char *template_name;
 	static HashMapCCI *template_index;
 	Assemble_thread *thread = arg;
@@ -369,7 +369,7 @@ void * assemble_KMA_threaded(void *arg) {
 			lockTime(excludeIn, spin);
 			file = files[file_i];
 			if(file != 0) {
-				fread(buffer, sizeof(int), 8, file);
+				sfread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -390,8 +390,8 @@ void * assemble_KMA_threaded(void *arg) {
 						free(header->seq);
 						header->seq = smalloc(header->size);
 					}
-					fread(qseq->seq, 1, qseq->len, file);
-					fread(header->seq, 1, header->len, file);
+					sfread(qseq->seq, 1, qseq->len, file);
+					sfread(header->seq, 1, header->len, file);
 					unlock(excludeIn);
 					
 					if(delta < qseq->len) {
@@ -779,7 +779,7 @@ void * assemble_KMA_threaded(void *arg) {
 
 void * assemble_KMA_dense_threaded(void *arg) {
 	
-	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeMatrix[1] = {0}, mainTemplate = -2, thread_wait = 0;
+	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeMatrix = {0}, mainTemplate = -2, thread_wait = 0;
 	static char *template_name;
 	static HashMapCCI *template_index;
 	Assemble_thread *thread = arg;
@@ -923,7 +923,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 			lockTime(excludeIn, spin);
 			file = files[file_i];
 			if(file != 0) {
-				fread(buffer, sizeof(int), 8, file);
+				sfread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -950,8 +950,8 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							ERROR();
 						}
 					}
-					fread(qseq->seq, 1, qseq->len, file);
-					fread(header->seq, 1, header->len, file);
+					sfread(qseq->seq, 1, qseq->len, file);
+					sfread(header->seq, 1, header->len, file);
 					unlock(excludeIn);
 					
 					if(delta < qseq->size) {
@@ -1253,7 +1253,7 @@ void * skip_assemble_KMA(void *arg) {
 	while(file_i < file_count) {
 		file = files[file_i];
 		if(file != 0) {
-			fread(buffer, sizeof(int), 8, file);
+			sfread(buffer, sizeof(int), 8, file);
 			if((nextTemplate = buffer[0]) == template) {
 				/* load frag */
 				qseq->len = buffer[1];
@@ -1273,8 +1273,8 @@ void * skip_assemble_KMA(void *arg) {
 					free(header->seq);
 					header->seq = smalloc(header->size);
 				}
-				fread(qseq->seq, 1, qseq->len, file);
-				fread(header->seq, 1, header->len, file);
+				sfread(qseq->seq, 1, qseq->len, file);
+				sfread(header->seq, 1, header->len, file);
 				
 				/* Update with read */
 				aligned_assem->depth += qseq->len;
@@ -1316,7 +1316,7 @@ void * skip_assemble_KMA(void *arg) {
 
 void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore alnStat, int t_len, int flag) {
 	
-	static volatile int excludeMatrix[1] = {0};
+	static volatile int *excludeMatrix = {0};
 	int i, j, pos, aln_len, start, read_score, myBias, gaps;
 	Assembly *assembly;
 	
@@ -1413,7 +1413,7 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 
 void alnToMatDense(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore alnStat, int t_len, int flag) {
 	
-	static volatile int excludeMatrix[1] = {0};
+	static volatile int *excludeMatrix = {0};
 	int i, pos, aln_len, start, read_score;
 	Assembly *assembly;
 	
@@ -1448,7 +1448,7 @@ void alnToMatDense(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnSco
 void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, int t_len, int bcd, double evalue, int thread_num) {
 	
 	const char bases[6] = "ACGTN-";
-	static volatile int excludeMatrix[1] = {0}, next, thread_wait = 0;
+	static volatile int *excludeMatrix = {0}, next, thread_wait = 0;
 	int i, j, pos, end ,asm_len, aln_len, bestScore, bestBaseScore, chunk;
 	int coverScore;
 	long unsigned depth, depthVar, depthUpdate;
@@ -1580,7 +1580,7 @@ void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, 
 
 void fixVarOverflow(Assem *aligned_assem, Assembly *assembly, int t_len, int thread_num) {
 	
-	static volatile int excludeMatrix[1] = {0}, next, thread_wait = 0;
+	static volatile int *excludeMatrix = {0}, next, thread_wait = 0;
 	int pos, end, chunk, depthUpdate;
 	double var, depth, tmp;
 	
@@ -1636,7 +1636,7 @@ void fixVarOverflow(Assem *aligned_assem, Assembly *assembly, int t_len, int thr
 void * assemble_KMA(void *arg) {
 	
 	const char bases[6] = "ACGTN-";
-	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0}, excludeMatrix[1] = {0};
+	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeMatrix = {0};
 	static volatile int thread_wait = 0, thread_init = 0, thread_begin = 0;
 	static volatile int mainTemplate = -2, next;
 	static int t_len, load, seq_in;
@@ -1818,7 +1818,7 @@ void * assemble_KMA(void *arg) {
 			lock(excludeIn);
 			file = files[file_i];
 			if(file != 0) {
-				fread(buffer, sizeof(int), 8, file);
+				sfread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -1839,8 +1839,8 @@ void * assemble_KMA(void *arg) {
 						free(header->seq);
 						header->seq = smalloc(header->size);
 					}
-					fread(qseq->seq, 1, qseq->len, file);
-					fread(header->seq, 1, header->len, file);
+					sfread(qseq->seq, 1, qseq->len, file);
+					sfread(header->seq, 1, header->len, file);
 					unlock(excludeIn);
 					
 					if(delta < qseq->len) {

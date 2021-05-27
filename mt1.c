@@ -181,7 +181,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	file_len = strlen(templatefilename);
 	strcat(templatefilename, ".length.b");
 	DB_file = sfopen(templatefilename, "rb");
-	fread(&DB_size, sizeof(int), 1, DB_file);
+	sfread(&DB_size, sizeof(int), 1, DB_file);
 	
 	/* load lengths */
 	template_lengths = smalloc(DB_size * sizeof(int));
@@ -189,7 +189,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	/*fseek(DB_file, (2 * DB_size) * sizeof(int), SEEK_CUR);
 	if(fread(template_lengths, sizeof(int), DB_size, DB_file) == 0) {
 		fseek(DB_file, sizeof(int), SEEK_SET);
-		fread(template_lengths, sizeof(int), DB_size, DB_file);
+		sfread(template_lengths, sizeof(int), DB_size, DB_file);
 	}*/
 	templatefilename[file_len] = 0;
 	fclose(DB_file);

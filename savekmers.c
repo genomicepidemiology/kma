@@ -80,9 +80,9 @@ int loadFsa(CompDNA *qseq, Qseqs *header, FILE *inputfile) {
 			free(header->seq);
 			header->seq = smalloc(header->size);
 		}
-		fread(qseq->seq, sizeof(long unsigned), qseq->complen, inputfile);
-		fread(qseq->N + 1, sizeof(int), qseq->N[0], inputfile);
-		fread(header->seq, 1, header->len, inputfile);
+		sfread(qseq->seq, sizeof(long unsigned), qseq->complen, inputfile);
+		sfread(qseq->N + 1, sizeof(int), qseq->N[0], inputfile);
+		sfread(header->seq, 1, header->len, inputfile);
 	} else {
 		qseq->seqlen = 0;
 		return 0;
@@ -93,7 +93,7 @@ int loadFsa(CompDNA *qseq, Qseqs *header, FILE *inputfile) {
 
 void * save_kmers_threaded(void *arg) {
 	
-	static volatile int excludeIn[1] = {0}, excludeOut[1] = {0};
+	static volatile int *excludeIn = {0}, *excludeOut = {0};
 	static unsigned readNum = 0;
 	KmerScan_thread *thread = arg;
 	int *Score, *Score_r, *bestTemplates, *bestTemplates_r, *regionTemplates;

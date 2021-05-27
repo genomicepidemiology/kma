@@ -1294,7 +1294,7 @@ int kma_main(int argc, char *argv[]) {
 				strcat(myTemplatefilename, ".length.b");
 				templatefile = sfopen(myTemplatefilename, "rb");
 				fseek(templatefile, (Mt1 + 1) * sizeof(int), SEEK_CUR);
-				fread(&qseq.len, sizeof(int), 1, templatefile);
+				sfread(&qseq.len, sizeof(int), 1, templatefile);
 				fclose(templatefile);
 				printFsaMt1(0, &qseq, 0, ioStream);
 				printFsa_pairMt1(0, &qseq, 0, 0, 0, ioStream);

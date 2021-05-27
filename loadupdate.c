@@ -172,14 +172,14 @@ unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **templ
 	strcat(templatefilename, ".length.b");
 	infile = sfopen(templatefilename, "rb");
 	templatefilename[file_len] = 0;
-	fread(&DB_size, sizeof(unsigned), 1, infile);
+	sfread(&DB_size, sizeof(unsigned), 1, infile);
 	if(finalDB->prefix) {
 		*template_lengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_slengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_ulengths = smalloc((DB_size << 1) * sizeof(unsigned));
-		fread(*template_lengths, sizeof(unsigned), DB_size, infile);
-		fread(*template_slengths, sizeof(unsigned), DB_size, infile);
-		fread(*template_ulengths, sizeof(unsigned), DB_size, infile);
+		sfread(*template_lengths, sizeof(unsigned), DB_size, infile);
+		sfread(*template_slengths, sizeof(unsigned), DB_size, infile);
+		sfread(*template_ulengths, sizeof(unsigned), DB_size, infile);
 		kmerindex = **template_slengths;
 		**template_ulengths = DB_size << 1;
 		**template_slengths = DB_size << 1;
@@ -187,7 +187,7 @@ unsigned load_DBs(char *templatefilename, char *outputfilename, unsigned **templ
 		*template_lengths = smalloc((DB_size << 1) * sizeof(unsigned));
 		*template_slengths = 0;
 		*template_ulengths = 0;
-		fread(*template_lengths, sizeof(unsigned), DB_size, infile);
+		sfread(*template_lengths, sizeof(unsigned), DB_size, infile);
 		kmerindex = **template_lengths;
 		**template_lengths = DB_size << 1;
 	}

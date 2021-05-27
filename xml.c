@@ -146,7 +146,7 @@ void capIterXML(FILE *out, const int DB_size, const long unsigned seqsize, const
 
 void hitXML(FILE *out, const int template, const char *template_name, const Aln *aligned, const AlnScore *alnStat, const Penalties *rewards, const int flag) {
 	
-	static volatile int lock[1] = {0};
+	static volatile int *lock = {0};
 	static int num = 0;
 	int i, Ms, MMs, W1s, Us, gap, pos, **d;
 	unsigned char *t, *q;

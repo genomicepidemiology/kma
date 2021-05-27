@@ -55,7 +55,7 @@ void * pipeThreader(void *arg) {
 FILE * kmaPipeThread(const char *cmd, const char *type, FILE *ioStream, int *status) {
 	
 	/* kmaPipe is a combination of popen and pclose, but allows for binary mode */
-	static volatile int lock[1] = {0};
+	static volatile int *lock = {0};
 	static Pid *pidlist = 0;
 	int pdes[2];
 	pthread_t id;
@@ -145,7 +145,7 @@ FILE * kmaPipeThread(const char *cmd, const char *type, FILE *ioStream, int *sta
 FILE * kmaPipeFork(const char *cmd, const char *type, FILE *ioStream, int *status) {
 	
 	/* kmaPipe is a combination of popen and pclose, but allows for binary mode */
-	static volatile int lock[1] = {0};
+	static volatile int *lock = {0};
 	static Pid *pidlist = 0;
 	int exit_status, pdes[2];
 	char *argv[2];

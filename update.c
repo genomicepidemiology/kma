@@ -37,7 +37,7 @@ unsigned convertLength_014to015(char *filename) {
 	file = sfopen(filename, "rb+");
 	filename[file_len] = 0;
 	
-	fread(&size, sizeof(unsigned), 1, file);
+	sfread(&size, sizeof(unsigned), 1, file);
 	lengths = smalloc(3 * size * sizeof(unsigned));
 	
 	file_len = fread(lengths, sizeof(unsigned), 3 * size, file);
@@ -85,11 +85,11 @@ int hashMapKMA_014to015(char *filename, unsigned prefix) {
 	dest = smalloc(sizeof(HashMapKMA));
 	dest->n = 0;
 	dest->size = 0;
-	fread(&DB_size, sizeof(unsigned), 1, file);
-	fread(&dest->kmersize, sizeof(unsigned), 1, file);
-	fread(&dest->prefix_len, sizeof(unsigned), 1, file);
-	fread(&dest->prefix, sizeof(long unsigned), 1, file);
-	fread(&dest->size, sizeof(long unsigned), 1, file);
+	sfread(&DB_size, sizeof(unsigned), 1, file);
+	sfread(&dest->kmersize, sizeof(unsigned), 1, file);
+	sfread(&dest->prefix_len, sizeof(unsigned), 1, file);
+	sfread(&dest->prefix, sizeof(long unsigned), 1, file);
+	sfread(&dest->size, sizeof(long unsigned), 1, file);
 	
 	kmersize = dest->kmersize;
 	mask = 0;
@@ -97,12 +97,12 @@ int hashMapKMA_014to015(char *filename, unsigned prefix) {
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1);
 	
 	/* load changed size */
-	fread(&tmp, sizeof(unsigned), 1, file);
+	sfread(&tmp, sizeof(unsigned), 1, file);
 	dest->n = tmp;
-	fread(&seqsize, sizeof(unsigned), 1, file); //seq size
-	fread(&tmp, sizeof(unsigned), 1, file);
+	sfread(&seqsize, sizeof(unsigned), 1, file); //seq size
+	sfread(&tmp, sizeof(unsigned), 1, file);
 	dest->v_index = tmp;
-	fread(&tmp, sizeof(unsigned), 1, file);
+	sfread(&tmp, sizeof(unsigned), 1, file);
 	dest->null_index = tmp;
 	
 	/* make checks */

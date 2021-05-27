@@ -21,7 +21,7 @@ kma_update: kma_update.c libkma.a
 	$(CC) $(CFLAGS) -o $@ kma_update.c libkma.a $(LDFLAGS)
 
 libkma.a: $(LIBS)
-	$(AR) -csru $@ $(LIBS)
+	$(AR) -csr $@ $(LIBS)
 
 clean:
 	$(RM) $(LIBS) $(PROGS) libkma.a

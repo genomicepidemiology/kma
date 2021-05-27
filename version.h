@@ -17,4 +17,4 @@
  * limitations under the License.
 */
 
-#define KMA_VERSION "1.3.17a"
+#define KMA_VERSION "1.3.18"
