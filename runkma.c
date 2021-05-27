@@ -908,14 +908,18 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i < bestHits; ++i) {
+					i = 0;
+					while(i != bestHits) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
 							start = best_start_pos[i];
 							end = best_end_pos[i];
 							i = bestHits;
+						} else {
+							++i;
 						}
+						
 					}
 					
 					if(bestTemplate == 0) {
@@ -1998,13 +2002,16 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					randScore = tmp_score * tot;
 					
 					score = 0;
-					for(i = 0; i < bestHits; ++i) {
+					i = 0;
+					while(i != bestHits) {
 						score += uniq_alignment_scores[abs(bestTemplates[i])];
 						if(randScore < score) {
 							bestTemplate = bestTemplates[i];
 							start = best_start_pos[i];
 							end = best_end_pos[i];
 							i = bestHits;
+						} else {
+							++i;
 						}
 					}
 					
