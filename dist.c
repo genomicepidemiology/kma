@@ -635,7 +635,8 @@ char * mfile(FILE *outfile, long unsigned size) {
 
 void * threadDist(void *arg) {
 	
-	static volatile int *lock = {0};
+	static volatile int Lock = 0;
+	volatile int *lock = &Lock;
 	DistThread *thread = arg;
 	int flag, format, thread_num, *N;
 	long unsigned ltdMat, covMat;

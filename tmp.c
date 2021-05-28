@@ -28,7 +28,8 @@ FILE * tmpF(const char *location) {
 	
 	static int tmpNum = 0;
 	static char *tmpname, *dirname = 0, *filename = 0;
-	static volatile int *lock = {0};
+	static volatile int Lock = 0;
+	volatile int *lock = &Lock;
 	int fd;
 	FILE *file;
 	

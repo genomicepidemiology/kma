@@ -107,8 +107,9 @@ void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int D
 
 int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rname, const Aln *aligned, const int *stats) {
 	
-	static volatile int *lock = {0}; 
+	static volatile int Lock = 0;
 	static Qseqs *Cigar = 0;
+	volatile int *lock = &Lock;
 	int flag, pos, mapQ, pnext, tlen, size, et, score, tab;
 	char *qname, *cigar, *rnext, *qual;
 	unsigned char *seq;

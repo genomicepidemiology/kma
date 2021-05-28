@@ -93,8 +93,9 @@ int loadFsa(CompDNA *qseq, Qseqs *header, FILE *inputfile) {
 
 void * save_kmers_threaded(void *arg) {
 	
-	static volatile int *excludeIn = {0}, *excludeOut = {0};
+	static volatile int Lock[2] = {0, 0};
 	static unsigned readNum = 0;
+	volatile int *excludeIn = &Lock[0], *excludeOut = &Lock[1];
 	KmerScan_thread *thread = arg;
 	int *Score, *Score_r, *bestTemplates, *bestTemplates_r, *regionTemplates;
 	int *regionScores, *extendScore, *p_readNum, *pr_readNum, *preg_readNum;

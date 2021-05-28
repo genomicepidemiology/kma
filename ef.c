@@ -47,7 +47,8 @@ void initExtendedFeatures(FILE *out, char *templatefilename, unsigned totFrags, 
 
 void getExtendedFeatures(Assem *aligned_assem, AssemInfo *matrix, long unsigned *seq, int t_len, int thread_num) {
 	
-	static volatile int *excludeMatrix = {0}, next, thread_wait = 0;
+	static volatile int Lock = 0, next, thread_wait = 0;
+	volatile int *excludeMatrix = &Lock;
 	unsigned pos, end, asm_len, chunk, nucHighVar, maxDepth, depthUpdate;
 	long unsigned snpSum, insertSum, deletionSum;
 	double highVar;
