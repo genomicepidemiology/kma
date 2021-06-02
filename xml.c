@@ -144,11 +144,11 @@ void capIterXML(FILE *out, const int DB_size, const long unsigned seqsize, const
 	fprintf(out, "</Iteration>\n");
 }
 
-void hitXML(FILE *out, const int template, const char *template_name, const Aln *aligned, const AlnScore *alnStat, const Penalties *rewards, const int flag) {
+void hitXML(FILE *out, const int template, const unsigned char *template_name, const Aln *aligned, const AlnScore *alnStat, const Penalties *rewards, const int flag) {
 	
 	static volatile int Lock = 0;
-	volatile int *lock = &Lock;
 	static int num = 0;
+	volatile int *lock = &Lock;
 	int i, Ms, MMs, W1s, Us, gap, pos, **d;
 	unsigned char *t, *q;
 	char *s, bases[6] = "ACGTN-";
@@ -227,4 +227,17 @@ void hitXML(FILE *out, const int template, const char *template_name, const Aln 
 	fprintf(out, "\t</Hit_hsps>\n");
 	fprintf(out, "</Hit>\n");
 	unlock(lock);
+	
+	/* here */
+	/*
+	fprintf(stdout, "%s\n", template_name);
+	i = 0;
+	for(i = 0; i < aligned->len; i += 60) {
+		fprintf(stdout, "t:\t%.60s\n", aligned->t + i);
+		fprintf(stdout, "s:\t%.60s\n", aligned->s + i);
+		fprintf(stdout, "q:\t%.60s\n\n", aligned->q + i);
+	}
+	fprintf(stdout, "\n\n");
+	*/
+	
 }
