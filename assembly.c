@@ -1717,6 +1717,7 @@ void * assemble_KMA(void *arg) {
 		t_len = thread->t_len;
 		load = (template_index->len != 0) ? 0 : 1;
 		matrix->len = 0;
+		seq_in = thread->seq_in;
 		
 		/* start threads */
 		aligned_assem->score = 0;
