@@ -479,7 +479,6 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 					if((values = hashMap_get(templates, getKmer(qseq->seq, j, shifter)))) {
 						if(values == last) {
 							if(kmersize < gaps) {
-								/* insertion */
 								Ms += kmersize;
 								gaps -= kmersize;
 								if(gaps) {
@@ -497,21 +496,9 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 									++MMs;
 								}
 							} else if (gaps) {
-								/* mismatch or indel */
-								if(gaps <= 2) {
-									MMs += gaps;
-								} else {
-									l = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-									l = MAX(2, l);
-									MMs += l;
-									n = MIN(gaps - l, kmersize);
-									Ms += MIN(n, l);
-								}
-								/*
 								--gaps;
 								++W1s;
 								Us += gaps;
-								*/
 							} else {
 								++Ms;
 							}
@@ -534,6 +521,7 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 									}
 									
 									score = kmersize * M;
+									MMs = MM << 1;
 									values_s = (short unsigned *) values;
 									n = *values_s;
 									for(l = 1; l <= n; ++l) {
@@ -541,25 +529,12 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 											if(extendScore[template] == HIT) {
 												Scores[template] += M;
 											} else {
-												/* insertion */
 												gaps = extendScore[template] - j - 1;
 												Scores[template] += (W1 + gaps * U);
 											}
 										} else if(Scores[template] != 0) {
 											Scores[template] += score;
 											if((gaps = extendScore[template] - j)) {
-												if(gaps <= 2) {
-													MMs = gaps;
-													Ms = 0;
-												} else {
-													MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-													MMs = MAX(2, MMs);
-													Ms = MIN(gaps - MMs, kmersize);
-													Ms = MIN(Ms, MMs);
-												}
-												Scores[template] += Ms * M + MMs * MM;
-												/*
-												MMs = 2 * MM;
 												if(gaps == 1) {
 													Scores[template] += MMs;
 												} else {
@@ -568,7 +543,6 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 														Scores[template] += Ms;
 													}
 												}
-												*/
 											} else {
 												Scores[template] += MM;
 											}
@@ -595,25 +569,12 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 											if(extendScore[template] == HIT) {
 												Scores[template] += M;
 											} else {
-												/* insertion */
 												gaps = extendScore[template] - j - 1;
 												Scores[template] += (W1 + gaps * U);
 											}
 										} else if(Scores[template] != 0) {
 											Scores[template] += score;
 											if((gaps = extendScore[template] - j)) {
-												if(gaps <= 2) {
-													MMs = gaps;
-													Ms = 0;
-												} else {
-													MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-													MMs = MAX(2, MMs);
-													Ms = MIN(gaps - MMs, kmersize);
-													Ms = MIN(Ms, MMs);
-												}
-												Scores[template] += Ms * M + MMs * MM;
-												/*
-												MMs = 2 * MM;
 												if(gaps == 1) {
 													Scores[template] += MMs;
 												} else {
@@ -622,7 +583,6 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 														Scores[template] += Ms;
 													}
 												}
-												*/
 											} else {
 												Scores[template] += MM;
 											}
@@ -1059,21 +1019,9 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 								++MMs;
 							}
 						} else if (gaps) {
-							/* mismatch or indel */
-							if(gaps <= 2) {
-								MMs += gaps;
-							} else {
-								l = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-								l = MAX(2, l);
-								MMs += l;
-								n = MIN(gaps - l, kmersize);
-								Ms += MIN(n, l);
-							}
-							/*
 							--gaps;
 							++W1s;
 							Us += gaps;
-							*/
 						} else {
 							++Ms;
 						}
@@ -1112,25 +1060,12 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 										if(extendScore[template] == HIT) {
 											Scores[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Scores[template] += (W1 + gaps * U);
 										}
 									} else if(Scores[template] != 0) {
 										Scores[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Scores[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
 												Scores[template] += MMs;
 											} else {
@@ -1139,7 +1074,6 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 													Scores[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Scores[template] += MM;
 										}
@@ -1159,25 +1093,12 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 										if(extendScore[template] == HIT) {
 											Scores[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Scores[template] += (W1 + gaps * U);
 										}
 									} else if(Scores[template] != 0) {
 										Scores[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Scores[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
 												Scores[template] += MMs;
 											} else {
@@ -1186,7 +1107,6 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 													Scores[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Scores[template] += MM;
 										}
@@ -2099,7 +2019,7 @@ int save_kmers_Sparse(const HashMapKMA *templates, const Penalties *rewards, int
 	}
 	
 	i = 0;
-	if(kmersize <= bestScore || bestScore * kmersize > end) {
+	if(bestScore && bestScore * kmersize > end) {
 		lock(excludeOut);
 		i = deConPrintPtr(bestTemplates, qseq, bestScore, header, flag, out);
 		unlock(excludeOut);
@@ -2164,7 +2084,6 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 				if((values = hashMap_get(templates, getKmer(qseq->seq, j, shifter)))) {
 					if(values == last) {
 						if(kmersize < gaps) {
-							/* insertion */
 							Ms += kmersize;
 							gaps -= kmersize;
 							if(gaps) {
@@ -2182,21 +2101,9 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 								++MMs;
 							}
 						} else if (gaps) {
-							/* mismatch or indel */
-							if(gaps <= 2) {
-								MMs += gaps;
-							} else {
-								l = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-								l = MAX(2, l);
-								MMs += l;
-								n = MIN(gaps - l, kmersize);
-								Ms += MIN(n, l);
-							}
-							/*
 							--gaps;
 							++W1s;
 							Us += gaps;
-							*/
 						} else {
 							++Ms;
 						}
@@ -2226,6 +2133,7 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 							}
 							
 							score = kmersize * M;
+							MMs = MM << 1;
 							if(SU) {
 								values_s = (short unsigned *) values;
 								n = *values_s;
@@ -2234,25 +2142,12 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 										if(extendScore[template] == HIT) {
 											Score[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Score[template] += (W1 + gaps * U);
 										}
 									} else if(Score[template] != 0) {
 										Score[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Score[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
 												Score[template] += MMs;
 											} else {
@@ -2261,7 +2156,6 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 													Score[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Score[template] += MM;
 										}
@@ -2280,25 +2174,12 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 										if(extendScore[template] == HIT) {
 											Score[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Score[template] += (W1 + gaps * U);
 										}
 									} else if(Score[template] != 0) {
 										Score[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Score[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
 												Score[template] += MMs;
 											} else {
@@ -2307,7 +2188,6 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 													Score[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Score[template] += MM;
 										}
@@ -2414,7 +2294,7 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 	end = qseq->seqlen + 1 - bestScore;
 	
 	i = 0;
-	if(kmersize <= bestScore || bestScore * kmersize > end) {
+	if(bestScore && bestScore * kmersize > end) {
 		lock(excludeOut);
 		i = deConPrintPtr(bestTemplates, qseq, bestScore, header, 0, out);
 		unlock(excludeOut);
@@ -2498,7 +2378,6 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 				if((values = hashMap_get(templates, getKmer(qseq->seq, j, shifter)))) {
 					if(values == last) {
 						if(kmersize < gaps) {
-							/* insertion */
 							Ms += kmersize;
 							gaps -= kmersize;
 							if(gaps) {
@@ -2516,21 +2395,9 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								++MMs;
 							}
 						} else if (gaps) {
-							/* mismatch or indel */
-							if(gaps <= 2) {
-								MMs += gaps;
-							} else {
-								l = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-								l = MAX(2, l);
-								MMs += l;
-								n = MIN(gaps - l, kmersize);
-								Ms += MIN(n, l);
-							}
-							/*
 							--gaps;
 							++W1s;
 							Us += gaps;
-							*/
 						} else {
 							++Ms;
 						}
@@ -2553,6 +2420,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								}
 								
 								score = kmersize * M;
+								MMs = MM << 1;
 								values_s = (short unsigned *) values;
 								n = *values_s;
 								for(l = 1; l <= n; ++l) {
@@ -2560,34 +2428,20 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 										if(extendScore[template] == HIT) {
 											Score[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Score[template] += (W1 + gaps * U);
 										}
 									} else if(Score[template] != 0) {
 										Score[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Score[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
-												Scores[template] += MMs;
+												Score[template] += MMs;
 											} else {
 												gaps -= 2;
 												if((Ms = MMs + gaps * M) < 0) {
 													Score[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Score[template] += MM;
 										}
@@ -2614,25 +2468,12 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 										if(extendScore[template] == HIT) {
 											Score[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Score[template] += (W1 + gaps * U);
 										}
 									} else if(Score[template] != 0) {
 										Score[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Score[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
 												Score[template] += MMs;
 											} else {
@@ -2641,7 +2482,6 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 													Score[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Score[template] += MM;
 										}
@@ -2798,21 +2638,9 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								++MMs;
 							}
 						} else if (gaps) {
-							/* mismatch or indel */
-							if(gaps <= 2) {
-								MMs += gaps;
-							} else {
-								l = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-								l = MAX(2, l);
-								MMs += l;
-								n = MIN(gaps - l, kmersize);
-								Ms += MIN(n, l);
-							}
-							/*
 							--gaps;
 							++W1s;
 							Us += gaps;
-							*/
 						} else {
 							++Ms;
 						}
@@ -2835,6 +2663,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								}
 								
 								score = kmersize * M;
+								MMs = MM << 1;
 								values_s = (short unsigned *) values;
 								n = *values_s;
 								for(l = 1; l <= n; ++l) {
@@ -2842,25 +2671,12 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 										if(extendScore[template] == HIT) {
 											Score_r[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Score_r[template] += (W1 + gaps * U);
 										}
 									} else if(Score_r[template] != 0) {
 										Score_r[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Score_r[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
 												Score_r[template] += MMs;
 											} else {
@@ -2869,7 +2685,6 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 													Score_r[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Score_r[template] += MM;
 										}
@@ -2889,40 +2704,27 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								}
 								
 								score = kmersize * M;
+								MMs = MM << 1;
 								n = *values;
 								for(l = 1; l <= n; ++l) {
 									if(j < extendScore[(template = values[l])]) {
 										if(extendScore[template] == HIT) {
 											Score_r[template] += M;
 										} else {
-											/* insertion */
 											gaps = extendScore[template] - j - 1;
 											Score_r[template] += (W1 + gaps * U);
 										}
 									} else if(Score_r[template] != 0) {
 										Score_r[template] += score;
 										if((gaps = extendScore[template] - j)) {
-											if(gaps <= 2) {
-												MMs = gaps;
-												Ms = 0;
-											} else {
-												MMs = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-												MMs = MAX(2, MMs);
-												Ms = MIN(gaps - MMs, kmersize);
-												Ms = MIN(Ms, MMs);
-											}
-											Score_r[template] += Ms * M + MMs * MM;
-											/*
-											MMs = 2 * MM;
 											if(gaps == 1) {
-												Scores[template] += MMs;
+												Score_r[template] += MMs;
 											} else {
 												gaps -= 2;
 												if((Ms = MMs + gaps * M) < 0) {
-													Scores[template] += Ms;
+													Score_r[template] += Ms;
 												}
 											}
-											*/
 										} else {
 											Score_r[template] += MM;
 										}
@@ -3031,8 +2833,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 	i = 0;
 	if(bestScore > 0 || bestScore_r > 0) {
 		end = qseq->seqlen + 1;
-		//if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
-		if(kmersize <= bestScore || kmersize <= bestScore_r) {
+		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
 			if(bestScore > bestScore_r) {
 				lock(excludeOut);
 				i = deConPrintPtr(bestTemplates, qseq, bestScore, header, 0, out);
@@ -3304,8 +3105,7 @@ int save_kmers_count(const HashMapKMA *templates, const Penalties *rewards, int 
 	i = 0;
 	if(bestScore > 0 || bestScore_r > 0) {
 		end = qseq->seqlen + 1;
-		//if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
-		if(kmersize <= bestScore || kmersize <= bestScore_r) {
+		if((bestScore >= bestScore_r && bestScore * kmersize > (end - bestScore)) || (bestScore < bestScore_r && bestScore_r * kmersize > (end - bestScore_r))) {
 			if(bestScore > bestScore_r) {
 				lock(excludeOut);
 				i = deConPrintPtr(bestTemplates, qseq, bestScore, header, 0, out);
@@ -3348,7 +3148,7 @@ int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, 
 		/* got hits */
 		bestScore = getF(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates);
 		
-		if(kmersize < bestScore && bestScore * kmersize < (qseq->seqlen - bestScore)) {
+		if(bestScore * kmersize < (qseq->seqlen - bestScore)) {
 			bestScore = 0;
 		}
 	} else {
@@ -3376,7 +3176,7 @@ int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, 
 		} else {
 			bestScore_r = getF(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates);
 		}
-		if(kmersize < bestScore_r && bestScore_r * kmersize < (qseq_r->seqlen - bestScore_r)) {
+		if(bestScore_r * kmersize < (qseq_r->seqlen - bestScore_r)) {
 			bestScore_r = 0;
 			*regionTemplates = abs(*regionTemplates);
 		}
@@ -3579,7 +3379,7 @@ int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards
 			flag |= 2;
 			flag_r |= 2;
 			compScore = MIN((hitCounter + hitCounter_r), (bestScore + bestScore_r));
-			if(kmersize <= compScore || (qseq->seqlen + qseq_r->seqlen - compScore - (kmersize << 1)) < compScore * kmersize) {
+			if((qseq->seqlen + qseq_r->seqlen - compScore - (kmersize << 1)) < compScore * kmersize) {
 				*regionTemplates = -(*regionTemplates);
 				if(0 < regionTemplates[1]) {
 					if(rev) {
@@ -3625,7 +3425,7 @@ int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards
 			}
 		} else {
 			hitCounter = MIN(hitCounter, bestScore);
-			hitCounter = kmersize <= hitCounter || (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize;
+			hitCounter = (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize;
 			if(hitCounter) {
 				if(0 < regionTemplates[1]) {
 					if(rev) {
@@ -3645,7 +3445,7 @@ int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards
 				}
 			}
 			hitCounter_r = MIN(hitCounter_r, bestScore_r);
-			hitCounter_r = kmersize <= hitCounter_r || (qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize;
+			hitCounter_r = (qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize;
 			if(hitCounter_r) {
 				if(0 < bestTemplates[1]) {
 					if(rev) {
@@ -3685,7 +3485,7 @@ int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards
 		return i;
 	} else if(0 < bestScore) {
 		hitCounter = MIN(hitCounter, bestScore);
-		if(kmersize <= hitCounter || (qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
+		if((qseq->seqlen - hitCounter - kmersize) < hitCounter * kmersize) {
 			if(rev) {
 				flag |= 8;
 				flag |= 32;
@@ -3716,7 +3516,7 @@ int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards
 		}
 	} else if(0 < bestScore_r) {
 		hitCounter_r = MIN(hitCounter_r, bestScore_r);
-		if(kmersize <= hitCounter_r || (qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize) {
+		if((qseq_r->seqlen - hitCounter_r - kmersize) < hitCounter_r * kmersize) {
 			if(rev) {
 				flag_r |= 8;
 				flag_r |= 32;
@@ -3778,7 +3578,7 @@ int save_kmers_forcePair(const HashMapKMA *templates, const Penalties *rewards, 
 	if((hitCounter_r = get_kmers_for_pair_ptr(templates, rewards, bestTemplates_r, bestTemplates, Score_r, Score, qseq_r, extendScore, exhaustive)) && 
 	(bestScore = getSecondForce(bestTemplates, bestTemplates_r, Score, Score_r, regionTemplates, regionScores))) {
 		
-		if(kmersize <= bestScore || (qseq->seqlen + qseq_r->seqlen - bestScore) < bestScore * kmersize) {
+		if((qseq->seqlen + qseq_r->seqlen - bestScore) < bestScore * kmersize) {
 			flag = 67;
 			flag_r = 131;
 			

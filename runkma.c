@@ -206,9 +206,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		ERROR();
 	}
 	alignLoadPtr = &alignLoad_fly;
-	if(!kmersize) {
-		kmersize = *template_lengths;
-	}
 	if(kmersize < 4 || 32 < kmersize) {
 		kmersize = 16;
 	}
@@ -1402,9 +1399,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* load databases */
 	alignLoadPtr = &alignLoad_fly_mem;
-	if(!kmersize) {
-		kmersize = *template_lengths;
-	}
 	if(kmersize < 4 || 32 < kmersize) {
 		kmersize = 16;
 	}

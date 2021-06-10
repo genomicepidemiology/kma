@@ -1301,6 +1301,7 @@ int kma_main(int argc, char *argv[]) {
 			} else {
 				myTemplatefilename = 0;
 			}
+			kmersize = 16;
 			totFrags = 0;
 			
 			/* SE */

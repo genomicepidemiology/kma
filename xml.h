@@ -26,4 +26,4 @@ void closeCapXML(FILE *out);
 void newIterXML(FILE *out, const int template, const int t_len, const char *template_name);
 double getEntropy(const unsigned char *aligned_assem_q, const int len);
 void capIterXML(FILE *out, const int DB_size, const long unsigned seqsize, const int t_len, const int readCounts, const double p_value, const long read_score, const unsigned char *aligned_assem_q, const int len);
-void hitXML(FILE *out, const int template, const unsigned char *template_name, const Aln *aligned, const AlnScore *alnStat, const Penalties *rewards, const int flag);
+void hitXML(FILE *out, const int template, const char *template_name, const Aln *aligned, const AlnScore *alnStat, const Penalties *rewards, const int flag);
