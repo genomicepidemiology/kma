@@ -75,7 +75,7 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 		template_slengths[template] = 0;
 		template_ulengths[template] = 0;
 		for(rc = 0; rc < 2; ++rc) {
-			/* revers complement */
+			/* reverse complement */
 			if(rc) {
 				comp_rc(qseq);
 			}
@@ -113,6 +113,9 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 				}
 				qseq->N[0]--;
 			}
+		}
+		if(prefix_len == 0) {
+			comp_rc(qseq);
 		}
 		return 1;
 	}

@@ -1055,7 +1055,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							}
 							
 							if(xml_out) {
-								hitXML(xml_out, template, template_name, aligned, &alnStat, NWmatrices->rewards, stats[4]);
+								hitXML(xml_out, template, header->seq, aligned, &alnStat, NWmatrices->rewards, stats[4]);
 							}
 						} else if(sam && !(sam & 2096)) {
 							stats[1] = read_score;
@@ -1717,6 +1717,7 @@ void * assemble_KMA(void *arg) {
 		t_len = thread->t_len;
 		load = (template_index->len != 0) ? 0 : 1;
 		matrix->len = 0;
+		seq_in = thread->seq_in;
 		
 		/* start threads */
 		aligned_assem->score = 0;
@@ -1931,7 +1932,7 @@ void * assemble_KMA(void *arg) {
 							}
 							
 							if(xml_out) {
-								hitXML(xml_out, template, template_name, aligned, &alnStat, NWmatrices->rewards, stats[4]);
+								hitXML(xml_out, template, header->seq, aligned, &alnStat, NWmatrices->rewards, stats[4]);
 							}
 						} else if(sam && !(sam & 2096)) {
 							stats[1] = read_score;

@@ -634,7 +634,6 @@ AlnScore KMA_score(const HashMapCCI *template_index, const unsigned char *qseq, 
 		}
 	}
 	mapQ = 0;
-	
 	if(mem_count) {
 		points->len = mem_count;
 	} else {
@@ -807,7 +806,7 @@ int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, i
 			i = q_len - q_start;
 			q_start = q_len - q_end;
 			q_end = i;
-			i = q_start;
+			i = q_start ? q_start : preseed(template_index, qseq, q_end - q_start);
 		} else if(q_start) {
 			i = q_start;
 		} else {
@@ -957,7 +956,7 @@ int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, i
 		}
 	}
 	
-	if(one2one && bestScore * kmersize < (q_len - kmersize - bestScore)) {
+	if(one2one && bestScore < kmersize && bestScore * kmersize < (q_len - kmersize - bestScore)) {
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {
@@ -1141,7 +1140,7 @@ int anker_rc_comp(const HashMapCCI *template_index, unsigned char *qseq, unsigne
 		}
 	}
 	
-	if(one2one && bestScore * kmersize < (q_len - kmersize - bestScore)) {
+	if(one2one && bestScore < kmersize && bestScore * kmersize < (q_len - kmersize - bestScore)) {
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {
