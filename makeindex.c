@@ -95,7 +95,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
 				if(qseq->len >= compressor->size) {
 					freeComp(compressor);
-					allocComp(compressor, qseq->len << 1);
+					allocComp(compressor, qseq->size);
 				}
 				bias = compDNAref(compressor, qseq->seq, qseq->len);
 				

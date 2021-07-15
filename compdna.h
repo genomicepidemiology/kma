@@ -22,16 +22,16 @@
 #ifndef COMPDNA
 typedef struct compDNA CompDNA;
 struct compDNA {
-	int seqlen;
-	int size;
-	int complen;
+	unsigned seqlen;
+	unsigned size;
+	unsigned complen;
 	long unsigned *seq;
 	int *N;
 };
 #define COMPDNA 1
 #endif
 
-void allocComp(CompDNA *compressor, int size);
+void allocComp(CompDNA *compressor, unsigned size);
 void freeComp(CompDNA *compressor);
 CompDNA * setComp(unsigned size);
 void destroyComp(CompDNA *src);

@@ -21,7 +21,7 @@
 #include "pherror.h"
 #include "qseqs.h"
 
-Qseqs * setQseqs(int size) {
+Qseqs * setQseqs(unsigned size) {
 	
 	Qseqs *dest;
 	

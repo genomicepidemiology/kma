@@ -24,7 +24,7 @@
 #include "qseqs.h"
 #include "stdnuc.h"
 
-void allocComp(CompDNA *compressor, int size) {
+void allocComp(CompDNA *compressor, unsigned size) {
 	
 	compressor->seqlen = 0;
 	if(size & 31) {
