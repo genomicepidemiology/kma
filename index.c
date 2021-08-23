@@ -92,7 +92,8 @@ int index_main(int argc, char *argv[]) {
 		fprintf(stderr, "# Too few arguments handed.\n");
 		helpMessage(-1);
 	} else if(sizeof(long unsigned) != 8) {
-		ERROR();
+		fprintf(stderr, "Need a 64-bit system.\n");
+		exit(1);
 	}
 	
 	/* set defaults */
