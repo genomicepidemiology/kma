@@ -48,10 +48,6 @@ typedef int key_t;
 #define shmctl(shmid, cmd, buf) fprintf(stderr, "sysV not available on Windows.\n")
 #endif
 
-/* here */ 
-/* christian */
-#include "runkma.h"
-
 int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT, double minFrac) {
 	
 	int i, file_len, shmid, deCon, *bestTemplates, *template_lengths;
@@ -97,25 +93,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	}
 	templatefilename[file_len] = 0;
 	fclose(templatefile);
-	
-	/* here */
-	/* christian */
-	/* alloc pair array */
-	getSecondBestForce(&templates->DB_size, 0, 0, 0, 0, 0);
-	/* print header */
-	strcat(templatefilename, ".name");
-	FILE *name_file;
-	Qseqs *template_name;
-	name_file = sfopen(templatefilename, "rb");
-	templatefilename[file_len] = 0;
-	template_name = setQseqs(256);
-	i = 0;
-	fprintf(stdout, "# ");
-	while(++i < templates->DB_size) {
-		fprintf(stdout, "\t%s", nameLoad(template_name, name_file));
-	}
-	fprintf(stdout, "\n");
-	/* to here */
 	
 	/* check if DB is sparse */
 	if(templates->prefix_len != 0 || templates->prefix != 0) {

@@ -66,7 +66,7 @@ int openAndDetermine(FileBuff *inputfile, char *filename) {
 int FileBuffgetFsa(FileBuff *src, Qseqs *header, Qseqs *qseq, char *trans) {
 	
 	unsigned char *buff, *seq;
-	int size, avail;
+	unsigned size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -161,7 +161,7 @@ int FileBuffgetFsa(FileBuff *src, Qseqs *header, Qseqs *qseq, char *trans) {
 int FileBuffgetFsaSeq(FileBuff *src, Qseqs *qseq, char *trans) {
 	
 	unsigned char *buff, *seq;
-	int size, avail;
+	unsigned size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -241,7 +241,7 @@ int FileBuffgetFsaSeq(FileBuff *src, Qseqs *qseq, char *trans) {
 int FileBuffgetFq(FileBuff *src, Qseqs *header, Qseqs *qseq, Qseqs *qual, char *trans) {
 	
 	unsigned char *buff, *seq;
-	int size, avail;
+	unsigned size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -396,7 +396,7 @@ int FileBuffgetFq(FileBuff *src, Qseqs *header, Qseqs *qseq, Qseqs *qual, char *
 int FileBuffgetFqSeq(FileBuff *src, Qseqs *qseq, Qseqs *qual, char *trans) {
 	
 	unsigned char *buff, *seq;
-	int size, avail;
+	unsigned size, avail;
 	
 	/* init */
 	avail = src->bytes;

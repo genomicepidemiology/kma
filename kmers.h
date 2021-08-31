@@ -19,4 +19,4 @@
 #define _XOPEN_SOURCE 600
 #include "penalties.h"
 
-int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT);
+int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT, double minFrac);

@@ -272,9 +272,10 @@ unsigned char refNanoCaller(unsigned char bestNuc, unsigned char tNuc, int bestS
 
 void * assemble_KMA_threaded(void *arg) {
 	
-	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeMatrix = {0}, mainTemplate = -2, thread_wait = 0;
+	static volatile int Lock[3] = {0, 0, 0}, mainTemplate = -2, thread_wait = 0;
 	static char *template_name;
 	static HashMapCCI *template_index;
+	volatile int *excludeIn = &Lock[0], *excludeOut = &Lock[1], *excludeMatrix = &Lock[2];
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, bias, myBias, gaps, pos, spin, sam;
 	int read_score, depthUpdate, bestBaseScore, bestScore, template, asm_len;
@@ -369,7 +370,7 @@ void * assemble_KMA_threaded(void *arg) {
 			lockTime(excludeIn, spin);
 			file = files[file_i];
 			if(file != 0) {
-				sfread(buffer, sizeof(int), 8, file);
+				read_score = fread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -592,7 +593,7 @@ void * assemble_KMA_threaded(void *arg) {
 							}
 							
 							if(xml_out) {
-								hitXML(xml_out, template, template_name, aligned, &alnStat, NWmatrices->rewards, stats[4]);
+								hitXML(xml_out, template, header->seq, aligned, &alnStat, NWmatrices->rewards, stats[4]);
 							}
 						} else if(sam && !(sam & 2096)) {
 							stats[1] = read_score;
@@ -627,11 +628,11 @@ void * assemble_KMA_threaded(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -779,9 +780,10 @@ void * assemble_KMA_threaded(void *arg) {
 
 void * assemble_KMA_dense_threaded(void *arg) {
 	
-	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeMatrix = {0}, mainTemplate = -2, thread_wait = 0;
+	static volatile int Lock[3] = {0, 0, 0}, mainTemplate = -2, thread_wait = 0;
 	static char *template_name;
 	static HashMapCCI *template_index;
+	volatile int *excludeIn = &Lock[0], *excludeOut = &Lock[1], *excludeMatrix = &Lock[2];
 	Assemble_thread *thread = arg;
 	int i, j, t_len, aln_len, start, end, file_i, file_count, template, spin;
 	int pos, read_score, bestScore, depthUpdate, bestBaseScore, nextTemplate;
@@ -923,7 +925,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 			lockTime(excludeIn, spin);
 			file = files[file_i];
 			if(file != 0) {
-				sfread(buffer, sizeof(int), 8, file);
+				read_score = fread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -1053,7 +1055,7 @@ void * assemble_KMA_dense_threaded(void *arg) {
 							}
 							
 							if(xml_out) {
-								hitXML(xml_out, template, template_name, aligned, &alnStat, NWmatrices->rewards, stats[4]);
+								hitXML(xml_out, template, header->seq, aligned, &alnStat, NWmatrices->rewards, stats[4]);
 							}
 						} else if(sam && !(sam & 2096)) {
 							stats[1] = read_score;
@@ -1089,11 +1091,11 @@ void * assemble_KMA_dense_threaded(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -1253,7 +1255,7 @@ void * skip_assemble_KMA(void *arg) {
 	while(file_i < file_count) {
 		file = files[file_i];
 		if(file != 0) {
-			sfread(buffer, sizeof(int), 8, file);
+			nextTemplate = fread(buffer, sizeof(int), 8, file);
 			if((nextTemplate = buffer[0]) == template) {
 				/* load frag */
 				qseq->len = buffer[1];
@@ -1297,10 +1299,10 @@ void * skip_assemble_KMA(void *arg) {
 				++file_i;
 			} else if(nextTemplate < template) {
 				/* Move pointer forward */
-				fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+				sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 			} else {
 				/* Move pointer back */
-				fseek(file, (-8) * sizeof(int), SEEK_CUR);
+				sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 				++file_i;
 			}
 		} else {
@@ -1316,7 +1318,8 @@ void * skip_assemble_KMA(void *arg) {
 
 void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore alnStat, int t_len, int flag) {
 	
-	static volatile int *excludeMatrix = {0};
+	static volatile int Lock = 0;
+	volatile int *excludeMatrix = &Lock;
 	int i, j, pos, aln_len, start, read_score, myBias, gaps;
 	Assembly *assembly;
 	
@@ -1413,7 +1416,8 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 
 void alnToMatDense(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore alnStat, int t_len, int flag) {
 	
-	static volatile int *excludeMatrix = {0};
+	static volatile int Lock = 0;
+	volatile int *excludeMatrix = &Lock;
 	int i, pos, aln_len, start, read_score;
 	Assembly *assembly;
 	
@@ -1448,7 +1452,8 @@ void alnToMatDense(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnSco
 void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, int t_len, int bcd, double evalue, int thread_num) {
 	
 	const char bases[6] = "ACGTN-";
-	static volatile int *excludeMatrix = {0}, next, thread_wait = 0;
+	static volatile int Lock = 0, next, thread_wait = 0;
+	volatile int *excludeMatrix = &Lock;
 	int i, j, pos, end ,asm_len, aln_len, bestScore, bestBaseScore, chunk;
 	int coverScore;
 	long unsigned depth, depthVar, depthUpdate;
@@ -1580,7 +1585,8 @@ void callConsensus(AssemInfo *matrix, Assem *aligned_assem, long unsigned *seq, 
 
 void fixVarOverflow(Assem *aligned_assem, Assembly *assembly, int t_len, int thread_num) {
 	
-	static volatile int *excludeMatrix = {0}, next, thread_wait = 0;
+	static volatile int Lock = 0, next, thread_wait = 0;
+	volatile int *excludeMatrix = &Lock;
 	int pos, end, chunk, depthUpdate;
 	double var, depth, tmp;
 	
@@ -1636,12 +1642,12 @@ void fixVarOverflow(Assem *aligned_assem, Assembly *assembly, int t_len, int thr
 void * assemble_KMA(void *arg) {
 	
 	const char bases[6] = "ACGTN-";
-	static volatile int *excludeIn = {0}, *excludeOut = {0}, *excludeMatrix = {0};
 	static volatile int thread_wait = 0, thread_init = 0, thread_begin = 0;
-	static volatile int mainTemplate = -2, next;
+	static volatile int mainTemplate = -2, next, Lock[3] = {0, 0, 0};
 	static int t_len, load, seq_in;
 	static char *template_name;
 	static HashMapCCI *template_index;
+	volatile int *excludeIn = &Lock[0], *excludeOut = &Lock[1], *excludeMatrix = &Lock[2];
 	Assemble_thread *thread = arg;
 	int i, minlen, aln_len, kmersize, sam, chunk, ef, template;
 	int read_score, asm_len, nextTemplate, file_i, file_count, delta, status;
@@ -1680,8 +1686,8 @@ void * assemble_KMA(void *arg) {
 	delta = qseq->size;
 	mq = thread->mq;
 	minlen = thread->minlen;
-	mrc = thread->mrc;
 	scoreT = thread->scoreT;
+	mrc = thread->mrc;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
 	sam = thread->sam;
@@ -1693,7 +1699,6 @@ void * assemble_KMA(void *arg) {
 	
 	if(template != -2) {
 		wait_atomic(thread_begin);
-		
 		
 		/* all assemblies done, 
 		signal threads to return */
@@ -1711,6 +1716,7 @@ void * assemble_KMA(void *arg) {
 		t_len = thread->t_len;
 		load = (template_index->len != 0) ? 0 : 1;
 		matrix->len = 0;
+		seq_in = thread->seq_in;
 		
 		/* start threads */
 		aligned_assem->score = 0;
@@ -1818,7 +1824,7 @@ void * assemble_KMA(void *arg) {
 			lock(excludeIn);
 			file = files[file_i];
 			if(file != 0) {
-				sfread(buffer, sizeof(int), 8, file);
+				read_score = fread(buffer, sizeof(int), 8, file);
 				if((nextTemplate = buffer[0]) == template) {
 					/* load frag */
 					qseq->len = buffer[1];
@@ -1925,7 +1931,7 @@ void * assemble_KMA(void *arg) {
 							}
 							
 							if(xml_out) {
-								hitXML(xml_out, template, template_name, aligned, &alnStat, NWmatrices->rewards, stats[4]);
+								hitXML(xml_out, template, header->seq, aligned, &alnStat, NWmatrices->rewards, stats[4]);
 							}
 						} else if(sam && !(sam & 2096)) {
 							stats[1] = read_score;
@@ -1960,11 +1966,11 @@ void * assemble_KMA(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}

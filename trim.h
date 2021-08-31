@@ -1,4 +1,4 @@
-/* Philip T.L.C. Clausen Jan 2017 plan@dtu.dk */
+/* Philip T.L.C. Clausen May 2021 plan@dtu.dk */
 
 /*
  * Copyright (c) 2017, Philip Clausen, Technical University of Denmark
@@ -16,5 +16,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
+#include <stdio.h>
+#include "compdna.h"
+#include "qseqs.h"
 
-#define KMA_VERSION "1.3.20+"
+void printTrimFsa(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out);
+void printTrimFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, Qseqs *qseq_r, Qseqs *qual_r, CompDNA *compressor, FILE *out);
+int trim_main(int argc, char *argv[]);

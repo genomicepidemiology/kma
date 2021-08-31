@@ -156,8 +156,11 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-Mt1", "Map everything to one template", "False/0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-pm", "Pairing method (p,u,f)", "u");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-1t1", "One query to one template", "False");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-hmm", "Use a HMM to assign template(s)", "True");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-hmm", "Use a HMM to assign template(s)", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ck", "Count k-mers over pseudo alignment", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-localopen", "Penalty for openning a local chain", "6");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mct", "Max overlap between templates", "0.1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-lc", "Length corrected template chaining", "False");
 	
 	fprintf(out, "#\n# Chaining:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-k", "K-mersize", "DB defined");
@@ -232,7 +235,7 @@ int kma_main(int argc, char *argv[]) {
 	static double ID_t, scoreT, coverT, mrc, evalue, minFrac, support;
 	static Penalties *rewards;
 	int i, j, args, exe_len, fileCount, size, escape, tmp, step1, step2;
-	unsigned totFrags;
+	long unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
 	FILE *templatefile, *ioStream;
 	time_t t0, t1;
@@ -285,7 +288,7 @@ int kma_main(int argc, char *argv[]) {
 		bcd = 1;
 		scoreT = 0.5;
 		coverT = 0.1;
-		mrc = 0.1;
+		mrc = 0.0;
 		ID_t = 1.0;
 		one2one = 0;
 		ss = 'q';
@@ -618,7 +621,7 @@ int kma_main(int argc, char *argv[]) {
 				if(++args < argc && *(argv[args]) != '-') {
 					ref_fsa = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-ref_fsa\".\n");
+						fprintf(stderr, "Invalid argument at \"-3p\".\n");
 						exit(4);
 					} else if(ref_fsa == 0) {
 						ref_fsa = 2;
@@ -636,10 +639,16 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-hmm") == 0) {
 				kmerScan = &save_kmers_HMM;
 				one2one = 0;
+			} else if(strcmp(argv[args], "-lc") == 0) {
+				kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
 			} else if(strcmp(argv[args], "-proxi") == 0) {
 				if(++args < argc) {
 					minFrac = strtod(argv[args], &exeBasic);
-					if(*exeBasic != 0 || minFrac < 0 || 1 < minFrac) {
+					if(*exeBasic != 0 || minFrac < -1 || 1 < minFrac) {
 						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
 						exit(1);
 					} else {
@@ -651,19 +660,11 @@ int kma_main(int argc, char *argv[]) {
 						getF = &getF_Proxi;
 						getR = &getR_Proxi;
 						getChainTemplates = &getProxiChainTemplates;
-						getMatch((int *)(&minFrac), 0);
-						getMatchSparse((int *)(&minFrac), 0, 0, 0, 0, 0);
-						getSecondPen((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0);
-						getF((int *)(&minFrac), 0, 0, 0, 0);
-						ankerAndClean((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-						ankerAndClean_MEM((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-						getProxiChainTemplates(0, (const Penalties *)(&minFrac), 0, 0, 0, 0, 0);
 					}
 				} else {
 					fprintf(stderr, "Need argument at: \"-proxi\".\n");
 					exit(1);
 				}
-				
 			} else if(strcmp(argv[args], "-ca") == 0) {
 				chainSeedsPtr = &chainSeeds_circular;
 			} else if(strcmp(argv[args], "-ss") == 0) {
@@ -875,7 +876,7 @@ int kma_main(int argc, char *argv[]) {
 					++args;
 					extendedFeatures = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-ef\".\n");
+						fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
 						exit(1);
 					}
 				} else {
@@ -985,7 +986,7 @@ int kma_main(int argc, char *argv[]) {
 				extendedFeatures = 1;
 			} else if(strcmp(argv[args], "-mint3") == 0) {
 				/* equivalent to:
-				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa, -dense, 
+				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa 2, -dense, 
 				-bcNano, -bcd 10, -bc 0.7, -vcf -ef */
 				kmerScan = &save_kmers;
 				one2one = 1;
@@ -1019,6 +1020,7 @@ int kma_main(int argc, char *argv[]) {
 		}
 		preseed(0, 0, exhaustive);
 		trimSeedsPtr(0, ts);
+		mrchain((int *)(&mrc), 0, 0, 0);
 		
 		if(sam && kmaPipe != &kmaPipeThread) {
 			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");
@@ -1032,6 +1034,10 @@ int kma_main(int argc, char *argv[]) {
 			}
 			kmerScan = &save_kmers;
 			one2one = 1;
+			if(minFrac < 0) {
+				fprintf(stderr, "spltDB cannot be used in combination with soft proximity matching, minFrac < 0\n");
+				exit(1);
+			}
 		}
 		
 		if(get_kmers_for_pair_ptr == &get_kmers_for_pair_count) {
@@ -1293,15 +1299,14 @@ int kma_main(int argc, char *argv[]) {
 				strcpy(myTemplatefilename, templatefilename);
 				strcat(myTemplatefilename, ".length.b");
 				templatefile = sfopen(myTemplatefilename, "rb");
-				fseek(templatefile, (Mt1 + 1) * sizeof(int), SEEK_CUR);
+				sfseek(templatefile, (Mt1 + 1) * sizeof(int), SEEK_CUR);
 				sfread(&qseq.len, sizeof(int), 1, templatefile);
 				fclose(templatefile);
-				printFsaMt1(0, &qseq, 0, ioStream);
-				printFsa_pairMt1(0, &qseq, 0, 0, 0, ioStream);
+				printFsaMt1(0, &qseq, 0, 0, ioStream);
+				printFsa_pairMt1(0, &qseq, 0, 0, 0, 0, 0, ioStream);
 			} else {
 				myTemplatefilename = 0;
 			}
-			kmersize = 16;
 			totFrags = 0;
 			
 			/* SE */
@@ -1318,6 +1323,8 @@ int kma_main(int argc, char *argv[]) {
 			if(fileCounter_INT > 0) {
 				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
+			
+			fprintf(stderr, "#\n# Total number of query fragment after trimming:\t%lu\n", totFrags);
 			
 			status |= errno;
 			
@@ -1343,7 +1350,7 @@ int kma_main(int argc, char *argv[]) {
 	} else if(step2) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status |= save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT);
+		status |= save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT, (!mem_mode && minFrac < 0) ? -minFrac : minFrac);
 		free(myTemplatefilename);
 	} else if(sparse_run) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
@@ -1358,9 +1365,9 @@ int kma_main(int argc, char *argv[]) {
 		if(spltDB == 0 && targetNum != 1) {
 			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else if(mem_mode) {
-			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

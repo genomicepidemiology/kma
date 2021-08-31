@@ -20,7 +20,7 @@
 #ifndef QSEQS
 typedef struct qseqs Qseqs;
 struct qseqs {
-	int size;
+	unsigned size;
 	int len;
 	unsigned char *seq;
 };
@@ -28,7 +28,7 @@ struct qseqs {
 #endif
 
 /* initialize Qseqs */
-Qseqs * setQseqs(int size);
+Qseqs * setQseqs(unsigned size);
 /* destroy Qseqs */
 void destroyQseqs(Qseqs *dest);
 void insertKmerBound(Qseqs *header, int start, int end);

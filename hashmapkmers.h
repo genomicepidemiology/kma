@@ -28,14 +28,16 @@ struct hashTable_kmers {
 };
 
 struct hashMap_kmers {
-	unsigned size;
-	unsigned n;
+	long unsigned size;
+	long unsigned n;
+	unsigned flag;
+	unsigned filler; //unused
 	struct hashTable_kmers **table;
 };
 #define HASHMAPKMERS 1
 #endif
 
-void hashMap_kmers_initialize(HashMap_kmers *dest, unsigned newSize);
+void hashMap_kmers_initialize(HashMap_kmers *dest, long unsigned newSize);
 void reallocHashMap_kmers(HashMap_kmers *dest);
 void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key);
 int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key);

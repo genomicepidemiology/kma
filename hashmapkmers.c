@@ -20,10 +20,21 @@
 #include <stdlib.h>
 #include "hashmapkmers.h"
 #include "pherror.h"
+#include "stdstat.h"
 
-void hashMap_kmers_initialize(HashMap_kmers *dest, unsigned newSize) {
+void hashMap_kmers_initialize(HashMap_kmers *dest, long unsigned newSize) {
+	
+	/* round to nearest power of two */
+	--newSize;
+	newSize |= newSize >> 1;
+	newSize |= newSize >> 2;
+	newSize |= newSize >> 4;
+	newSize |= newSize >> 8;
+	newSize |= newSize >> 16;
+	newSize |= newSize >> 32;
+	dest->size = newSize++;
+	
 	/* set hashMap */
-	dest->size = newSize;
 	dest->n = 0;
 	/* set hashTable */
 	dest->table = calloc(newSize, sizeof(HashTable_kmers*));
@@ -39,8 +50,7 @@ void reallocHashMap_kmers(HashMap_kmers *dest) {
 	
 	/* save buckets */
 	table = 0;
-	index = dest->size;
-	while(index--) {
+	for(index = 0; index <= dest->size; ++index) {
 		for(node = dest->table[index]; node; node = node_next) {
 			node_next = node->next;
 			node->next = table;
@@ -50,15 +60,23 @@ void reallocHashMap_kmers(HashMap_kmers *dest) {
 	
 	/* reallocate table */
 	free(dest->table);
-	dest->table = calloc(dest->size <<= 1, sizeof(HashTable_kmers *));
+	++dest->size;
+	dest->size <<= 1;
+	dest->table = calloc(dest->size, sizeof(HashTable_kmers *));
 	if(!dest->table) {
 		ERROR();
 	}
+	--dest->size;
 	
 	/* refill table */
 	for(node = table; node; node = node_next) {
 		node_next = node->next;
-		index = node->key % dest->size;
+		if(dest->flag) {
+			murmur(index, node->key);
+			index &= dest->size;
+		} else {
+			index = node->key & dest->size;
+		}
 		node->next = dest->table[index];
 		dest->table[index] = node;
 	}
@@ -66,11 +84,16 @@ void reallocHashMap_kmers(HashMap_kmers *dest) {
 
 void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
 	
-	unsigned index;
+	long unsigned index;
 	HashTable_kmers *node;
 	
 	/* get index */
-	index = key % dest->size;
+	if(dest->flag) {
+		murmur(index, key);
+		index &= dest->size;
+	} else {
+		index = key & dest->size;
+	}
 	
 	for(node = dest->table[index]; node != 0; node = node->next) {
 		if(key == node->key) { // Keys match change value
@@ -81,6 +104,12 @@ void hashMap_kmers_CountIndex(HashMap_kmers *dest, long unsigned key) {
 	
 	if(dest->n == dest->size) {
 		reallocHashMap_kmers(dest);
+		if(dest->flag) {
+			murmur(index, key);
+			index &= dest->size;
+		} else {
+			index = key & dest->size;
+		}
 	}
 	++dest->n;
 	node = smalloc(sizeof(HashTable_kmers));
@@ -95,7 +124,12 @@ int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key) {
 	long unsigned index;
 	HashTable_kmers *node;
 	
-	index = key % dest->size;
+	if(dest->flag) {
+		murmur(index, key);
+		index &= dest->size;
+	} else {
+		index = key & dest->size;
+	}
 	for(node = dest->table[index]; node != 0; node = node->next) {
 		if(node->key == key) {
 			return 0;
@@ -104,6 +138,13 @@ int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key) {
 	
 	if(dest->n == dest->size) {
 		reallocHashMap_kmers(dest);
+		if(dest->flag) {
+			murmur(index, key);
+			index &= dest->size;
+		} else {
+			index = key & dest->size;
+		}
+		
 	}
 	++dest->n;
 	node = smalloc(sizeof(HashTable_kmers));
@@ -116,10 +157,10 @@ int hashMap_CountKmer(HashMap_kmers *dest, long unsigned key) {
 
 void emptyHash(HashMap_kmers *dest) {
 	
-	unsigned i;
+	long unsigned i;
 	HashTable_kmers *node, *next;
 	
-	for(i = 0; i < dest->size; ++i) {
+	for(i = 0; i <= dest->size; ++i) {
 		for(node = dest->table[i]; node != 0; node = next) {
 			next = node->next;
 			free(node);

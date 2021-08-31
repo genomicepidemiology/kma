@@ -1,6 +1,6 @@
 CFLAGS ?= -Wall -O3
 CFLAGS += -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o trim.o tmp.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -40,9 +40,9 @@ dist.o: dist.h hashmapkma.h matrix.h pherror.h
 ef.o: ef.h assembly.h stdnuc.h vcf.h version.h
 filebuff.o: filebuff.h pherror.h qseqs.h
 frags.o: frags.h filebuff.h pherror.h qseqs.h
-hashmap.o: hashmap.h hashtable.h pherror.h
-hashmapcci.o: hashmapcci.h pherror.h stdnuc.h
-hashmapkma.o: hashmapkma.h pherror.h
+hashmap.o: hashmap.h hashtable.h pherror.h stdstat.h
+hashmapcci.o: hashmapcci.h pherror.h stdnuc.h stdstat.h
+hashmapkma.o: hashmapkma.h pherror.h stdstat.h
 hashmapkmers.o: hashmapkmers.h pherror.h
 hashtable.o: hashtable.h hashmapkma.h hashmapkmers.h pherror.h
 index.o: index.h compress.h decon.h hashmap.h hashmapkma.h loadupdate.h makeindex.h pherror.h stdstat.h version.h
@@ -72,6 +72,7 @@ sparse.o: sparse.h compkmers.h hashtable.h kmapipe.h pherror.h runinput.h savekm
 spltdb.o: spltdb.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapcci.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h runkma.h stdnuc.h stdstat.h tmp.h vcf.h
 stdnuc.o: stdnuc.h
 stdstat.o: stdstat.h
+trim.o: trim.h compdna.h pherror.h runinput.h qseqs.h
 tmp.o: tmp.h pherror.h threader.h
 update.o: update.h hashmapkma.h pherror.h stdnuc.h
 updateindex.o: updateindex.h compdna.h hashmap.h hashmapcci.h pherror.h qualcheck.h stdnuc.h pherror.h

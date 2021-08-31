@@ -23,14 +23,16 @@
 typedef struct hashMap HashMap;
 struct hashMap {
 	/* open hash structure */
-	long unsigned size;			// size of DB
-	long unsigned n;			// k-mers stored
+	long unsigned size;		// size of DB
+	long unsigned n;		// k-mers stored
 	long unsigned mask;
-	unsigned kmersize;			// k
-	unsigned prefix_len;		// prefix length
-	long unsigned prefix;		// prefix
-	HashTable **table;	// org
-	unsigned **values;			// ME
+	unsigned kmersize;		// k
+	unsigned prefix_len;	// prefix length
+	long unsigned prefix;	// prefix
+	unsigned mlen;			// Minimizer length
+	unsigned flag;			// flag to describe k-mer format: std, hom, min, minhom
+	HashTable **table;		// org
+	unsigned **values;		// ME
 	int DB_size;
 };
 #define STRUCTHASHMAP 1
@@ -40,7 +42,7 @@ extern int (*hashMap_add)(HashMap *, long unsigned, unsigned);
 extern unsigned * (*hashMapGet)(HashMap *, long unsigned);
 extern void (*addUniqueValues)(HashMap *, long unsigned, unsigned *);
 extern unsigned * (*updateValuePtr)(unsigned *, unsigned);
-HashMap * hashMap_initialize(long unsigned size, unsigned kmersize);
+HashMap * hashMap_initialize(const long unsigned size, const unsigned kmersize, const unsigned mlen, const unsigned flag);
 int megaMap_addKMA(HashMap *templates, long unsigned key, unsigned value);
 unsigned * megaMap_getValue(HashMap *templates, long unsigned key);
 void hashMap2megaMap(HashMap *templates, HashTable *table);

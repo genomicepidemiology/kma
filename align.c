@@ -957,7 +957,7 @@ int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, i
 		}
 	}
 	
-	if(one2one && bestScore * kmersize < (q_len - kmersize - bestScore)) {
+	if(one2one && bestScore < kmersize && bestScore * kmersize < (q_len - kmersize - bestScore)) {
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {
@@ -1141,7 +1141,7 @@ int anker_rc_comp(const HashMapCCI *template_index, unsigned char *qseq, unsigne
 		}
 	}
 	
-	if(one2one && bestScore * kmersize < (q_len - kmersize - bestScore)) {
+	if(one2one && bestScore < kmersize && bestScore * kmersize < (q_len - kmersize - bestScore)) {
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {

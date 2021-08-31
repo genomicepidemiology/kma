@@ -136,14 +136,14 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
 	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
 	int fragCount, fileCount, maxFrag, coverScore, tmp_start, tmp_end, score;
 	int seq_in_no, DB_size, flag, counter, stats[5];
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
-	int *matched_templates, *template_lengths;
+	int *matched_templates, *template_lengths, *qBoundPtr, *Lengths;
 	unsigned randScore, *fragmentCounts, *readCounts;
 	long read_score, best_read_score, *seq_indexes;
 	long unsigned Nhits, template_tot_ulen, bestNum, seqin_size;
@@ -170,6 +170,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	/* get lengths and names */
 	file_len = strlen(templatefilename);
 	DB_size = load_DBs_KMA(templatefilename, &alignment_scores, &uniq_alignment_scores, &template_lengths, shm);
+	if(!kmersize) {
+		kmersize = *template_lengths;
+	}
 	templatefilename[file_len] = 0;
 	template_name = setQseqs(256);
 	strcat(templatefilename, ".name");
@@ -200,13 +203,20 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	if(lseek(seq_in_no, 0, SEEK_SET) != 0) {
 		ERROR();
 	}
+	/*
+	seq_in = sfopen(templatefilename, "rb");
+	sfseek(seq_in, 0, SEEK_END);
+	seqin_size = 4 * ftell(seq_in);
+	sfseek(seq_in, 0, SEEK_SET);
+	seq_in_no = fileno(seq_in);
+	*/
 	templatefilename[file_len] = 0;
 	templates_index = calloc(DB_size, sizeof(HashMapCCI*));
 	if(!templates_index) {
 		ERROR();
 	}
 	alignLoadPtr = &alignLoad_fly;
-	if(kmersize < 4 || 32 < kmersize) {
+	if(kmersize < 4 || 31 < kmersize) {
 		kmersize = 16;
 	}
 	
@@ -285,7 +295,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	fprintf(stderr, "# Running KMA.\n");
 	t0 = clock();
 	
-	
 	/* allocate stuff */
 	i = 1;
 	alnThreads = 0;
@@ -296,6 +305,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		bestTemplates_r = smalloc(((DB_size + 1) << 1) * sizeof(int));
 		best_start_pos = smalloc((DB_size << 1) * sizeof(int));
 		best_end_pos = smalloc((DB_size << 1) * sizeof(int));
+		Lengths = smalloc((DB_size << 1) * sizeof(int));
 		qseq_comp = smalloc(sizeof(CompDNA));
 		qseq_r_comp = smalloc(sizeof(CompDNA));
 		allocComp(qseq_comp, 1024);
@@ -319,6 +329,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->bestTemplates_r = bestTemplates_r;
 		alnThread->best_start_pos = best_start_pos;
 		alnThread->best_end_pos = best_end_pos;
+		alnThread->Lengths = Lengths;
 		alnThread->alignment_scores = alignment_scores;
 		alnThread->uniq_alignment_scores = uniq_alignment_scores;
 		alnThread->seq_indexes = seq_indexes;
@@ -339,8 +350,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->template_lengths = template_lengths;
 		alnThread->templates_index = templates_index;
 		alnThread->mq = mq;
-		alnThread->sam = sam;//(sam == 1) ? 1 : 0;
+		alnThread->sam = (sam == 1) ? 1 : 0;
 		alnThread->scoreT = scoreT;
+		alnThread->minFrac = minFrac;
 		alnThread->next = alnThreads;
 		alnThreads = alnThread;
 		
@@ -363,6 +375,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	bestTemplates_r = smalloc(((DB_size + 1) << 1) * sizeof(int));
 	best_start_pos = smalloc((DB_size << 1) * sizeof(int));
 	best_end_pos = smalloc((DB_size << 1) * sizeof(int));
+	Lengths = smalloc((DB_size << 1) * sizeof(int));
 	qseq = setQseqs(1024);
 	qseq_r = setQseqs(1024);
 	header = setQseqs(256);
@@ -391,6 +404,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->bestTemplates_r = bestTemplates_r;
 	alnThread->best_start_pos = best_start_pos;
 	alnThread->best_end_pos = best_end_pos;
+	alnThread->Lengths = Lengths;
 	alnThread->alignment_scores = alignment_scores;
 	alnThread->uniq_alignment_scores = uniq_alignment_scores;
 	alnThread->seq_indexes = seq_indexes;
@@ -409,8 +423,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->kmersize = kmersize;
 	alnThread->minlen = minlen;
 	alnThread->mq = mq;
-	alnThread->sam = sam;//(sam == 1) ? 1 : 0;
+	alnThread->sam = (sam == 1) ? 1 : 0;
 	alnThread->scoreT = scoreT;
+	alnThread->minFrac = minFrac;
 	alnThread->template_lengths = template_lengths;
 	alnThread->templates_index = templates_index;
 	alnThread->next = 0;
@@ -428,7 +443,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	}
 	kmaPipe(0, 0, inputfile, &i);
 	status |= i;
-	
 	i = 0;
 	sfwrite(&i, sizeof(int), 1, frag_out_raw);
 	fflush(frag_out_raw);
@@ -530,6 +544,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		free(alnThread->bestTemplates_r);
 		free(alnThread->best_start_pos);
 		free(alnThread->best_end_pos);
+		free(alnThread->Lengths);
 		freeComp(alnThread->qseq_comp);
 		free(alnThread->qseq_comp);
 		freeComp(alnThread->qseq_r_comp);
@@ -574,6 +589,16 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	while(--i) {
 		template_tot_ulen += template_lengths[i];
 	}
+	
+	/* here */
+	/*
+	i = DB_size;
+	j = 0;
+	while(--i) {
+		fprintf(stdout, "%lu\n", alignment_scores[++j]);
+	}
+	*/
+	/* to here */
 	
 	/* ConClave */
 	if(ConClave == 1) {
@@ -657,6 +682,18 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			if(bestTemplate < 0) {
 				bestTemplate = -bestTemplate;
 				strrc(qseq->seq, qseq->len);
+				flag |= 16;
+				
+				/* check and invert query bounds */
+				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+					/* get q-bounds */
+					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
+					tmp_start = *qBoundPtr;
+					tmp_end = *++qBoundPtr;
+					/* invert */
+					*qBoundPtr = qseq->len - tmp_start;
+					*--qBoundPtr = qseq->len - tmp_end;
+				}
 			}
 			w_scores[bestTemplate] += read_score;
 			if(fragmentCounts) {
@@ -732,7 +769,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			header->len = stats[3];
 			
 			/* best templates, skip rest */
-			fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
+			sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			
 			/* Several mapped templates, choose best */
@@ -787,7 +824,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			
 			if(stats[2] < 0) {
 				sfread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -805,7 +842,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				t_len = template_lengths[template];
 				//expected = (Nhits - read_score) * (1.0 * t_len) / (template_tot_ulen - t_len + etta);
 				expected = t_len;
-				expected /= MAX(1,(template_tot_ulen - t_len));
+				expected /= MAX(1, (template_tot_ulen - t_len));
 				expected *= (Nhits - read_score);
 				//q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
 				q_value = read_score - expected;
@@ -828,7 +865,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			
 			if(bestHits != 1) {
 				/* best templates, skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 				sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 				bestTemplate = 0;
 				i = bestHits;
@@ -849,12 +886,12 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				}
 			} else {
 				/* skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
 			}
 			
 			if(stats[2] < 0) {
 				sfread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -919,7 +956,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						} else {
 							++i;
 						}
-						
 					}
 					
 					if(bestTemplate == 0) {
@@ -984,8 +1020,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						}
 					}
 				}
-				
-				
 			} else {
 				bestTemplate = *bestTemplates;
 				start = *best_start_pos;
@@ -996,6 +1030,18 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			if(bestTemplate < 0) {
 				bestTemplate = -bestTemplate;
 				strrc(qseq->seq, qseq->len);
+				flag |= 16;
+				
+				/* check and invert query bounds */
+				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+					/* get q-bounds */
+					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
+					tmp_start = *qBoundPtr;
+					tmp_end = *++qBoundPtr;
+					/* invert */
+					*qBoundPtr = qseq->len - tmp_start;
+					*--qBoundPtr = qseq->len - tmp_end;
+				}
 			}
 			w_scores[bestTemplate] += read_score;
 			if(fragmentCounts) {
@@ -1334,7 +1380,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -1345,7 +1391,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	int fileCount, coverScore, tmp_start, tmp_end, bestTemplate, status, tot;
 	int sparse, progress, seq_in_no, DB_size, end, flag, flag_r;
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
-	int *template_lengths, stats[5];
+	int *template_lengths, *qBoundPtr, stats[5];
 	unsigned randScore, *fragmentCounts, *readCounts;
 	long best_read_score, read_score, seq_seeker;
 	long unsigned Nhits, template_tot_ulen, bestNum, counter, seqin_size;
@@ -1371,6 +1417,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	/* get lengths and names */
 	file_len = strlen(templatefilename);
 	DB_size = load_DBs_KMA(templatefilename, &alignment_scores, &uniq_alignment_scores, &template_lengths, shm);
+	if(!kmersize) {
+		kmersize = *template_lengths;
+	}
 	templatefilename[file_len] = 0;
 	template_name = setQseqs(256);
 	strcat(templatefilename, ".name");
@@ -1510,7 +1559,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	while((rc_flag = get_ankers(matched_templates, qseq_comp, header, &flag, inputfile)) != 0) {
 		if(*matched_templates) { // SE
 			read_score = 0;
-			qseq_r->len = 0;
 		} else { // PE
 			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, &flag_r, inputfile);
 			read_score = labs(read_score);
@@ -1545,11 +1593,13 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			if(rc_flag < 0 && 0 < matched_templates[*matched_templates]) {
 				bestHits = -bestHits;
 			}
+			
+			/* make sure update_sores is not corrupted after update of full aln */
 			if(read_score && kmersize <= qseq_r->len) {
 				unCompDNA(qseq_r_comp, qseq_r->seq);
-				update_Scores_pe(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, flag, flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				update_Scores_pe_MEM(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, flag, flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			} else {
-				update_Scores(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				update_Scores_MEM(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			}
 			
 			/* dump seq to all */
@@ -1567,6 +1617,11 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				verbose = 1;
 			}
 		}
+	}
+	
+	/* check soft proxi */
+	if(minFrac < 0) {
+		sfread(alignment_scores, sizeof(long unsigned), DB_size, inputfile);
 	}
 	
 	/* verbose */
@@ -1648,7 +1703,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		fragmentCounts = 0;
 		readCounts = 0;
 	}
-	
 	
 	if(xml) {
 		if(xml == 2) {
@@ -1752,6 +1806,18 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			if(bestTemplate < 0) {
 				bestTemplate = -bestTemplate;
 				strrc(qseq->seq, qseq->len);
+				flag |= 16;
+				
+				/* check and invert query bounds */
+				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+					/* get q-bounds */
+					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
+					tmp_start = *qBoundPtr;
+					tmp_end = *++qBoundPtr;
+					/* invert */
+					*qBoundPtr = qseq->len - tmp_start;
+					*--qBoundPtr = qseq->len - tmp_end;
+				}
 			}
 			w_scores[bestTemplate] += read_score;
 			if(fragmentCounts) {
@@ -1827,7 +1893,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			header->len = stats[3];
 			
 			/* best templates, skip rest */
-			fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
+			sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			
 			/* Several mapped templates, choose best */
@@ -1882,7 +1948,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			
 			if(stats[2] < 0) {
 				sfread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -1923,7 +1989,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			
 			if(bestHits != 1) {
 				/* best templates, skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 				sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 				bestTemplate = 0;
 				i = bestHits;
@@ -1944,12 +2010,12 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				}
 			} else {
 				/* skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
 			}
 			
 			if(stats[2] < 0) {
 				sfread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -2087,6 +2153,18 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			if(bestTemplate < 0) {
 				bestTemplate = -bestTemplate;
 				strrc(qseq->seq, qseq->len);
+				flag |= 16;
+				
+				/* check and invert query bounds */
+				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+					/* get q-bounds */
+					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
+					tmp_start = *qBoundPtr;
+					tmp_end = *++qBoundPtr;
+					/* invert */
+					*qBoundPtr = qseq->len - tmp_start;
+					*--qBoundPtr = qseq->len - tmp_end;
+				}
 			}
 			w_scores[bestTemplate] += read_score;
 			if(fragmentCounts) {
@@ -2349,6 +2427,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	if(verbose) {
 		fprintf(stderr, "# Template\tScore\tProgress\n");
 	}
+	
 	for(template = 1; template < DB_size; ++template) {
 		if(w_scores[template] > 0) {
 			if(progress) {
@@ -2374,7 +2453,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				q_value = read_score;
 			}
 			p_value  = p_chisqr(q_value);
-			
 			if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len))) {
 				/* load DB */
 				seq_seeker *= sizeof(long unsigned);

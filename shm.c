@@ -38,6 +38,7 @@ typedef int key_t;
 #include "pherror.h"
 #include "hashmapkma.h"
 #include "shm.h"
+#include "stdnuc.h"
 #include "version.h"
 
 void hashMap_shm_detach(HashMapKMA *dest) {
@@ -49,23 +50,23 @@ void hashMap_shm_detach(HashMapKMA *dest) {
 
 int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	
-	int shmid, kmersize, status;
+	int shmid, mlen, status;
 	unsigned DB_size;
 	long unsigned mask, size;
 	key_t key;
 	
 	/* load sizes */
 	sfread(&DB_size, sizeof(unsigned), 1, file);
-	sfread(&dest->kmersize, sizeof(unsigned), 1, file);
+	sfread(&dest->mlen, sizeof(unsigned), 1, file);
 	sfread(&dest->prefix_len, sizeof(unsigned), 1, file);
 	sfread(&dest->prefix, sizeof(long unsigned), 1, file);
 	sfread(&dest->size, sizeof(long unsigned), 1, file);
 	sfread(&dest->n, sizeof(long unsigned), 1, file);
 	sfread(&dest->v_index, sizeof(long unsigned), 1, file);
 	sfread(&dest->null_index, sizeof(long unsigned), 1, file);
-	kmersize = dest->kmersize;
+	mlen = dest->mlen;
 	mask = 0;
-	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (mlen << 1));
 	status = 0;
 	
 	/* check shared memory, else load */
@@ -87,12 +88,12 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, IPC_CREAT | 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "Could not setup the shared hashMap e\n");
-		fseek(file, size, SEEK_CUR);
+		sfseek(file, size, SEEK_CUR);
 		dest->exist = 0;
 		status = 1;
 	} else {
 		dest->exist = shmat(shmid, NULL, 0);
-		sfread(dest->exist, 1, size, file);
+		cfread(dest->exist, 1, size, file);
 	}
 	
 	/* values */
@@ -106,13 +107,13 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, IPC_CREAT | 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "Could not setup the shared hashMap v\n");
-		fseek(file, size, SEEK_CUR);
+		sfseek(file, size, SEEK_CUR);
 		dest->values = 0;
 		status = 1;
 	} else {
 		/* found */
 		dest->values = shmat(shmid, NULL, 0);
-		sfread(dest->values, 1, size, file);
+		cfread(dest->values, 1, size, file);
 	}
 	if((dest->size - 1) == mask) {
 		return status;
@@ -120,7 +121,7 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	
 	/* kmers */
 	size = dest->n + 1;
-	if(dest->kmersize <= 16) {
+	if(dest->mlen <= 16) {
 		size *= sizeof(unsigned);
 	} else {
 		size *= sizeof(long unsigned);
@@ -129,13 +130,13 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, IPC_CREAT | 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "Could not setup the shared hashMap k\n");
-		fseek(file, size, SEEK_CUR);
+		sfseek(file, size, SEEK_CUR);
 		dest->values = 0;
 		status = 1;
 	} else {
 		/* found */
 		dest->key_index = shmat(shmid, NULL, 0);
-		sfread(dest->key_index, 1, size, file);
+		cfread(dest->key_index, 1, size, file);
 	}
 	
 	/* value indexes */
@@ -149,13 +150,21 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, IPC_CREAT | 0666);
 	if(shmid < 0) {
 		fprintf(stderr, "Could not setup the shared hashMap i\n");
-		fseek(file, size, SEEK_CUR);
+		sfseek(file, size, SEEK_CUR);
 		dest->value_index = 0;
 		status = 1;
 	} else {
 		/* found */
 		dest->value_index = shmat(shmid, NULL, 0);
-		sfread(dest->value_index, 1, size, file);
+		cfread(dest->value_index, 1, size, file);
+	}
+	
+	if(fread(&dest->kmersize, sizeof(unsigned), 1, file)) {
+		sfread(&dest->flag, sizeof(unsigned), 1, file);
+		setCmerPointers(dest->flag);
+	} else {
+		dest->kmersize = dest->mlen;
+		dest->flag = 0;
 	}
 	
 	return status;
@@ -163,23 +172,23 @@ int hashMapKMA_setupSHM(HashMapKMA *dest, FILE *file, const char *filename) {
 
 void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	
-	int shmid, kmersize;
+	int shmid, mlen;
 	unsigned DB_size;
 	long unsigned mask, size;
 	key_t key;
 	
 	/* load sizes */
 	sfread(&DB_size, sizeof(unsigned), 1, file);
-	sfread(&dest->kmersize, sizeof(unsigned), 1, file);
+	sfread(&dest->mlen, sizeof(unsigned), 1, file);
 	sfread(&dest->prefix_len, sizeof(unsigned), 1, file);
 	sfread(&dest->prefix, sizeof(long unsigned), 1, file);
 	sfread(&dest->size, sizeof(long unsigned), 1, file);
 	sfread(&dest->n, sizeof(long unsigned), 1, file);
 	sfread(&dest->v_index, sizeof(long unsigned), 1, file);
 	sfread(&dest->null_index, sizeof(long unsigned), 1, file);
-	kmersize = dest->kmersize;
+	mlen = dest->mlen;
 	mask = 0;
-	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (mlen << 1));
 	
 	/* check shared memory, and destroy */
 	size = dest->size;
@@ -217,7 +226,7 @@ void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	
 	/* kmers */
 	size = dest->n + 1;
-	if(dest->kmersize <= 16) {
+	if(dest->mlen <= 16) {
 		size *= sizeof(unsigned);
 	} else {
 		size *= sizeof(long unsigned);
@@ -240,6 +249,14 @@ void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	if(shmid >= 0) {
 		shmctl(shmid, IPC_RMID, NULL);
 	}
+	
+	if(fread(&dest->kmersize, sizeof(unsigned), 1, file)) {
+		sfread(&dest->flag, sizeof(unsigned), 1, file);
+		setCmerPointers(dest->flag);
+	} else {
+		dest->kmersize = dest->mlen;
+		dest->flag = 0;
+	}
 }
 
 int * length_setupSHM(FILE *file, const char *filename) {
@@ -249,9 +266,9 @@ int * length_setupSHM(FILE *file, const char *filename) {
 	key_t key;
 	
 	/* load size */
-	fseek(file, 0, SEEK_END);
+	sfseek(file, 0, SEEK_END);
 	size = ftell(file) - sizeof(int);
-	fseek(file, sizeof(int), SEEK_SET);
+	sfseek(file, sizeof(int), SEEK_SET);
 	
 	key = ftok(filename, 'l');
 	shmid = shmget(key, size, IPC_CREAT | 0666);
@@ -260,7 +277,7 @@ int * length_setupSHM(FILE *file, const char *filename) {
 		template_lengths = 0;
 	} else {
 		template_lengths = shmat(shmid, NULL, 0);
-		sfread(template_lengths, sizeof(unsigned), size / sizeof(unsigned), file);
+		cfread(template_lengths, sizeof(unsigned), size / sizeof(unsigned), file);
 	}
 	
 	return template_lengths;
@@ -273,7 +290,7 @@ void length_destroySHM(FILE *file, const char *filename) {
 	key_t key;
 	
 	/* load size */
-	fseek(file, 0, SEEK_END);
+	sfseek(file, 0, SEEK_END);
 	size = ftell(file) - sizeof(int);
 	
 	key = ftok(filename, 'l');
@@ -291,7 +308,7 @@ long unsigned * seq_setupSHM(FILE *file, const char *filename) {
 	key_t key;
 	
 	/* load size */
-	fseek(file, 0, SEEK_END);
+	sfseek(file, 0, SEEK_END);
 	size = ftell(file);
 	rewind(file);
 	
@@ -302,7 +319,7 @@ long unsigned * seq_setupSHM(FILE *file, const char *filename) {
 		seq = 0;
 	} else {
 		seq = shmat(shmid, NULL, 0);
-		sfread(seq, sizeof(long unsigned), size / sizeof(long unsigned), file);
+		cfread(seq, sizeof(long unsigned), size / sizeof(long unsigned), file);
 	}
 	
 	return seq;
@@ -315,7 +332,7 @@ void seq_destroySHM(FILE *file, const char *filename) {
 	key_t key;
 	
 	/* load size */
-	fseek(file, 0, SEEK_END);
+	sfseek(file, 0, SEEK_END);
 	size = ftell(file);
 	
 	key = ftok(filename, 's');
@@ -333,7 +350,7 @@ char * name_setupSHM(FILE *file, const char *filename) {
 	key_t key;
 	
 	/* load size */
-	fseek(file, 0, SEEK_END);
+	sfseek(file, 0, SEEK_END);
 	size = ftell(file);
 	rewind(file);
 	
@@ -344,7 +361,7 @@ char * name_setupSHM(FILE *file, const char *filename) {
 		template_names = 0;
 	} else {
 		template_names = shmat(shmid, NULL, 0);
-		sfread(template_names, 1, size, file);
+		cfread(template_names, 1, size, file);
 		for(i = 0; i < size; ++i) {
 			if(template_names[i] == '\n') {
 				template_names[i] = 0;
@@ -362,7 +379,7 @@ void name_destroySHM(FILE *file, const char *filename) {
 	key_t key;
 	
 	/* load size */
-	fseek(file, 0, SEEK_END);
+	sfseek(file, 0, SEEK_END);
 	size = ftell(file);
 	
 	key = ftok(filename, 'n');

@@ -142,7 +142,7 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 	for(i = 1; n && i < DB_size; ++i) {
 		if(i == *seqlist) {
 			/* get seq */
-			fseek(seqfile, skip, SEEK_CUR);
+			sfseek(seqfile, skip, SEEK_CUR);
 			sfread(compseq, sizeof(long unsigned), (template_lengths[i] >> 5) + 1, seqfile);
 			
 			j = template_lengths[i];
@@ -153,7 +153,7 @@ void printFastaList(char *filename, int *template_lengths, int *seqlist) {
 			
 			/* print seq */
 			fprintf(stdout, ">%s\n", nameLoad(template_name, namefile));
-			fwrite(seq, 1, template_lengths[i] + 1, stdout);
+			sfwrite(seq, 1, template_lengths[i] + 1, stdout);
 			
 			/* get next target */
 			while(--n && i == *++seqlist);
