@@ -66,7 +66,7 @@ FILE * tmpF(const char *location) {
 		strcpy(tmpname, "XXXXXX");
 	} else if(filename) {
 		/* open tmpfile on previous location */
-		sprintf(tmpname, "%d", tmpNum++);
+		fd = sprintf(tmpname, "%d", tmpNum++);
 		if((file = fopen(filename, "wb+"))) {
 			unlink(filename);
 		}

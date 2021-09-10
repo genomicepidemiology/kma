@@ -35,6 +35,8 @@ struct hashMapKMA {
 	long unsigned prefix;			// prefix
 	int DB_size;
 	unsigned shmFlag;
+	unsigned mlen;
+	unsigned flag;
 	unsigned *exist;				// size long
 	long unsigned *exist_l;			// size long, big DBs
 	unsigned *values;				// compressed values

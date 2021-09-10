@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include "hashmapkma.h"
 #include "pherror.h"
+#include "stdnuc.h"
 #ifdef _WIN32
 #define mmap(addr, len, prot, flags, fd, offset) (0; fprintf(stderr, "mmap not available on windows.\n"); exit(1););
 #define munmap(addr, len) (-1);
@@ -33,14 +34,14 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	
 	int fd;
 	unsigned *uptr;
-	long unsigned size, *luptr;
+	long unsigned Size, size, *luptr;
 	unsigned char *data;
 	
 	/* mmap data */
 	fd = fileno(file);
-	fseek(file, 0, SEEK_END);
-	size = ftell(file);
-	data = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0);
+	sfseek(file, 0, SEEK_END);
+	Size = ftell(file);
+	data = mmap(0, Size, PROT_READ, MAP_SHARED, fd, 0);
 	if(data == MAP_FAILED) {
 		ERROR();
 	}
@@ -48,7 +49,7 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	/* get data */
 	uptr = (unsigned *) data;
 	dest->DB_size = *uptr++;
-	dest->kmersize = *uptr++;
+	dest->mlen = *uptr++;
 	dest->prefix_len = *uptr++;
 	luptr = (long unsigned *) uptr;
 	dest->prefix = *luptr++;
@@ -57,8 +58,9 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	dest->v_index = *luptr++;
 	dest->null_index = *luptr++;
 	data = (unsigned char *) luptr;
+	Size -= (3 * sizeof(unsigned) + 5 * sizeof(long unsigned));
 	dest->mask = 0;
-	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
+	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->mlen << 1));
 	dest->shmFlag = 16;
 	
 	/* exist */
@@ -83,6 +85,7 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	dest->exist = (unsigned *) data;
 	dest->exist_l = (long unsigned *) data;
 	data += size;
+	Size -= size;
 	
 	/* values */
 	size = dest->v_index;
@@ -100,6 +103,7 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 	dest->values_s = (short unsigned *) data;
 	dest->shmFlag |= 2;
 	data += size;
+	Size -= size;
 	
 	/* check for megaMap */
 	if((dest->size - 1) == dest->mask) {
@@ -108,41 +112,53 @@ int hashMapKMAmmap(HashMapKMA *dest, FILE *file) {
 		dest->value_index = 0;
 		dest->value_index_l = 0;
 		hashMap_get = &megaMap_getGlobal;
-		return 0;
 	} else {
 		hashMap_get = &hashMap_getGlobal;
+		/* kmers */
+		size = dest->n + 1;
+		if(dest->mlen <= 16) {
+			size *= sizeof(unsigned);
+			getKeyPtr = &getKey;
+		} else {
+			size *= sizeof(long unsigned);
+			getKeyPtr = &getKeyL;
+		}
+		
+		dest->key_index = (unsigned *) data;
+		dest->key_index_l = (long unsigned *) data;
+		dest->shmFlag |= 4;
+		data += size;
+		Size -= size;
+		
+		/* value indexes */
+		size = dest->n;
+		if(dest->v_index < UINT_MAX) {
+			size *= sizeof(unsigned);
+			getValueIndexPtr = &getValueIndex;
+		} else {
+			size *= sizeof(long unsigned);
+			getValueIndexPtr = &getValueIndexL;
+		}
+		dest->value_index = (unsigned *) data;
+		dest->value_index_l = (long unsigned *) data;
+		dest->shmFlag |= 8;
+		data += size;
+		Size -= size;
+		
+		/* make indexing a masking problem */
+		--dest->size;
 	}
 	
-	/* kmers */
-	size = dest->n + 1;
-	if(dest->kmersize <= 16) {
-		size *= sizeof(unsigned);
-		getKeyPtr = &getKey;
+	if(Size) {
+		uptr = (unsigned *) data;
+		dest->kmersize = *uptr++;
+		dest->flag = *uptr++;
 	} else {
-		size *= sizeof(long unsigned);
-		getKeyPtr = &getKeyL;
+		dest->kmersize = dest->mlen;
+		/* mark as invalid for later unmapping */
+		++dest->mlen;
+		dest->flag = 0;
 	}
-	
-	dest->key_index = (unsigned *) data;
-	dest->key_index_l = (long unsigned *) data;
-	dest->shmFlag |= 4;
-	data += size;
-	
-	/* value indexes */
-	size = dest->n;
-	if(dest->v_index < UINT_MAX) {
-		size *= sizeof(unsigned);
-		getValueIndexPtr = &getValueIndex;
-	} else {
-		size *= sizeof(long unsigned);
-		getValueIndexPtr = &getValueIndexL;
-	}
-	dest->value_index = (unsigned *) data;
-	dest->value_index_l = (long unsigned *) data;
-	dest->shmFlag |= 8;
-	
-	/* make indexing a masking problem */
-	--dest->size;
 	
 	return 0;
 }
@@ -174,11 +190,17 @@ void hashMapKMA_munmap(HashMapKMA *dest) {
 		unit = (dest->DB_size < USHRT_MAX) ? sizeof(short unsigned) : sizeof(unsigned);
 		size += dest->v_index * unit;
 		if((dest->size - 1) != dest->mask) {
-			unit = (dest->kmersize <= 16) ? sizeof(unsigned) : sizeof(long unsigned);
+			unit = (dest->mlen <= 16) ? sizeof(unsigned) : sizeof(long unsigned);
 			size += (dest->n + 1) * unit;
 			unit = (dest->v_index < UINT_MAX) ? sizeof(unsigned) : sizeof(long unsigned);
 			size += dest->n * unit;
 		}
+		if(dest->mlen <= dest->kmersize) {
+			size += 2 * sizeof(unsigned);
+		}
+		
+		fprintf(stderr, "%lu\n", size);
+		
 		if(data && dest->shmFlag & 1 && munmap(data, size) < 0) {
 			ERROR();
 		}

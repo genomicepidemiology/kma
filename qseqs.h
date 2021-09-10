@@ -21,7 +21,7 @@
 typedef struct qseqs Qseqs;
 struct qseqs {
 	unsigned size;
-	unsigned len;
+	int len;
 	unsigned char *seq;
 };
 #define QSEQS 1

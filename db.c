@@ -46,7 +46,7 @@ void dbInfo(char *filename) {
 	filename_len = strlen(filename);
 	strcpy(filename + filename_len, ".seq.b");
 	dbfile = sfopen(filename, "rb");
-	fseek(dbfile, 0, SEEK_END);
+	sfseek(dbfile, 0, SEEK_END);
 	ntcount = 4 * ftell(dbfile);
 	fclose(dbfile);
 	filename[filename_len] = 0;
@@ -64,8 +64,10 @@ void dbInfo(char *filename) {
 	filename[filename_len] = 0;
 	
 	/* get basic statistics */
-	fprintf(stdout, "# templates:\t%d\n", templates->DB_size);
+	fprintf(stdout, "# templates:\t%d\n", templates->DB_size - 1);
 	fprintf(stdout, "k:\t%d\n", templates->kmersize);
+	fprintf(stdout, "m:\t%d\n", templates->mlen);
+	fprintf(stdout, "hc:\t%d\n", templates->flag & 1);
 	/* get prefix */
 	if(templates->prefix_len) {
 		prefix = templates->prefix;
@@ -80,7 +82,7 @@ void dbInfo(char *filename) {
 		fprintf(stderr, "prefix:\t-\n");
 	}
 	fprintf(stdout, "# uniq k-mers:\t%lu\n", templates->n);
-	fprintf(stdout, "k-mer fraqtion covered:\t%f\n", templates->n / power(4, templates->kmersize));
+	fprintf(stdout, "k-mer fraction covered:\t%f\n", templates->n / power(4, templates->kmersize));
 	fprintf(stdout, "inferred tax size:\t%lu\n", templates->v_index);
 	
 	/* get number of unique inferred tax */

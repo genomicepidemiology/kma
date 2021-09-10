@@ -41,7 +41,7 @@
 #include "vcf.h"
 #include "xml.h"
 
-void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
+void printFsaMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out) {
 	
 	static int buff[8] = {0, 0, 1, 0, 0, 0, 0, 0};
 	
@@ -56,7 +56,7 @@ void printFsaMt1(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	}
 }
 
-void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out) {
+void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, Qseqs *qseq_r, Qseqs *qual_r, CompDNA *compressor, FILE *out) {
 	
 	static int buff[8] = {0, 0, 1, 0, 0, 0, 0, 0};
 	
@@ -186,9 +186,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	/* load lengths */
 	template_lengths = smalloc(DB_size * sizeof(int));
 	sfread(template_lengths, sizeof(int), DB_size, DB_file);
-	/*fseek(DB_file, (2 * DB_size) * sizeof(int), SEEK_CUR);
+	/*sfseek(DB_file, (2 * DB_size) * sizeof(int), SEEK_CUR);
 	if(fread(template_lengths, sizeof(int), DB_size, DB_file) == 0) {
-		fseek(DB_file, sizeof(int), SEEK_SET);
+		sfseek(DB_file, sizeof(int), SEEK_SET);
 		sfread(template_lengths, sizeof(int), DB_size, DB_file);
 	}*/
 	templatefilename[file_len] = 0;

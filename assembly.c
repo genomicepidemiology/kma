@@ -628,11 +628,11 @@ void * assemble_KMA_threaded(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -1091,11 +1091,11 @@ void * assemble_KMA_dense_threaded(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -1299,10 +1299,10 @@ void * skip_assemble_KMA(void *arg) {
 				++file_i;
 			} else if(nextTemplate < template) {
 				/* Move pointer forward */
-				fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+				sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 			} else {
 				/* Move pointer back */
-				fseek(file, (-8) * sizeof(int), SEEK_CUR);
+				sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 				++file_i;
 			}
 		} else {
@@ -1686,8 +1686,8 @@ void * assemble_KMA(void *arg) {
 	delta = qseq->size;
 	mq = thread->mq;
 	minlen = thread->minlen;
-	mrc = thread->mrc;
 	scoreT = thread->scoreT;
+	mrc = thread->mrc;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
 	sam = thread->sam;
@@ -1699,7 +1699,6 @@ void * assemble_KMA(void *arg) {
 	
 	if(template != -2) {
 		wait_atomic(thread_begin);
-		
 		
 		/* all assemblies done, 
 		signal threads to return */
@@ -1967,11 +1966,11 @@ void * assemble_KMA(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}

@@ -24,6 +24,7 @@
 #include "index.h"
 #include "shm.h"
 #include "seq2fasta.h"
+#include "trim.h"
 #include "update.h"
 
 static int helpmessage(FILE *out) {
@@ -37,6 +38,7 @@ static int helpmessage(FILE *out) {
 	fprintf(out, "# %16s\t%-32s\n", "dist", "Calculate distance measures between templates");
 	fprintf(out, "# %16s\t%-32s\n", "db", "Make statistics on KMA db");
 	fprintf(out, "# %16s\t%-32s\n", "update", "Update database to current version");
+	fprintf(out, "# %16s\t%-32s\n", "trim", "trim sequences");
 	fprintf(out, "# %16s\t%-32s\n", "-c", "Citation");
 	fprintf(out, "# %16s\t%-32s\n", "-v", "Version");
 	fprintf(out, "# %16s\t%-32s\n", "-h", "Help on alignment and mapping");
@@ -62,6 +64,8 @@ int main(int argc, char *argv[]) {
 			status = update_main(argc, argv);
 		} else if(strcmp(*argv, "db") == 0) {
 			status = db_main(argc, argv);
+		} else if(strcmp(*argv, "trim") == 0) {
+			status = trim_main(argc, argv);
 		} else {
 			fprintf(stderr, "Invalid option:\t%s\n", *argv);
 			status = helpmessage(stderr);

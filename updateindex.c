@@ -32,7 +32,9 @@ void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, unsigned **, unsigned **, u
 
 int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header) {
 	
-	int i, j, end, shifter;
+	int i, j, end, shifter, mPos, hLen, seqend;
+	unsigned kmersize, mlen, flag, cPos, iPos;
+	long unsigned mask, mmask, kmer, cmer, hmer, *seq;
 	
 	if(qseq->seqlen < templates->kmersize) {
 		return 0;
@@ -41,16 +43,31 @@ int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen,
 	/* set parameters */
 	qseq->N[0]++;
 	qseq->N[qseq->N[0]] = qseq->seqlen;
-	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
+	seq = qseq->seq;
+	kmersize = templates->kmersize;
+	shifter = 64 - (kmersize << 1);
+	mask = 0xFFFFFFFFFFFFFFFF >> shifter;
+	mlen = templates->mlen;
+	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
+	flag = templates->flag;
+	seqend = qseq->seqlen - kmersize + 1;
+	hLen = kmersize;
 	
 	/* iterate sequence */
-	for(i = 1, j = 0; i <= qseq->N[0]; ++i) {
-		end = qseq->N[i] - templates->kmersize + 1;
-		for(;j < end; ++j) {
+	for(i = 1, j = 0; i <= qseq->N[0] && j < seqend; ++i) {
+		/* init k-mer */
+		getKmer_macro(kmer, seq, j, cPos, iPos, (shifter + 2));
+		cmer = flag ? initCmer(kmer, &mPos, &hmer, &hLen, shifter + 2, kmersize, mlen, mmask) : kmer;
+		end = qseq->N[i];
+		for(j += kmersize - 1; j < end; ++j) {
+			/* update k-mer */
+			kmer = updateKmer_macro(kmer, seq, j, mask);
+			cmer = flag ? updateCmer(cmer, &mPos, &hmer, &hLen, kmer, kmersize, mlen, mmask) : kmer;
+			
 			/* update hashMap */
-			hashMap_add(templates, getKmer(qseq->seq, j, shifter), template);
+			hashMap_add(templates, cmer, template);
 		}
-		j = qseq->N[i] + 1;
+		j = end + 1;
 	}
 	qseq->N[0]--;
 	
@@ -59,23 +76,33 @@ int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen,
 
 int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header) {
 	
-	int i, j, end, rc, prefix_len, prefix_shifter, shifter;
-	long unsigned prefix;
+	int i, j, end, rc, prefix_len, prefix_shifter, mPos, hLen, seqend;
+	unsigned kmersize, shifter, mlen, flag, cPos, iPos;
+	long unsigned pmask, mask, mmask, prefix, pmer, kmer, cmer, hmer, *seq;
 	
 	if(qseq->seqlen < templates->kmersize) {
 		return 0;
 	}
+	seq = qseq->seq;
 	prefix = templates->prefix;
 	prefix_len = templates->prefix_len;
-	prefix_shifter = sizeof(long unsigned) * sizeof(long unsigned) - (prefix_len << 1);
-	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
+	prefix_shifter = 64 - (prefix_len << 1);
+	pmask = 0xFFFFFFFFFFFFFFFF >> prefix_shifter;
+	kmersize = templates->kmersize;
+	shifter = 64 - (kmersize << 1);
+	mask = 0xFFFFFFFFFFFFFFFF >> shifter;
+	mlen = templates->mlen;
+	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
+	flag = templates->flag;
+	seqend = qseq->seqlen - kmersize - prefix_len + 1;
+	hLen = kmersize;
 	
 	/* test homology and length */
 	if(QualCheck(templates, qseq, MinKlen, homQ, homT, template_ulengths, header)) {
 		template_slengths[template] = 0;
 		template_ulengths[template] = 0;
 		for(rc = 0; rc < 2; ++rc) {
-			/* reverse complement */
+			/* revers complement */
 			if(rc) {
 				comp_rc(qseq);
 			}
@@ -85,12 +112,18 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 			qseq->N[qseq->N[0]] = qseq->seqlen;
 			j = 0;
 			if(prefix_len) {
-				for(i = 1; i <= qseq->N[0]; ++i) {
-					end = qseq->N[i] - prefix_len - templates->kmersize + 1;
-					for(;j < end; ++j) {
-						if(getKmer(qseq->seq, j, prefix_shifter) == prefix) {
+				for(i = 1; i <= qseq->N[0] && j < seqend; ++i) {
+					getKmer_macro(pmer, seq, j, cPos, iPos, (prefix_shifter + 2));
+					end = qseq->N[i] - kmersize;
+					for(j += prefix_len - 1; j < end; ++j) {
+						pmer = updateKmer_macro(pmer, seq, j, pmask);
+						if(pmer == prefix) {
+							/* get kmer */
+							getKmer_macro(kmer, seq, (j + 1), cPos, iPos, shifter);
+							cmer = flag ? getCmer(kmer, &mPos, &hLen, shifter, mlen, mmask) : kmer;
+							
 							/* add kmer */
-							if(hashMap_add(templates, getKmer(qseq->seq, j + prefix_len, shifter), template)) {
+							if(hashMap_add(templates, cmer, template)) {
 								template_ulengths[template]++;
 							}
 							template_slengths[template]++;
@@ -100,16 +133,22 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 				}
 				qseq->N[0]--;
 			} else {
-				for(i = 1; i <= qseq->N[0]; ++i) {
-					end = qseq->N[i] - templates->kmersize + 1;
-					for(;j < end; ++j) {
+				for(i = 1; i <= qseq->N[0] && j < seqend; ++i) {
+					getKmer_macro(kmer, seq, j, cPos, iPos, (shifter + 2));
+					cmer = flag ? initCmer(kmer, &mPos, &hmer, &hLen, shifter + 2, kmersize, mlen, mmask) : kmer;
+					end = qseq->N[i];
+					for(j += kmersize - 1;j < end; ++j) {
+						/* update kmer */
+						kmer = updateKmer_macro(kmer, seq, j, mask);
+						cmer = flag ? updateCmer(cmer, &mPos, &hmer, &hLen, kmer, kmersize, mlen, mmask) : kmer;
+						
 						/* add kmer */
-						if(hashMap_add(templates, getKmer(qseq->seq, j, shifter), template)) {
+						if(hashMap_add(templates, cmer, template)) {
 							template_ulengths[template]++;
 						}
 						template_slengths[template]++;
 					}
-					j = qseq->N[i] + 1;
+					j = end + 1;
 				}
 				qseq->N[0]--;
 			}

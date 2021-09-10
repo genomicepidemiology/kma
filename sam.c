@@ -102,14 +102,14 @@ void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int D
 	while(--DB_size) {
 		fprintf(stdout, "@SQ\tSN:%s\tLN:%d\n", nameLoad(template_name, name_file), *++template_lengths);
 	}
-	fseek(name_file, 0, SEEK_SET);
+	sfseek(name_file, 0, SEEK_SET);
 }
 
 int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rname, const Aln *aligned, const int *stats) {
 	
 	static volatile int Lock = 0;
-	static Qseqs *Cigar = 0;
 	volatile int *lock = &Lock;
+	static Qseqs *Cigar = 0;
 	int flag, pos, mapQ, pnext, tlen, size, et, score, tab;
 	char *qname, *cigar, *rnext, *qual;
 	unsigned char *seq;
@@ -143,6 +143,7 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	2048	supplementary alignment
 	*/
 	
+	
 	qname = (char *) header->seq;
 	seq = qseq->seq;
 	if(Qual) {
@@ -150,7 +151,6 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	} else {
 		qual = "*";
 	}
-	
 	if(aligned) {
 		mapQ = 254 < aligned->mapQ ? 254 : aligned->mapQ;
 		et = *stats;
@@ -173,6 +173,7 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	}
 	rnext = "*";
 	pnext = 0;
+	
 	tab = 0;
 	if(qname) {
 		while(*qname) {
@@ -195,7 +196,7 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 		cigar = makeCigar(Cigar, aligned);
 		if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
 			cigar = (char *) Cigar->seq;
-			sprintf(cigar, "%dS", *((int*) (header->seq + (header->len - 2 * sizeof(int)))));
+			Cigar->len += sprintf(cigar, "%dS", *((int*) (header->seq + (header->len - 2 * sizeof(int)))));
 		}
 	}
 	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);

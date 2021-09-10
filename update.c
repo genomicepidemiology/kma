@@ -41,18 +41,18 @@ unsigned convertLength_014to015(char *filename) {
 	lengths = smalloc(3 * size * sizeof(unsigned));
 	
 	file_len = fread(lengths, sizeof(unsigned), 3 * size, file);
-	fseek(file, sizeof(unsigned), SEEK_SET);
+	sfseek(file, sizeof(unsigned), SEEK_SET);
 	if(file_len == size) {
 		file_len = 0;
 	} else if(file_len == 2 * size) {
 		fprintf(stderr, "DB is old.\n");
 		fprintf(stderr, "It will only work for \"-Sparse\" mapping!!!\n");
-		fwrite(lengths, sizeof(unsigned), size, file);
-		fwrite(lengths, sizeof(unsigned), 2 * size, file);
+		sfwrite(lengths, sizeof(unsigned), size, file);
+		sfwrite(lengths, sizeof(unsigned), 2 * size, file);
 		file_len = 0;
 	} else if(file_len == 3 * size) {
-		fwrite(lengths + 2 * size, sizeof(unsigned), size, file);
-		fwrite(lengths, sizeof(unsigned), 2 * size, file);
+		sfwrite(lengths + 2 * size, sizeof(unsigned), size, file);
+		sfwrite(lengths, sizeof(unsigned), 2 * size, file);
 		file_len = 1;
 	} else {
 		fprintf(stderr, "DB is malformed.\n");

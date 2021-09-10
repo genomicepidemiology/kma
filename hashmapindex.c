@@ -23,6 +23,7 @@
 #include "hashmapindex.h"
 #include "pherror.h"
 #include "stdnuc.h"
+#include "stdstat.h"
 #ifndef _WIN32
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -33,7 +34,6 @@ typedef int key_t;
 #define shmget(key, size, permission) ((size != 0) ? (-1) : (-key))
 #define shmat(shmid, NULL_Ptr, integer) (NULL)
 #endif
-#define murmur(index, kmer) index = (3323198485ul ^ kmer) * 0x5bd1e995; index ^= index >> 15;
 
 void (*destroyPtr)(HashMap_index *) = &alignClean;
 HashMap_index * (*alignLoadPtr)(HashMap_index *, int, int, int, int, long unsigned, long unsigned) = &alignLoad_fly;

@@ -67,7 +67,7 @@ Matrix * ltdMatrix_init(unsigned size) {
 	dest->mat = smalloc(size * sizeof(int *));
 	Size = size;
 	Size *= (size - 1);
-	Size *= (sizeof(int) / 2);
+	Size *= (sizeof(double) / 2);
 	*(dest->mat) = calloc(Size, 1);
 	if(!*(dest->mat)) {
 		ERROR();
@@ -105,7 +105,7 @@ Matrix * ltdMatrix_minit(long unsigned size) {
 		ERROR();
 	}
 	fflush(tmp);
-	fseek(tmp, 0, SEEK_SET);
+	sfseek(tmp, 0, SEEK_SET);
 	*(dest->mat) = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(tmp), 0);
 	if(*(dest->mat) == MAP_FAILED) {
 			ERROR();

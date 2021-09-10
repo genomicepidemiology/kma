@@ -23,6 +23,7 @@
 #include "hashmapcci.h"
 #include "pherror.h"
 #include "stdnuc.h"
+#include "stdstat.h"
 #include "threader.h"
 #ifndef _WIN32
 #include <sys/ipc.h>
@@ -93,8 +94,9 @@ void hashMapCCI_destroy(HashMapCCI *dest) {
 
 int hashMapCCI_get(const HashMapCCI *dest, long unsigned key, unsigned shifter) {
 	
-	long unsigned index;
+	unsigned cPos, iPos;
 	int pos, *chain;
+	long unsigned index, kmer;
 	
 	/* get hash */
 	murmur(index, key);
@@ -104,14 +106,17 @@ int hashMapCCI_get(const HashMapCCI *dest, long unsigned key, unsigned shifter) 
 	if((pos = dest->index[index]) == 0) {
 		return 0;
 	} else if(0 < pos) {
-		return (getKmer(dest->seq, pos - 1, shifter) == key) ? pos : 0;
+		getKmer_macro(kmer, dest->seq, (pos - 1), cPos, iPos, shifter);
+		return (kmer == key) ? pos : 0;
 	}
 	
 	/* check chain */
 	chain = dest->chain - pos - 1;
 	while((pos = *++chain)) {
-		if(getKmer(dest->seq, abs(pos) - 1, shifter) == key) {
-			return pos;
+		pos = abs(pos) - 1;
+		getKmer_macro(kmer, dest->seq, pos, cPos, iPos, shifter);
+		if(kmer == key) {
+			return *chain;
 		}
 	}
 	
@@ -196,8 +201,9 @@ int * hashMapCCI_getNextDubPos(const HashMapCCI *dest, int *chain, long unsigned
 int defragChain(HashMapCCI *dest, int size, int shifter) {
 	
 	/* defragmentize the chains to make space for new chain, return 0 on failure */
-	int newsize, cci_size, pos, newpos, index, fulldefrag;
+	int newsize, cci_size, pos, apos, newpos, index, fulldefrag;
 	int *newchain, *chain, *next;
+	unsigned cPos, iPos;
 	long unsigned ipos, kmer;
 	
 	/* check if chain is available */
@@ -244,7 +250,8 @@ int defragChain(HashMapCCI *dest, int size, int shifter) {
 			chain = next++;
 		}
 		if(index < cci_size && newsize < size) {
-			kmer = getKmer(dest->seq, abs(*next) - 1, shifter);
+			apos = abs(*next) - 1;
+			getKmer_macro(kmer, dest->seq, apos, cPos, iPos, shifter);
 			murmur(ipos, kmer);
 			ipos &= dest->mask;
 			dest->index[ipos] = -newpos;
@@ -275,8 +282,8 @@ int defragChain(HashMapCCI *dest, int size, int shifter) {
 int newChain(HashMapCCI *dest, int pos, int newpos, long unsigned kmer, int shifter) {
 	
 	/* add new chain to hashmap */
-	int *chain;
-	unsigned index;
+	int cPos, iPos, *chain;
+	long unsigned index, key;
 	
 	if(4 <= dest->cci_avail) {
 		index = dest->cci_next;
@@ -293,7 +300,8 @@ int newChain(HashMapCCI *dest, int pos, int newpos, long unsigned kmer, int shif
 	chain = dest->chain + index;
 	
 	/* check duplication */
-	if(getKmer(dest->seq, pos - 1, shifter) == kmer) {
+	getKmer_macro(key, dest->seq, (pos - 1), cPos, iPos, shifter);
+	if(key == kmer) {
 		*chain = -pos;
 		*++chain = -newpos;
 	} else {
@@ -306,14 +314,17 @@ int newChain(HashMapCCI *dest, int pos, int newpos, long unsigned kmer, int shif
 
 int extendChain(HashMapCCI *dest, int chainpos, int newpos, long unsigned kmer, int shifter) {
 	
-	int pos, dup, size, *chain, *newchain;
-	long unsigned index;
+	int pos, apos, dup, size, *chain, *newchain;
+	unsigned cPos, iPos;
+	long unsigned index, key;
 	
 	pos = chainpos;
 	chain = dest->chain + pos;
 	dup = 1;
 	while(*chain && dup) {
-		if(getKmer(dest->seq, abs(*chain) - 1, shifter) == kmer) {
+		apos = abs(*chain) - 1;
+		getKmer_macro(key, dest->seq, apos, cPos, iPos, shifter);
+		if(key == kmer) {
 			dup = 0;
 			if(0 < *chain) {
 				*chain = -*chain;
@@ -380,7 +391,8 @@ int extendChain(HashMapCCI *dest, int chainpos, int newpos, long unsigned kmer, 
 		while(*newchain != *chain) {
 			if((dup = *newchain) == 0) {
 				/* add new chain index */
-				kmer = getKmer(dest->seq, abs(newpos) - 1, shifter);
+				apos = abs(newpos) - 1;
+				getKmer_macro(kmer, dest->seq, apos, cPos, iPos, shifter);
 				murmur(index, kmer);
 				index &= dest->mask;
 				--(dest->index[index]);
@@ -457,8 +469,9 @@ void hashMapCCI_add_thread(HashMapCCI *dest, long unsigned key, int newpos, unsi
 
 HashMapCCI * hashMapCCI_load(HashMapCCI *src, int seq, int len, int kmersize) {
 	
-	int i, end, shifter;
+	int i, end, shifter, cPos, iPos;
 	long size;
+	long unsigned kmer;
 	
 	/* init */
 	if(src == 0) {
@@ -484,7 +497,8 @@ HashMapCCI * hashMapCCI_load(HashMapCCI *src, int seq, int len, int kmersize) {
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (src->kmerindex << 1);
 	end = len - kmersize + 1;
 	for(i = 0; i < end; ++i) {
-		hashMapCCI_add(src, getKmer(src->seq, i, shifter), i + 1, shifter);
+		getKmer_macro(kmer, src->seq, i, cPos, iPos, shifter);
+		hashMapCCI_add(src, kmer, i + 1, shifter);
 	}
 	
 	return src;
@@ -495,8 +509,9 @@ HashMapCCI * hashMapCCI_load_thread(HashMapCCI *src, int seq, int len, int kmers
 	static volatile int Lock = 0, next = 1, thread_wait = 0;
 	static long unsigned size;
 	volatile int *lock = &Lock;
-	int i, end, shifter, chunk;
+	int i, end, shifter, chunk, cPos, iPos;
 	long check;
+	long unsigned kmer;
 	
 	/* init */
 	lock(lock);
@@ -583,7 +598,8 @@ HashMapCCI * hashMapCCI_load_thread(HashMapCCI *src, int seq, int len, int kmers
 		end = len - kmersize + 1;
 		i = -1;
 		while(++i < end) {
-			hashMapCCI_add(src, getKmer(src->seq, i, shifter), i + 1, shifter);
+			getKmer_macro(kmer, src->seq, i, cPos, iPos, shifter);
+			hashMapCCI_add(src, kmer, i + 1, shifter);
 		}
 	}
 	unlock(lock);

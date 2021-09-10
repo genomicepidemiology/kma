@@ -21,24 +21,27 @@
 #include "hashmap.h"
 #include "hashtable.h"
 #include "pherror.h"
+#include "stdstat.h"
 
 int (*hashMap_add)(HashMap *, long unsigned, unsigned);
 unsigned * (*hashMapGet)(HashMap *, long unsigned);
 void (*addUniqueValues)(HashMap *, long unsigned, unsigned *);
 unsigned * (*updateValuePtr)(unsigned *, unsigned);
 
-HashMap * hashMap_initialize(long unsigned size, unsigned kmersize) {
+HashMap * hashMap_initialize(const long unsigned size, const unsigned kmersize, const unsigned mlen, const unsigned flag) {
 	
 	HashMap *src;
 	
 	src = smalloc(sizeof(HashMap));
 	src->size = size;
 	src->n = 0;
-	src->mask = 0;
-	src->mask = (~src->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	src->mask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
 	src->kmersize = kmersize;
 	src->prefix_len = 0;
 	src->prefix = 0;
+	src->mlen = mlen;
+	src->flag = flag;
+	
 	src->DB_size = 1;
 	
 	if((size - 1) == src->mask) {
@@ -65,6 +68,7 @@ int megaMap_addKMA(HashMap *templates, long unsigned key, unsigned value) {
 	
 	unsigned *values;
 	
+	key &= templates->mask;
 	values = templates->values[key];
 	if(values == 0) {
 		templates->values[key] = updateValuePtr(0, value);
@@ -79,7 +83,7 @@ int megaMap_addKMA(HashMap *templates, long unsigned key, unsigned value) {
 }
 
 unsigned * megaMap_getValue(HashMap *templates, long unsigned key) {
-	return templates->values[key];
+	return templates->values[key & templates->mask];
 }
 
 void hashMap2megaMap(HashMap *templates, HashTable *table) {
@@ -87,6 +91,7 @@ void hashMap2megaMap(HashMap *templates, HashTable *table) {
 	HashTable *node, *next;
 	
 	templates->table = 0;
+	templates->size = templates->mask + 1;
 	templates->values = calloc(templates->size, sizeof(unsigned *));
 	if(!templates->values) {
 		ERROR();
@@ -98,7 +103,7 @@ void hashMap2megaMap(HashMap *templates, HashTable *table) {
 		next = node->next;
 		
 		/* move values */
-		templates->values[node->key] = node->value;
+		templates->values[node->key & templates->mask] = node->value;
 		
 		/* clean */
 		free(node);
@@ -158,11 +163,17 @@ unsigned * updateShortValue(unsigned *valuesOrg, unsigned value) {
 
 int hashMap_addKMA(HashMap *templates, long unsigned key, unsigned value) {
 	
-	unsigned *values;
-	long unsigned index;
+	unsigned *values, flag;
+	long unsigned index, mask;
 	HashTable *node, *next, *table;
 	
-	index = key & templates->size;
+	if(templates->flag) {
+		murmur(index, key);
+		index &= templates->size;
+	} else {
+		index = key & templates->size;
+	}
+	
 	/* check if key exists */
 	for(node = templates->table[index]; node != 0; node = node->next) {
 		if(key == node->key) {
@@ -192,7 +203,7 @@ int hashMap_addKMA(HashMap *templates, long unsigned key, unsigned value) {
 		
 		/* check for megamap */
 		templates->size <<= 1;
-		if((templates->size - 1) == templates->mask) {
+		if((templates->mask + 1) <= (templates->size << 1)) {
 			hashMap2megaMap(templates, table);
 			return megaMap_addKMA(templates, key, value);
 		}
@@ -202,16 +213,28 @@ int hashMap_addKMA(HashMap *templates, long unsigned key, unsigned value) {
 		if(!templates->table) {
 			ERROR();
 		}
-		--templates->size;
+		mask = --templates->size;
 		
+		flag = templates->flag;
 		for(node = table; node != 0; node = next) {
 			next = node->next;
-			index = node->key & templates->size;
+			if(flag) {
+				murmur(index, node->key);
+				index &= mask;
+			} else {
+				index = node->key & mask;
+			}
 			node->next = templates->table[index];
 			templates->table[index] = node;
 		}
 		
-		index = key & templates->size;
+		
+		if(flag) {
+			murmur(index, key);
+			index &= mask;
+		} else {
+			index = key & mask;
+		}
 	}
 	
 	/* add new value */
@@ -234,9 +257,17 @@ int hashMap_addKMA(HashMap *templates, long unsigned key, unsigned value) {
 
 unsigned * hashMapGetValue(HashMap *templates, long unsigned key) {
 	
+	long unsigned index;
 	HashTable *node;
 	
-	for(node = templates->table[key & templates->size]; node != 0; node = node->next) {
+	if(templates->flag) {
+		murmur(index, key);
+		index &= templates->size;
+	} else {
+		index = key & templates->size;
+	}
+	
+	for(node = templates->table[index]; node != 0; node = node->next) {
 		if(key == node->key) {
 			return node->value;
 		}
@@ -253,7 +284,12 @@ void hashMap_addUniqueValues(HashMap *dest, long unsigned key, unsigned *values)
 	node = smalloc(sizeof(HashTable));
 	node->key = key;
 	node->value = values;
-	index = key & dest->size;
+	if(dest->flag) {
+		murmur(index, key);
+		index &= dest->size;
+	} else {
+		index = key & dest->size;
+	}
 	node->next = dest->table[index];
 	dest->table[index] = node;
 	dest->n++;
@@ -261,7 +297,7 @@ void hashMap_addUniqueValues(HashMap *dest, long unsigned key, unsigned *values)
 
 void megaMap_addUniqueValues(HashMap *dest, long unsigned key, unsigned *values) {
 	
-	dest->values[key] = values;
+	dest->values[key & dest->mask] = values;
 	dest->n++;
 }
 

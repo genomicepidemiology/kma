@@ -687,9 +687,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			if(read_score && kmersize <= qseq_r->len) {
 				unCompDNA(qseq_r_comp, qseq_r->seq);
-				update_Scores_pe(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, flag, flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				update_Scores_pe_MEM(qseq->seq, qseq->len, qseq_r->seq, qseq_r->len, bestHits, best_read_score + read_score, best_start_pos, best_end_pos, bestTemplates, header, header_r, flag, flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			} else {
-				update_Scores(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				update_Scores_MEM(qseq->seq, qseq->len, bestHits, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			}
 			
 			/* dump seq to all */
@@ -1029,7 +1029,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			header->len = stats[3];
 			
 			/* best templates, skip rest */
-			fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
+			sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 			
 			/* Several mapped templates, choose best */
@@ -1084,7 +1084,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			if(stats[2] < 0) {
 				sfread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -1125,7 +1125,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			
 			if(bestHits != 1) {
 				/* best templates, skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
 				sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
 				bestTemplate = 0;
 				i = bestHits;
@@ -1146,12 +1146,12 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				}
 			} else {
 				/* skip rest */
-				fseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
 			}
 			
 			if(stats[2] < 0) {
 				sfread(stats, sizeof(int), 2, frag_in_raw);
-				fseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
 		}
 		rewind(frag_in_raw);
@@ -1384,7 +1384,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		templatefilename = 0;
 		initialiseVcf(vcf_out, templatefilename);
 	}
-	seq_in_no = 0;
 	
 	/* preallocate assembly matrices */
 	matrix = smalloc(sizeof(AssemInfo));
@@ -1527,9 +1526,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	thread->header = header;
 	thread->points = points;
 	thread->points->len = 0;
+	thread->template_index = template_index;
 	thread->next = 0;
 	thread->spin = (sparse < 0) ? 10 : 100;
-	thread->template_index = template_index;
 	
 	/* Do local assemblies of fragments mapping to the same template */
 	depth = 0;
@@ -1710,8 +1709,8 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			}
 		} else {
 			nameSkip(name_file, end);
-			seq_seeker += ((template_lengths[template] >> 5) + 1);
-		}
+			seq_seeker += ((template_lengths[template] >> 5) + 1);	
+		}		
 	}
 	
 	if(progress) {

@@ -1,7 +1,7 @@
-/* Philip T.L.C. Clausen Jan 2017 plan@dtu.dk */
+/* Philip T.L.C. Clausen Sep 2021 plan@dtu.dk */
 
 /*
- * Copyright (c) 2017, Philip Clausen, Technical University of Denmark
+ * Copyright (c) 2021, Philip Clausen, Technical University of Denmark
  * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-#define _XOPEN_SOURCE 600
-#include "penalties.h"
 
-int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT, double minFrac);
+#include <stdio.h>
+#include "assembly.h"
+
+void initsv(FILE *outfile, long unsigned flag);
+void printsv(FILE *outfile, long unsigned flag, char *template_name, Assem *aligned_assem, int t_len, unsigned readCount, long unsigned read_score, double expected, double q_value, double p_value, long unsigned ConClave_Score);

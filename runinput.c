@@ -26,8 +26,8 @@
 #include "seqparse.h"
 #include "stdstat.h"
 
-void (*printFsa_ptr)(Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
-void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
+void (*printFsa_ptr)(Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
+void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
 long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, FILE *out) {
 	
@@ -86,12 +86,16 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 					}
 					*/
 					qseq->len = end - start;
+					qual->len = end - start;
+					
 					/* print */
 					if(qseq->len > minlen && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
 						/* dump seq */
 						qseq->seq += start;
-						printFsa_ptr(header, qseq, compressor, out);
+						qual->seq += start;
+						printFsa_ptr(header, qseq, qual, compressor, out);
 						qseq->seq -= start;
+						qual->seq -= start;
 						++count;
 					}
 				}
@@ -114,7 +118,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 					if(qseq->len > minlen) {
 						/* dump seq */
 						qseq->seq += start;
-						printFsa_ptr(header, qseq, compressor, out);
+						printFsa_ptr(header, qseq, 0, compressor, out);
 						qseq->seq -= start;
 						++count;
 					}
@@ -216,6 +220,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				}
 				*/
 				qseq->len = end - start;
+				qual->len = end - start;
 				eq1 = eQual(seq + start, qseq->len, minQ, prob - phredScale);
 				
 				/* trim reverse */
@@ -237,27 +242,28 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				}
 				*/
 				qseq2->len = end - start2;
+				qual2->len = end - start2;
 				eq2 = eQual(seq + start2, qseq2->len, minQ, prob - phredScale);
 				
 				/* print */
+				qseq->seq += start;
+				qual->seq += start;
+				qseq2->seq += start2;
+				qual2->seq += start2;
+				++count;
 				if(qseq->len > minlen && qseq2->len > minlen && minQ <= eq1 && minQ <= eq2) {
-					qseq->seq += start;
-					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
-					qseq->seq -= start;
-					qseq2->seq -= start2;
-					++count;
+					printFsa_pair_ptr(header, qseq, qual, header2, qseq2, qual2, compressor, out);
 				} else if(qseq->len > minlen && minQ <= eq1) {
-					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor, out);
-					qseq->seq -= start;
-					++count;
+					printFsa_ptr(header, qseq, qual, compressor, out);
 				} else if(qseq2->len > minlen && minQ <= eq2) {
-					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor, out);
-					qseq2->seq -= start2;
-					++count;
+					printFsa_ptr(header2, qseq2, qual2, compressor, out);
+				} else {
+					--count;
 				}
+				qseq->seq -= start;
+				qual->seq -= start;
+				qseq2->seq -= start2;
+				qual2->seq -= start2;
 			}
 		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile2, header2, qseq2, trans))) {
@@ -286,24 +292,20 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				qseq2->len = end - start2;
 				
 				/* print */
+				qseq->seq += start;
+				qseq2->seq += start2;
+				++count;
 				if(qseq->len > minlen && qseq2->len > minlen) {
-					qseq->seq += start;
-					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
-					qseq->seq -= start;
-					qseq2->seq -= start2;
-					++count;
+					printFsa_pair_ptr(header, qseq, 0, header2, qseq2, 0, compressor, out);
 				} else if(qseq->len > minlen) {
-					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor, out);
-					qseq->seq -= start;
-					++count;
+					printFsa_ptr(header, qseq, 0, compressor, out);
 				} else if(qseq2->len > minlen) {
-					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor, out);
-					qseq2->seq -= start2;
-					++count;
+					printFsa_ptr(header2, qseq2, 0, compressor, out);
+				} else {
+					--count;
 				}
+				qseq->seq -= start;
+				qseq2->seq -= start2;
 			}
 		}
 		
@@ -400,6 +402,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				}
 				*/
 				qseq->len = end - start;
+				qual->len = end - start;
 				eq1 = eQual(seq + start, qseq->len, minQ, prob - phredScale);
 				
 				/* trim reverse */
@@ -421,27 +424,28 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				}
 				*/
 				qseq2->len = end - start2;
+				qual2->len = end - start2;
 				eq2 = eQual(seq + start2, qseq2->len, minQ, prob - phredScale);
 				
 				/* print */
+				qseq->seq += start;
+				qual->seq += start;
+				qseq2->seq += start2;
+				qual2->seq += start2;
+				++count;
 				if(qseq->len > minlen && qseq2->len > minlen && minQ <= eq1 && minQ <= eq2) {
-					qseq->seq += start;
-					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
-					qseq->seq -= start;
-					qseq2->seq -= start2;
-					++count;
+					printFsa_pair_ptr(header, qseq, qual, header2, qseq2, qual2, compressor, out);
 				} else if(qseq->len > minlen && minQ <= eq1) {
-					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor, out);
-					qseq->seq -= start;
-					++count;
+					printFsa_ptr(header, qseq, qual, compressor, out);
 				} else if(qseq2->len > minlen && minQ <= eq2) {
-					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor, out);
-					qseq2->seq -= start2;
-					++count;
+					printFsa_ptr(header2, qseq2, qual2, compressor, out);
+				} else {
+					--count;
 				}
+				qseq->seq -= start;
+				qual->seq -= start;
+				qseq2->seq -= start2;
+				qual2->seq -= start2;
 			}
 		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile, header2, qseq2, trans))) {
@@ -471,24 +475,20 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				qseq2->len = end - start2;
 				
 				/* print */
+				qseq->seq += start;
+				qseq2->seq += start2;
+				++count;
 				if(qseq->len > minlen && qseq2->len > minlen) {
-					qseq->seq += start;
-					qseq2->seq += start2;
-					printFsa_pair_ptr(header, qseq, header2, qseq2, compressor, out);
-					qseq->seq -= start;
-					qseq2->seq -= start2;
-					++count;
+					printFsa_pair_ptr(header, qseq, 0, header2, qseq2, 0, compressor, out);
 				} else if(qseq->len > minlen) {
-					qseq->seq += start;
-					printFsa_ptr(header, qseq, compressor, out);
-					qseq->seq -= start;
-					++count;
+					printFsa_ptr(header, qseq, 0, compressor, out);
 				} else if(qseq2->len > minlen) {
-					qseq2->seq += start2;
-					printFsa_ptr(header2, qseq2, compressor, out);
-					qseq2->seq -= start2;
-					++count;
+					printFsa_ptr(header2, qseq2, 0, compressor, out);
+				} else {
+					--count;
 				}
+				qseq->seq -= start;
+				qseq2->seq -= start2;
 			}
 		}
 		
@@ -513,7 +513,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 	return count;
 }
 
-void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
+void bootFsa(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out) {
 	
 	int i, end, buffer[4];
 	
@@ -546,7 +546,7 @@ void bootFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	resetComp(compressor);
 }
 
-void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
+void printFsa(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out) {
 	
 	int buffer[4];
 	
@@ -570,7 +570,7 @@ void printFsa(Qseqs *header, Qseqs *qseq, CompDNA *compressor, FILE *out) {
 	resetComp(compressor);
 }
 
-void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *header_r, Qseqs *qseq_r, CompDNA *compressor, FILE *out) {
+void printFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, Qseqs *qseq_r, Qseqs *qual_r, CompDNA *compressor, FILE *out) {
 	
 	int buffer[4];
 	

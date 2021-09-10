@@ -27,6 +27,7 @@
 #include "compdna.h"
 #include "hashmapkma.h"
 #include "kmapipe.h"
+#include "kmeranker.h"
 #include "kmers.h"
 #include "kmmap.h"
 #include "penalties.h"
@@ -47,9 +48,10 @@ typedef int key_t;
 #define shmctl(shmid, cmd, buf) fprintf(stderr, "sysV not available on Windows.\n")
 #endif
 
-int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT) {
+int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int thread_num, const int exhaustive, Penalties *rewards, FILE *out, int sam, int minlen, double mrs, double coverT, double minFrac) {
 	
 	int i, file_len, shmid, deCon, *bestTemplates, *template_lengths;
+	long unsigned *softProxi;
 	FILE *inputfile, *templatefile;
 	time_t t0, t1;
 	key_t key;
@@ -104,28 +106,20 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 			deConPrintPtr = printPtr;
 		}
 		if(templates->prefix_len == 0 && get_kmers_for_pair_ptr != &get_kmers_for_pair_count) {
-			/* here */
-			/*
 			if(kmerScan == &save_kmers) {
 				kmerScan = &save_kmers_pseuodeSparse;
 			} else {
 				kmerScan = &save_kmers_sparse_chain;
 			}
-			*/
-			kmerScan = &save_kmers_pseuodeSparse;
-			
+			//kmerScan = &save_kmers_pseuodeSparse;
 			get_kmers_for_pair_ptr = &get_kmers_for_pair_pseoudoSparse;
 		} else {
-			/* here */
-			/*
 			if(kmerScan == &save_kmers) {
 				kmerScan = &save_kmers_Sparse;
 			} else {
 				kmerScan = &save_kmers_sparse_chain;
 			}
-			*/
-			kmerScan = &save_kmers_Sparse;
-			
+			//kmerScan = &save_kmers_Sparse;
 			get_kmers_for_pair_ptr = &get_kmers_for_pair_Sparse;
 		}
 	}
@@ -134,12 +128,32 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	if(printPtr == &print_ankers_spltDB || printPtr == &print_ankers_Sparse_spltDB) {
 		printPtr(0, 0, thread_num, 0, 0, 0);
 	}
+	/* proxi */
+	softProxi = 0;
+	if(minFrac < 1.0) {
+		if(minFrac < 0) {
+			minFrac = -minFrac;
+			softProxi = calloc(templates->DB_size + 3, sizeof(long unsigned));
+			if(!softProxi) {
+				ERROR();
+			}
+		}
+		getMatch((int *)(&minFrac), 0);
+		getMatch((int *)(softProxi), 0);
+		getMatchSparse((int *)(&minFrac), 0, 0, 0, 0, 0);
+		getMatchSparse((int *)(softProxi), 0, 0, 0, 0, 0);
+		getSecondForce((int *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0);
+		getSecondPen((int *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0);
+		getF((int *)(&minFrac), (int *)(softProxi), 0, 0, 0);
+		ankerAndClean((int *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+		ankerAndClean_MEM((int *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+		getProxiChainTemplates(0, (const Penalties *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0);
+	}
 	template_lengths = 0;
-	if(kmerScan == &save_kmers_HMM) {
+	if(kmerScan == &save_kmers_HMM || kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
 		/* load lengths */
 		strcat(templatefilename, ".length.b");
 		templatefile = sfopen(templatefilename, "rb");
-		
 		sfread(&templates->DB_size, sizeof(int), 1, templatefile);
 		if(shm & 4) {
 			key = ftok(templatefilename, 'l');
@@ -156,9 +170,12 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		}
 		templatefilename[file_len] = 0;
 		fclose(templatefile);
-		save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, minlen, 0, 0);
-	} else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
-		kmerScan(0, 0, &(int){thread_num}, (int *)(&coverT), (int *)(&mrs), 0, 0, 0, 0, 0, minlen, 0, 0);
+		
+		if(kmerScan == &save_kmers_HMM) {
+			save_kmers_HMM(templates, 0, &(int){thread_num}, template_lengths, 0, 0, 0, 0, 0, 0, minlen, 0, 0);
+		} else {
+			kmerScan(0, 0, &(int){thread_num}, (int *)(&coverT), (int *)(&mrs), template_lengths, 0, 0, 0, 0, minlen, 0, 0);
+		}
 	}
 	
 	t1 = clock();
@@ -236,9 +253,15 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	if(printPtr == &print_ankers_spltDB || printPtr == &print_ankers_Sparse_spltDB) {
 		printPtr(bestTemplates, 0, 0, 0, 0, out);
 	} else {
-		/* print number of fragments */
-		sfwrite(&(int){bestTemplates[2]}, sizeof(int), 1, out);
+		/* print number of fragments and send terminating signal*/
+		sfwrite(&(int){-bestTemplates[2]}, sizeof(int), 1, out);
 	}
+	/* here */
+	if(softProxi) {
+		sfwrite(softProxi, sizeof(int), 6, out);
+		sfwrite(softProxi, sizeof(long unsigned), templates->DB_size, out);
+	}
+	
 	kmaPipe(0, 0, inputfile, &i);
 	if(kmaPipe == &kmaPipeFork) {
 		t1 = clock();
@@ -251,12 +274,12 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 	if(!((shm & 1) || (deCon && (shm & 2)))) {
 		hashMapKMA_destroy(templates);
 	}
-	if(kmerScan == &save_kmers_HMM && (shm & 4) == 0) {
+	if(template_lengths && !(shm & 4)) {
 		free(template_lengths);
-	} else if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
+	}
+	if(kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {
 		kmerScan(0, 0, &(int){thread_num}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	}
-	
 	for(thread = threads; thread; thread = threads) {
 		threads = thread->next;
 		free(thread->bestTemplates);

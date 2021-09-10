@@ -42,8 +42,8 @@ void insertKmerBound(Qseqs *header, int start, int end) {
 	
 	int *seq;
 	
-	if((header->len + 2 * sizeof(int)) < header->size) {
-		header->size = (header->len + 2 * sizeof(int)) << 1;
+	if(header->size < (header->len + 2 * sizeof(int) + 2)) {
+		header->size = (header->len + 2 * sizeof(int) + 1) << 1;
 		if(!(header->seq = realloc(header->seq, header->size))) {
 			ERROR();
 		}
@@ -53,5 +53,4 @@ void insertKmerBound(Qseqs *header, int start, int end) {
 	*seq = start;
 	*++seq = end;
 	header->len += (2 * sizeof(int) + 1);
-	
 }

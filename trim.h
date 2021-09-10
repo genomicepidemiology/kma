@@ -1,4 +1,4 @@
-/* Philip T.L.C. Clausen Jan 2017 plan@dtu.dk */
+/* Philip T.L.C. Clausen May 2021 plan@dtu.dk */
 
 /*
  * Copyright (c) 2017, Philip Clausen, Technical University of Denmark
@@ -16,12 +16,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-#define _XOPEN_SOURCE 600
 #include <stdio.h>
 #include "compdna.h"
-#include "penalties.h"
 #include "qseqs.h"
 
-void printFsaMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out);
-void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, Qseqs *qseq_r, Qseqs *qual_r, CompDNA *compressor, FILE *out);
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num);
+void printTrimFsa(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out);
+void printTrimFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, Qseqs *qseq_r, Qseqs *qual_r, CompDNA *compressor, FILE *out);
+int trim_main(int argc, char *argv[]);
