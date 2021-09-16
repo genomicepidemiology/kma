@@ -44,6 +44,7 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 #include "tmp.h"
+#include "tsv.h"
 #include "updatescores.h"
 #include "version.h"
 #include "vcf.h"
@@ -396,7 +397,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -416,8 +417,8 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	long double depth, q_value, expected;
 	char *templatefilename, Date[11];
 	FILE **inputfiles, *inputfile, *frag_in_raw;
-	FILE *res_out, *alignment_out, *consensus_out, *frag_out_raw, *xml_out;
-	FILE *extendedFeatures_out, *name_file, **template_fragments;
+	FILE *res_out, *tsv_out, *alignment_out, *consensus_out, *frag_out_raw;
+	FILE *extendedFeatures_out, *name_file, **template_fragments, *xml_out;
 	time_t t0, t1;
 	struct tm *tm;
 	FileBuff *frag_out, *frag_out_all, *matrix_out, *vcf_out;
@@ -510,6 +511,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	strcat(outputfilename, ".res");
 	res_out = sfopen(outputfilename, "w");
 	outputfilename[file_len] = 0;
+	if(tsv) {
+		strcat(outputfilename, ".tsv");
+		tsv_out = sfopen(outputfilename, "w");
+		outputfilename[file_len] = 0;
+	}
 	if(nf == 0) {
 		strcat(outputfilename, ".frag.gz");
 		frag_out = gzInitFileBuff(CHUNK);
@@ -853,7 +859,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	maxFrag = 1000000;
 	
 	/* Patricks features */
-	if(extendedFeatures || xml) {
+	if(extendedFeatures || xml || tsv) {
 		fragmentCounts = calloc(DB_size, sizeof(unsigned));
 		readCounts = calloc(DB_size, sizeof(unsigned));
 		if(!fragmentCounts || !readCounts) {
@@ -1380,6 +1386,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
+	if(tsv) {
+		initsv(tsv_out, tsv);
+	}
 	if(vcf) {
 		templatefilename = 0;
 		initialiseVcf(vcf_out, templatefilename);
@@ -1671,6 +1680,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
+					if(tsv) {
+						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
+					}
 					if(nc != 1) {
 						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 					}
@@ -1698,6 +1710,11 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 						depth /= t_len;
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
+						if(tsv) {
+							/* here */
+							/* test ID = 0 */
+							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
+						}
 						if(extendedFeatures) {
 							printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
@@ -1730,6 +1747,9 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	/* Close files */
 	close(seq_in_no);
 	fclose(res_out);
+	if(tsv) {
+		fclose(tsv_out);
+	}
 	if(alignment_out) {
 		fclose(alignment_out);
 		fclose(consensus_out);

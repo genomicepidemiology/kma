@@ -45,6 +45,7 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 #include "tmp.h"
+#include "tsv.h"
 #include "updatescores.h"
 #include "vcf.h"
 #include "xml.h"
@@ -136,7 +137,7 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
 	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
@@ -150,7 +151,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, q_id, cover, q_cover, p_value;
 	long double depth, expected, q_value;
-	FILE *inputfile, *frag_in_raw, *res_out, *name_file;
+	FILE *inputfile, *frag_in_raw, *res_out, *tsv_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
 	FILE *extendedFeatures_out, *xml_out;
 	time_t t0, t1;
@@ -235,6 +236,11 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		strcat(outputfilename, ".res");
 		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
+		if(tsv) {
+			strcat(outputfilename, ".tsv");
+			tsv_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		}
 		if(nf == 0) {
 			strcat(outputfilename, ".frag.gz");
 			frag_out = gzInitFileBuff(CHUNK);
@@ -471,7 +477,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		extendedFeatures_out = 0;
 	}
 	
-	if(extendedFeatures || xml) {
+	if(extendedFeatures || xml || tsv) {
 		fragmentCounts = calloc(DB_size, sizeof(unsigned));
 		readCounts = calloc(DB_size, sizeof(unsigned));
 		if(!fragmentCounts || !readCounts) {
@@ -1136,6 +1142,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
+	if(tsv) {
+		initsv(tsv_out, tsv);
+	}
 	if(vcf) {
 		initialiseVcf(vcf_out, templatefilename);
 	}
@@ -1297,6 +1306,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
+					if(tsv) {
+						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
+					}
 					if(nc != 1) {
 						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 					}
@@ -1326,6 +1338,11 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						q_cover = 100.0 * t_len / aln_len;
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
+						if(tsv) {
+							/* here */
+							/* test ID = 0 */
+							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
+						}
 						if(extendedFeatures) {
 							printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
@@ -1353,6 +1370,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	/* Close files */
 	close(seq_in_no);
 	fclose(res_out);
+	if(tsv) {
+		fclose(tsv_out);
+	}
 	if(alignment_out) {
 		fclose(alignment_out);
 		fclose(consensus_out);
@@ -1380,7 +1400,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -1398,7 +1418,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
 	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
-	FILE *inputfile, *frag_in_raw, *res_out, *name_file;
+	FILE *inputfile, *frag_in_raw, *res_out, *tsv_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
 	FILE *extendedFeatures_out, *xml_out;
 	time_t t0, t1;
@@ -1483,6 +1503,11 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		strcat(outputfilename, ".res");
 		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
+		if(tsv) {
+			strcat(outputfilename, ".tsv");
+			tsv_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		}
 		if(nf == 0) {
 			strcat(outputfilename, ".frag.gz");
 			frag_out = gzInitFileBuff(CHUNK);
@@ -1693,7 +1718,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	} else {
 		extendedFeatures_out = 0;
 	}
-	if(extendedFeatures || xml) {
+	if(extendedFeatures || xml || tsv) {
 		fragmentCounts = calloc(DB_size, sizeof(unsigned));
 		readCounts = calloc(DB_size, sizeof(unsigned));
 		if(!fragmentCounts || !readCounts) {
@@ -2253,6 +2278,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
+	if(tsv) {
+		initsv(tsv_out, tsv);
+	}
 	if(vcf) {
 		initialiseVcf(vcf_out, templatefilename);
 	}
@@ -2498,6 +2526,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
+					if(tsv) {
+						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
+					}
 					if(nc != 1) {
 						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 					}
@@ -2532,6 +2563,11 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						q_cover = 0;
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
+						if(tsv) {
+							/* here */
+							/* test ID = 0 */
+							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
+						}
 						if(extendedFeatures) {
 							printExtendedFeatures(thread->template_name, aligned_assem, fragmentCounts[template], readCounts[template], extendedFeatures_out);
 						}
@@ -2566,6 +2602,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	/* Close files */
 	close(seq_in_no);
 	fclose(res_out);
+	if(tsv) {
+		fclose(tsv_out);
+	}
 	if(alignment_out) {
 		fclose(alignment_out);
 		fclose(consensus_out);

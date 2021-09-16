@@ -38,6 +38,7 @@
 #include "runkma.h"
 #include "stdnuc.h"
 #include "stdstat.h"
+#include "tsv.h"
 #include "vcf.h"
 #include "xml.h"
 
@@ -81,15 +82,15 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, 
 	
 }
 
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
 	
 	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta, seq_in;
 	int *template_lengths;
 	long unsigned read_score, seeker;
 	double p_value, id, q_id, cover, q_cover;
 	long double depth;
-	FILE *res_out, *alignment_out, *consensus_out, *template_fragments;
-	FILE *DB_file, *xml_out;
+	FILE *res_out, *tsv_out, *xml_out, *alignment_out, *consensus_out;
+	FILE *template_fragments, *DB_file;
 	time_t t0, t1;
 	FileBuff *frag_out, *matrix_out, *vcf_out;
 	Aln *aligned, *gap_align;
@@ -121,6 +122,11 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		strcat(outputfilename, ".res");
 		res_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
+		if(tsv) {
+			strcat(outputfilename, ".tsv");
+			tsv_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		}
 		if(nf == 0) {
 			strcat(outputfilename, ".frag.gz");
 			frag_out = gzInitFileBuff(CHUNK);
@@ -245,6 +251,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	
 	/* print heading of resistance file: */
 	fprintf(res_out, "#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\tQuery_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n");
+	if(tsv) {
+		initsv(tsv_out, tsv);
+	}
 	if(vcf) {
 		initialiseVcf(vcf_out, templatefilename);
 	}
@@ -423,6 +432,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			/* Output result */
 			fprintf(res_out, "%-12s\t%8lu\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				thread->template_name, read_score, 0, t_len, id, cover, q_id, q_cover, (double) depth, (double) read_score, p_value);
+			if(tsv) {
+				printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, aligned_assem->readCountAln, read_score, 0, (double) read_score, p_value, read_score);
+			}
 			if(nc != 1) {
 				printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 			}
@@ -439,6 +451,11 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	} else if(ID_t == 0.0) {
 		fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				thread->template_name, read_score, 0, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) read_score, p_value);
+		if(tsv) {
+			/* here */
+			/* test ID = 0 */
+			printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, aligned_assem->readCountAln, read_score, 0, (double) read_score, p_value, read_score);
+		}
 	}
 	
 	if(xml) {
@@ -458,6 +475,9 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	
 	/* Close files */
 	fclose(res_out);
+	if(tsv) {
+		fclose(tsv_out);
+	}
 	if(alignment_out) {
 		fclose(alignment_out);
 		fclose(consensus_out);

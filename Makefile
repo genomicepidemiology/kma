@@ -54,14 +54,14 @@ kmmap.o: kmmap.h hashmapkma.h
 loadupdate.o: loadupdate.h pherror.h hashmap.h hashmapkma.h updateindex.h
 makeindex.o: makeindex.h compdna.h filebuff.h hashmap.h pherror.h qseqs.h seqparse.h updateindex.h
 matrix.o: matrix.h pherror.h
-mt1.o: mt1.h assembly.h chain.h filebuff.h hashmapcci.h kmapipe.h nw.h penalties.h pherror.h printconsensus.h qseqs.h runkma.h stdstat.h vcf.h
+mt1.o: mt1.h assembly.h chain.h filebuff.h hashmapcci.h kmapipe.h nw.h penalties.h pherror.h printconsensus.h qseqs.h runkma.h stdstat.h tsv.h vcf.h
 nw.o: nw.h pherror.h stdnuc.h penalties.h
 pherror.o: pherror.h
 printconsensus.o: printconsensus.h assembly.h
 qseqs.o: qseqs.h pherror.h
 qualcheck.o: qualcheck.h compdna.h hashmap.h pherror.h stdnuc.h stdstat.h
 runinput.o: runinput.h compdna.h filebuff.h pherror.h qseqs.h seqparse.h
-runkma.o: runkma.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapcci.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h stdnuc.h stdstat.h tmp.h vcf.h
+runkma.o: runkma.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapcci.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h stdnuc.h stdstat.h tmp.h tsv.h vcf.h
 sam.o: sam.h nw.h pherror.h qseqs.h runkma.h
 savekmers.o: savekmers.h ankers.h compdna.h hashmapkma.h kmeranker.h penalties.h pherror.h qseqs.h stdnuc.h stdstat.h threader.h
 seq2fasta.o: seq2fasta.h pherror.h qseqs.h runkma.h stdnuc.h
@@ -69,7 +69,7 @@ seqmenttree.o: seqmenttree.h pherror.h
 seqparse.o: seqparse.h filebuff.h qseqs.h
 shm.o: shm.h pherror.h hashmapkma.h version.h
 sparse.o: sparse.h compkmers.h hashtable.h kmapipe.h pherror.h runinput.h savekmers.h stdnuc.h stdstat.h
-spltdb.o: spltdb.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapcci.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h runkma.h stdnuc.h stdstat.h tmp.h vcf.h
+spltdb.o: spltdb.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapcci.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h runkma.h stdnuc.h stdstat.h tmp.h tsv.h vcf.h
 stdnuc.o: stdnuc.h
 stdstat.o: stdstat.h
 trim.o: trim.h compdna.h pherror.h runinput.h qseqs.h
