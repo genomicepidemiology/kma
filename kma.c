@@ -123,7 +123,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-and", "Use both mrs and p-value on consensus", "or");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-oa", "Use neither mrs or p-value on consensus", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-tsv", "Tsv flag", "0");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-tsh", "Help on -tsv", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-tsvh", "Help on -tsv", "");
 	
 	fprintf(out, "#\n# Consensus:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-bc", "Minimum support to call bases", "0");
