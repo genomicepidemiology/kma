@@ -89,7 +89,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 					qual->len = end - start;
 					
 					/* print */
-					if(qseq->len > minlen && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
+					if(minlen <= qseq->len && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
 						/* dump seq */
 						qseq->seq += start;
 						qual->seq += start;

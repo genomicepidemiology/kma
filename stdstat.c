@@ -238,7 +238,7 @@ double eQual(unsigned char *qual, int len, int phredScale, int minQ) {
 }
 */
 
-double eQual(unsigned char *qual, const int len, const int minQ, const double *prob) {
+unsigned eQual(unsigned char *qual, const int len, const int minQ, const double *prob) {
 	
 	/*
 	static const double prob[128] = {
@@ -277,5 +277,5 @@ double eQual(unsigned char *qual, const int len, const int minQ, const double *p
 	}
 	
 	/* return average */
-	return -10 * log10(sum / len);
+	return ceil(-10 * log10(sum / len));
 }

@@ -925,12 +925,12 @@ int kma_main(int argc, char *argv[]) {
 				fprintf(stdout, "# %-8s\t%s\n", "128", "Query_Depth");
 				fprintf(stdout, "# %-8s\t%s\n", "256", "Read_Count_Map");
 				fprintf(stdout, "# %-8s\t%s\n", "512", "Read_Count_Aln");
-				fprintf(stdout, "# %-8s\t%s\n", "1024", "ConClave_Score");
-				fprintf(stdout, "# %-8s\t%s\n", "2048", "ConClave_Quality");
-				fprintf(stdout, "# %-8s\t%s\n", "4096", "Score");
-				fprintf(stdout, "# %-8s\t%s\n", "8192", "Expected");
-				fprintf(stdout, "# %-8s\t%s\n", "16384", "q_value");
-				fprintf(stdout, "# %-8s\t%s\n", "32768", "p_value");
+				fprintf(stdout, "# %-8s\t%s\n", "1024", "Score");
+				fprintf(stdout, "# %-8s\t%s\n", "2048", "Expected");
+				fprintf(stdout, "# %-8s\t%s\n", "4096", "q_value");
+				fprintf(stdout, "# %-8s\t%s\n", "8192", "p_value");
+				fprintf(stdout, "# %-8s\t%s\n", "16384", "ConClave_Score");
+				fprintf(stdout, "# %-8s\t%s\n", "32768", "ConClave_Quality");
 				fprintf(stdout, "#\n");
 				return 0;
 			} else if(strcmp(argv[args], "-xml") == 0) {
