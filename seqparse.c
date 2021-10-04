@@ -532,9 +532,10 @@ int FileBuffgetFqSeq(FileBuff *src, Qseqs *qseq, Qseqs *qual, char *trans) {
 
 int getPhredFileBuff(FileBuff *dest) {
 	
-	int seek;
+	int seek, scale;
 	unsigned char *buff;
 	
+	scale = 33;
 	buff = dest->next;
 	
 	while(*buff != 0) {
@@ -553,11 +554,11 @@ int getPhredFileBuff(FileBuff *dest) {
 				return 0;
 			} else if(53 < *buff && *buff < 59) {
 				return 33;
-			} else if(*buff > 84) {
-				return 64;
+			} else if(94 < *buff) {
+				scale = 64;
 			}
 		}
 	}
 	
-	return 0;
+	return scale;
 }

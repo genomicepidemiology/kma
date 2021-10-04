@@ -29,4 +29,4 @@ double p_chisqr(long double q);
 double power(double x, unsigned n);
 double binP(int n, int k, double p);
 unsigned minimum(unsigned *src, unsigned n);
-double eQual(unsigned char *qual, const int len, const int minQ, const double *prob);
+unsigned eQual(unsigned char *qual, const int len, const int minQ, const double *prob);
