@@ -201,6 +201,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-cge", "Set CGE penalties and rewards", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mint2", "Set 2ng gen Mintyper preset", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mint3", "Set 3rd gen Mintyper preset", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ont", "Set 3rd gen genefinding preset", "False");
 	
 	fprintf(out, "#\n");
 	
@@ -1041,6 +1042,27 @@ int kma_main(int argc, char *argv[]) {
 				significantAndSupport(0, 0, 0.7);
 				vcf = 1;
 				extendedFeatures = 1;
+			} else if(strcmp(argv[args], "-ont") == 0) {
+				/* -bcNano */
+				if(significantBase == &significantNuc) {
+					significantBase = &significantAnd90Nuc;
+				}
+				baseCall = &nanoCaller;
+				significantBase = &significantAndSupport;
+				support = 0.7; /* -bc 0.7 */
+			 	coverT = 0.1; /* -mct 0.1 */
+			 	/* -proxi -0.9 */
+				minFrac = -0.9;
+			 	getMatch = &getProxiMatch;
+				getMatchSparse = &getProxiMatchSparse;
+				getSecondForce = &getSecondProxiForce;
+				getSecondPen = &getSecondProxiPen;
+				getF = &getF_Proxi;
+				getR = &getR_Proxi;
+				getChainTemplates = &getProxiChainTemplates;
+				mrc = 0.7; /* -mrc 0.7 */
+			 	scoreT = 0.25; /* -mrs 0.25 */
+			 	minQ = 10; /* -eq 10 */
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
