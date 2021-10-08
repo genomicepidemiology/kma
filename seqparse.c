@@ -532,22 +532,23 @@ int FileBuffgetFqSeq(FileBuff *src, Qseqs *qseq, Qseqs *qual, char *trans) {
 
 int getPhredFileBuff(FileBuff *dest) {
 	
-	int seek, scale;
+	int seek, avail, scale;
 	unsigned char *buff;
 	
+	avail = dest->bytes;
 	scale = 33;
 	buff = dest->next;
 	
-	while(*buff != 0) {
+	while(avail) {
 		seek = 3;
-		while(seek && *buff != 0) {
+		while(seek && --avail) {
 			if(*++buff == '\n') {
 				--seek;
 			}
 		}
 		
-		seek = 1;
-		while(seek) {
+		seek = avail ? 1 : 0;
+		while(seek && --avail) {
 			if(*++buff == '\n') {
 				seek = 0;
 			} else if(*buff < 33) {
