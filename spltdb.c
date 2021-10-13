@@ -397,7 +397,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -515,6 +515,8 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 		strcat(outputfilename, ".tsv");
 		tsv_out = sfopen(outputfilename, "w");
 		outputfilename[file_len] = 0;
+	} else {
+		tsv_out = 0;
 	}
 	if(nf == 0) {
 		strcat(outputfilename, ".frag.gz");
@@ -1676,7 +1678,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
 				}
 				
-				if(ID_t <= id) {
+				if(ID_t <= id && Depth_t <= depth) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);

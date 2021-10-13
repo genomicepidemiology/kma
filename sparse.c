@@ -326,7 +326,7 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 	destroyFileBuff(inputfile);
 }
 
-int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *exePrev, int ID_t, double evalue, char ss, unsigned shm) {
+int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *exePrev, double ID_t, double Depth_t, double evalue, char ss, unsigned shm) {
 	
 	int i, file_len, stop, template, status, contamination, score_add, deCon;
 	unsigned *Scores, *w_Scores, *SearchList;
@@ -489,9 +489,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				for(i = 0; i < templates->DB_size; ++i) {
 					if(SearchList[i] && w_Scores_tot[i] >= score) {
 						tmp_cover = 100.0 * w_Scores[i] / template_ulengths[i];
-						if(tmp_cover >= ID_t) {
-							tmp_score = w_Scores_tot[i];
-							tmp_depth = 1.0 * w_Scores_tot[i] / template_lengths[i];
+						tmp_score = w_Scores_tot[i];
+						tmp_depth = 1.0 * tmp_score / template_lengths[i];
+						if(ID_t <= tmp_cover && Depth_t <= tmp_depth) {
 							if(tmp_score > score || (tmp_cover > cover || (tmp_cover == cover && (tmp_depth > depth || (tmp_depth == depth && template_ulengths[i] > template_ulengths[template]))))) {
 								/* calculate p_value */
 								tmp_expected = 1.0 * (Nhits.tot - w_Scores_tot[i]) * template_ulengths[i] / (templates->n - template_ulengths[i] + etta);
@@ -518,9 +518,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				for(i = 0; i < templates->DB_size; ++i) {
 					if(SearchList[i]) {
 						tmp_cover = 100.0 * w_Scores[i] / template_ulengths[i];
-						if(tmp_cover >= ID_t) {
-							tmp_score = w_Scores_tot[i];
-							tmp_depth = 1.0 * w_Scores_tot[i] / template_lengths[i];
+						tmp_score = w_Scores_tot[i];
+						tmp_depth = 1.0 * tmp_score / template_lengths[i];
+						if(ID_t <= tmp_cover && Depth_t <= tmp_depth) {
 							if(tmp_depth > depth || (tmp_depth == depth && (tmp_cover > cover || (tmp_cover == cover && (tmp_score > score || (tmp_score == score && template_ulengths[i] > template_ulengths[template])))))) {
 								/* calculate p_value */
 								tmp_expected = 1.0 * (Nhits.tot - w_Scores_tot[i]) * template_ulengths[i] / (templates->n - template_ulengths[i] + etta);
@@ -547,9 +547,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				for(i = 0; i < templates->DB_size; ++i) {
 					if(SearchList[i]) {
 						tmp_cover = 100.0 * w_Scores[i] / template_ulengths[i];
-						if(tmp_cover >= ID_t) {
-							tmp_score = w_Scores_tot[i];
-							tmp_depth = 1.0 * w_Scores_tot[i] / template_lengths[i];
+						tmp_score = w_Scores_tot[i];
+						tmp_depth = 1.0 * tmp_score / template_lengths[i];
+						if(ID_t <= tmp_cover && Depth_t <= tmp_depth) {
 							if(tmp_cover > cover || (tmp_cover == cover && (tmp_depth > depth || (tmp_depth == depth && (tmp_score > score || (tmp_score == score && template_ulengths[i] > template_ulengths[template])))))) {
 								/* calculate p_value */
 								tmp_expected = 1.0 * (Nhits.tot - w_Scores_tot[i]) * template_ulengths[i] / (templates->n - template_ulengths[i] + etta);
@@ -575,7 +575,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 			}
 			
 			/* validate best match */
-			if(cover && cover >= ID_t) {
+			if(cover && ID_t <= cover && Depth_t <= depth) {
 				/* with draw contamination k-mers matching this template */
 				score_add = 0;
 				score_tot_add = 0;
@@ -668,9 +668,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				for(i = 0; i < templates->DB_size; ++i) {
 					if(SearchList[i] && w_Scores_tot[i] >= score) {
 						tmp_cover = 100.0 * w_Scores[i] / template_ulengths[i];
-						if(tmp_cover >= ID_t) {
-							tmp_score = w_Scores_tot[i];
-							tmp_depth = 1.0 * w_Scores_tot[i] / template_lengths[i];
+						tmp_score = w_Scores_tot[i];
+						tmp_depth = 1.0 * tmp_score / template_lengths[i];
+						if(ID_t <= tmp_cover && Depth_t <= tmp_depth) {
 							if(tmp_score > score || (tmp_cover > cover || (tmp_cover == cover && (tmp_depth > depth || (tmp_depth == depth && template_ulengths[i] > template_ulengths[template]))))) {
 								/* calculate p_value */
 								tmp_expected = 1.0 * (Nhits.tot - w_Scores_tot[i]) * template_ulengths[i] / (templates->n - template_ulengths[i] + etta);
@@ -697,9 +697,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				for(i = 0; i < templates->DB_size; ++i) {
 					if(SearchList[i]) {
 						tmp_cover = 100.0 * w_Scores[i] / template_ulengths[i];
-						if(tmp_cover >= ID_t) {
-							tmp_score = w_Scores_tot[i];
-							tmp_depth = 1.0 * w_Scores_tot[i] / template_lengths[i];
+						tmp_score = w_Scores_tot[i];
+						tmp_depth = 1.0 * tmp_score / template_lengths[i];
+						if(ID_t <= tmp_cover && Depth_t <= tmp_depth) {
 							if(tmp_depth > depth || (tmp_depth == depth && (tmp_cover > cover || (tmp_cover == cover && (tmp_score > score || (tmp_score == score && template_ulengths[i] > template_ulengths[template])))))) {
 								/* calculate p_value */
 								tmp_expected = 1.0 * (Nhits.tot - w_Scores_tot[i]) * template_ulengths[i] / (templates->n - template_ulengths[i] + etta);
@@ -726,9 +726,9 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 				for(i = 0; i < templates->DB_size; ++i) {
 					if(SearchList[i]) {
 						tmp_cover = 100.0 * w_Scores[i] / template_ulengths[i];
-						if(tmp_cover >= ID_t) {
-							tmp_score = w_Scores_tot[i];
-							tmp_depth = 1.0 * w_Scores_tot[i] / template_lengths[i];
+						tmp_score = w_Scores_tot[i];
+						tmp_depth = 1.0 * tmp_score / template_lengths[i];
+						if(ID_t <= tmp_cover && Depth_t <= tmp_depth) {
 							if(tmp_cover > cover || (tmp_cover == cover && (tmp_depth > depth || (tmp_depth == depth && (tmp_score > score || (tmp_score == score && template_ulengths[i] > template_ulengths[template])))))) {
 								/* calculate p_value */
 								tmp_expected = 1.0 * (Nhits.tot - w_Scores_tot[i]) * template_ulengths[i] / (templates->n - template_ulengths[i] + etta);
@@ -754,7 +754,7 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 			}
 			
 			/* validate best match */
-			if(cover && cover >= ID_t) {
+			if(cover && ID_t <= cover && Depth_t <= depth) {
 				/* output results */
 				query_cover = 100.0 * w_Scores_tot[template] / Ntot;
 				/* calc tot values */

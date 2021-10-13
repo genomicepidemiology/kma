@@ -270,7 +270,7 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 					
 					if((values = hashMapGet(templates, cmer))) {
 						updateScoreAndTemplate_ptr(Scores_tot, bestTemplates, values);
-						if(hashMap_CountKmer(foundKmers, key)) {
+						if(hashMap_CountKmer(foundKmers, cmer)) {
 							addUscore_ptr(Scores, values);
 						}
 					}

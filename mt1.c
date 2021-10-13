@@ -82,7 +82,7 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, 
 	
 }
 
-void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
+void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int kmersize, int minlen, Penalties *rewards, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int Mt1, int ref_fsa, int print_matrix, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, int thread_num) {
 	
 	int i, j, aln_len, t_len, coverScore, file_len, DB_size, delta, seq_in;
 	int *template_lengths;
@@ -126,6 +126,8 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			strcat(outputfilename, ".tsv");
 			tsv_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
+		} else {
+			tsv_out = 0;
 		}
 		if(nf == 0) {
 			strcat(outputfilename, ".frag.gz");
@@ -428,7 +430,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		} else {
 			id = 0;
 		}
-		if(ID_t <= id && 0 < id) {
+		if(ID_t <= id && 0 < id && Depth_t <= depth) {
 			/* Output result */
 			fprintf(res_out, "%-12s\t%8lu\t%8d\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				thread->template_name, read_score, 0, t_len, id, cover, q_id, q_cover, (double) depth, (double) read_score, p_value);

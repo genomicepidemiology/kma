@@ -137,7 +137,7 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
 	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
@@ -240,6 +240,8 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 			strcat(outputfilename, ".tsv");
 			tsv_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
+		} else {
+			tsv_out = 0;
 		}
 		if(nf == 0) {
 			strcat(outputfilename, ".frag.gz");
@@ -1302,7 +1304,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
 				}
 				
-				if(ID_t <= id && 0 < id) {
+				if(ID_t <= id && 0 < id && Depth_t <= depth) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
@@ -1400,7 +1402,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -1507,6 +1509,8 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 			strcat(outputfilename, ".tsv");
 			tsv_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
+		} else {
+			tsv_out = 0;
 		}
 		if(nf == 0) {
 			strcat(outputfilename, ".frag.gz");
@@ -2522,7 +2526,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				if(xml) {
 					capIterXML(xml_out, DB_size, seqin_size, t_len, readCounts[template], p_value, read_score, aligned_assem->q, aln_len);
 				}
-				if(ID_t <= id) {
+				if(ID_t <= id && Depth_t <= depth) {
 					/* Output result */
 					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
