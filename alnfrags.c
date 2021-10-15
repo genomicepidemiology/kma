@@ -184,7 +184,7 @@ int alnFragsSE_old(HashMapCCI **templates_index, int *matched_templates, int *te
 	return 1;
 }
 
-int alnFragsUnionPE_old(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, double mrc, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, CompDNA *qseq_fr_comp, CompDNA *qseq_rr_comp, unsigned char *qseq, unsigned char *qseq_r, unsigned char *qseq_fr, unsigned char *qseq_rr, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
+int alnFragsUnionPE_old(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, double mrc, double minFrac, int minlen, CompDNA *qseq_comp, CompDNA *qseq_r_comp, CompDNA *qseq_fr_comp, CompDNA *qseq_rr_comp, unsigned char *qseq, unsigned char *qseq_r, unsigned char *qseq_fr, unsigned char *qseq_rr, Qseqs *header, Qseqs *header_r, int kmersize, int *bestTemplates, int *bestTemplates_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *best_start_pos, int *best_end_pos, int *flag, int *flag_r, int *best_read_score, int *best_read_score_r, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
 	int t_i, template, read_score, Wl;
 	int compScore, bestHits, bestHits_r, aln_len, start, end, arc, rc, t_len;
@@ -356,10 +356,6 @@ int alnFragsUnionPE_old(HashMapCCI **templates_index, int *matched_templates, in
 			}
 		} else {
 			bestTemplates_r[t_i] = 0;
-			if(bestTemplates[t_i] != 0) {
-				best_start_pos[t_i] = -1;
-				best_end_pos[t_i] = -1;
-			}
 		}
 		
 		read_score += bestTemplates[t_i];
@@ -1386,14 +1382,8 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 		}
 		/* to here */
 		
+		/* here */
 		read_score += bestTemplates[t_i];
-		if(best_start_pos[t_i] == 0) {
-			read_score += Wl;
-		}
-		if(best_end_pos[t_i] == t_len) {
-			read_score += Wl;
-		}
-		
 		if(compScore < read_score) {
 			compScore = read_score;
 		}
@@ -1434,7 +1424,7 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 					}
 					lock(excludeOut);
 					/* here */
-					update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+					update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score + *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 					unlock(excludeOut);
 				} else {
 					if(!rc) {
@@ -1445,7 +1435,7 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 					}
 					lock(excludeOut);
 					/* here */
-					update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+					update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score + *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 					unlock(excludeOut);
 				}
 			} else {
@@ -1781,12 +1771,6 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 		/* to here */
 		
 		read_score += bestTemplates[t_i];
-		if(best_start_pos[t_i] == 0) {
-			read_score += Wl;
-		}
-		if(best_end_pos[t_i] == t_len) {
-			read_score += Wl;
-		}
 		if(compScore < read_score) {
 			compScore = read_score;
 		}
