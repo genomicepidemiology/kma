@@ -30,6 +30,7 @@
 #include "assembly.h"
 #include "chain.h"
 #include "compdna.h"
+#include "conclave.h"
 #include "ef.h"
 #include "filebuff.h"
 #include "frags.h"
@@ -62,17 +63,6 @@ typedef int key_t;
 #define shmctl(shmid, cmd, buf) fprintf(stderr, "sysV not available on Windows.\n")
 #endif
 #define nameSkip(infile, c) while((c = fgetc(infile)) != '\n' && c != EOF)
-
-
-unsigned char * ustrdup(unsigned char *src, size_t n) {
-	
-	unsigned char *dest;
-	
-	dest = smalloc(n);
-	memcpy(dest, src, n);
-	
-	return dest;
-}
 
 int load_DBs_KMA(char *templatefilename, long unsigned **alignment_scores, long unsigned **uniq_alignment_scores, int **template_lengths, unsigned shm) {
 	
@@ -139,17 +129,15 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 
 int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
 	
-	int i, j, tmp_template, tmp_tmp_template, file_len, bestTemplate, tot;
-	int template, bestHits, t_len, start, end, aln_len, status, rand, sparse;
-	int fragCount, fileCount, maxFrag, coverScore, tmp_start, tmp_end, score;
-	int seq_in_no, DB_size, flag, counter, stats[5];
+	int i, file_len, template, t_len, end, aln_len, status, sparse, fileCount;
+	int coverScore, seq_in_no, DB_size, counter;
 	int *bestTemplates, *bestTemplates_r, *best_start_pos, *best_end_pos;
-	int *matched_templates, *template_lengths, *qBoundPtr, *Lengths;
-	unsigned randScore, *fragmentCounts, *readCounts;
-	long read_score, best_read_score, *seq_indexes;
-	long unsigned Nhits, template_tot_ulen, bestNum, seqin_size;
+	int *matched_templates, *template_lengths, *Lengths;
+	unsigned *fragmentCounts, *readCounts;
+	long read_score, *seq_indexes;
+	long unsigned Nhits, template_tot_ulen, seqin_size;
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
-	double tmp_score, bestScore, id, q_id, cover, q_cover, p_value;
+	double id, q_id, cover, q_cover, p_value;
 	long double depth, expected, q_value;
 	FILE *inputfile, *frag_in_raw, *res_out, *tsv_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
@@ -158,7 +146,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	FileBuff *frag_out, *frag_out_all, *matrix_out, *vcf_out;
 	Aln *aligned, *gap_align;
 	Assem *aligned_assem;
-	Frag **alignFrags, *alignFrag;
+	Frag **alignFrags;
 	CompDNA *qseq_comp, *qseq_r_comp;
 	Qseqs *qseq, *qseq_r, *header, *header_r, *template_name;
 	AssemInfo *matrix;
@@ -360,6 +348,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		alnThread->mq = mq;
 		alnThread->sam = (sam == 1) ? 1 : 0;
 		alnThread->scoreT = scoreT;
+		alnThread->mrc = mrc;
 		alnThread->minFrac = minFrac;
 		alnThread->next = alnThreads;
 		alnThreads = alnThread;
@@ -433,6 +422,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	alnThread->mq = mq;
 	alnThread->sam = (sam == 1) ? 1 : 0;
 	alnThread->scoreT = scoreT;
+	alnThread->mrc = mrc;
 	alnThread->minFrac = minFrac;
 	alnThread->template_lengths = template_lengths;
 	alnThread->templates_index = templates_index;
@@ -586,9 +576,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	if(!template_fragments) {
 		ERROR();
 	}
-	fragCount = 0;
-	fileCount = 0;
-	maxFrag = 1000000;
 	
 	/* Get expected values */
 	sparse = 0;
@@ -598,526 +585,15 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		template_tot_ulen += template_lengths[i];
 	}
 	
-	/* here */
-	/*
-	i = DB_size;
-	j = 0;
-	while(--i) {
-		fprintf(stdout, "%lu\n", alignment_scores[++j]);
-	}
-	*/
-	/* to here */
-	
 	/* ConClave */
 	if(ConClave == 1) {
-		while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			flag = stats[4];
-			
-			sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-			sfread(header->seq, 1, header->len, frag_in_raw);
-			sfread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			/* Several mapped templates, choose best */
-			if(bestHits > 1) {
-				bestTemplate = -1;
-				bestScore = 0;
-				best_read_score = 0;
-				bestNum = 0;
-				start = 0;
-				end = 0;
-				/* iterate hits */
-				for(i = 0; i != bestHits; ++i) {
-					tmp_tmp_template = bestTemplates[i];
-					tmp_start = best_start_pos[i];
-					tmp_end = best_end_pos[i];
-					if(tmp_tmp_template < 0) {
-						tmp_template = -tmp_tmp_template;
-					} else {
-						tmp_template = tmp_tmp_template;
-					}
-					tmp_score = 1.0 * alignment_scores[tmp_template] / (template_lengths[tmp_template] - kmersize + 1);
-					//if(tmp_score > bestScore) {
-					if(alignment_scores[tmp_template] > best_read_score) {
-						bestTemplate = tmp_tmp_template;
-						best_read_score = alignment_scores[tmp_template];
-						bestScore = tmp_score;
-						bestNum = uniq_alignment_scores[tmp_template];
-						start = tmp_start;
-						end = tmp_end;
-					} else if(alignment_scores[tmp_template] == best_read_score) {
-					//} else if(tmp_score == bestScore) {
-						if(tmp_score > bestScore) {
-						//if(alignment_scores[tmp_template] > best_read_score) {
-							bestTemplate = tmp_tmp_template;
-							best_read_score = alignment_scores[tmp_template];
-							bestScore = tmp_score;
-							bestNum = uniq_alignment_scores[tmp_template];
-							start = tmp_start;
-							end = tmp_end;
-						} else if(tmp_score == bestScore && alignment_scores[tmp_template] > bestNum) {
-						//} else if(alignment_scores[tmp_template] == best_read_score) {
-							if(uniq_alignment_scores[tmp_template] > bestNum) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-								start = tmp_start;
-								end = tmp_end;
-							} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_template < abs(bestTemplate)) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-								start = tmp_start;
-								end = tmp_end;
-							}
-						}
-					}
-				}
-			} else {
-				bestTemplate = *bestTemplates;
-				start = *best_start_pos;
-				end = *best_end_pos;
-			}
-			
-			/* reverse complement seq */
-			if(bestTemplate < 0) {
-				bestTemplate = -bestTemplate;
-				strrc(qseq->seq, qseq->len);
-				flag |= 16;
-				
-				/* check and invert query bounds */
-				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
-					/* get q-bounds */
-					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
-					tmp_start = *qBoundPtr;
-					tmp_end = *++qBoundPtr;
-					/* invert */
-					*qBoundPtr = qseq->len - tmp_start;
-					*--qBoundPtr = qseq->len - tmp_end;
-				}
-			}
-			w_scores[bestTemplate] += read_score;
-			if(fragmentCounts) {
-				fragmentCounts[bestTemplate]++;
-				readCounts[bestTemplate]++;
-			}
-			
-			/* dump frag info */
-			alignFrag = smalloc(sizeof(Frag));
-			alignFrag->buffer[0] = qseq->len;
-			alignFrag->buffer[1] = bestHits;
-			alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-			alignFrag->buffer[3] = start;
-			alignFrag->buffer[4] = end;
-			alignFrag->buffer[5] = header->len;
-			alignFrag->buffer[6] = flag;
-			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-			alignFrag->header = ustrdup(header->seq, header->len);
-			alignFrag->next = alignFrags[bestTemplate];
-			alignFrags[bestTemplate] = alignFrag;
-			
-			++fragCount;
-			
-			if(stats[2] < 0) {
-				if(extendedFeatures) {
-					readCounts[bestTemplate]++;
-				}
-				sfread(stats, sizeof(int), 3, frag_in_raw);
-				qseq->len = stats[0];
-				header->len = stats[1];
-				flag = stats[2];
-				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-				sfread(header->seq, 1, header->len, frag_in_raw);
-				/* dump frag info */
-				alignFrag = smalloc(sizeof(Frag));
-				alignFrag->buffer[0] = qseq->len;
-				alignFrag->buffer[1] = bestHits;
-				alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-				alignFrag->buffer[3] = start;
-				alignFrag->buffer[4] = end;
-				alignFrag->buffer[5] = header->len;
-				alignFrag->buffer[6] = flag;
-				alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-				alignFrag->header = ustrdup(header->seq, header->len);
-				alignFrag->next = alignFrags[bestTemplate];
-				alignFrags[bestTemplate] = alignFrag;
-				
-				++fragCount;
-			}
-			
-			if(fragCount >= maxFrag) {
-				template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-				++fileCount;
-				fragCount = 0;
-				/* control fileamount */
-				if(fileCount >= DB_size) {
-					template_fragments = realloc(template_fragments, (fileCount + 1) * sizeof(FILE*));
-					if(!template_fragments) {
-						ERROR();
-					}
-				}
-			}
-		}
-		template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-		++fileCount;
+		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
 	} else if(ConClave == 2) {
-		/* find potential template candidates */
-		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			
-			/* best templates, skip rest */
-			sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
-			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			
-			/* Several mapped templates, choose best */
-			if(bestHits > 1) {
-				bestTemplate = -1;
-				bestScore = 0;
-				best_read_score = 0;
-				bestNum = 0;
-				/* iterate hits */
-				for(i = 0; i != bestHits; ++i) {
-					tmp_tmp_template = bestTemplates[i];
-					if(tmp_tmp_template < 0) {
-						tmp_template = -tmp_tmp_template;
-					} else {
-						tmp_template = tmp_tmp_template;
-					}
-					tmp_score = 1.0 * alignment_scores[tmp_template] / (template_lengths[tmp_template] - kmersize + 1);
-					//if(tmp_score > bestScore) {
-					if(alignment_scores[tmp_template] > best_read_score) {
-						bestTemplate = tmp_tmp_template;
-						best_read_score = alignment_scores[tmp_template];
-						bestScore = tmp_score;
-						bestNum = uniq_alignment_scores[tmp_template];
-					} else if(alignment_scores[tmp_template] == best_read_score) {
-					//} else if(tmp_score == bestScore) {
-						if(tmp_score > bestScore) {
-						//if(alignment_scores[tmp_template] > best_read_score) {
-							bestTemplate = tmp_tmp_template;
-							best_read_score = alignment_scores[tmp_template];
-							bestScore = tmp_score;
-							bestNum = uniq_alignment_scores[tmp_template];
-						} else if(tmp_score == bestScore && alignment_scores[tmp_template] > bestNum) {
-						//} else if(alignment_scores[tmp_template] == best_read_score) {
-							if(uniq_alignment_scores[tmp_template] > bestNum) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-							} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_template < abs(bestTemplate)) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-							}
-						}
-					}
-				}
-			} else {
-				bestTemplate = *bestTemplates;
-			}
-			w_scores[abs(bestTemplate)] += read_score;
-			
-			if(stats[2] < 0) {
-				sfread(stats, sizeof(int), 2, frag_in_raw);
-				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
-			}
-		}
-		rewind(frag_in_raw);
-		
-		/* discard insignifiacant templates */
-		Nhits = 0;
-		template = DB_size;
-		while(--template) {
-			Nhits += w_scores[template];
-		}
-		
-		template = DB_size;
-		while(--template) {
-			if((read_score = w_scores[template])) {
-				t_len = template_lengths[template];
-				//expected = (Nhits - read_score) * (1.0 * t_len) / (template_tot_ulen - t_len + etta);
-				expected = t_len;
-				expected /= MAX(1, (template_tot_ulen - t_len));
-				expected *= (Nhits - read_score);
-				//q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
-				q_value = read_score - expected;
-				q_value /= (expected + read_score);
-				q_value *= read_score - expected;
-				p_value  = p_chisqr(q_value);
-				if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len)) == 0) {
-					w_scores[template] = 0;
-				}
-			}
-		}
-		
-		/* identify sorting keys */
-		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			
-			if(bestHits != 1) {
-				/* best templates, skip rest */
-				sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
-				sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-				bestTemplate = 0;
-				i = bestHits;
-				while(i--) {
-					template = abs(bestTemplates[i]);
-					if(w_scores[template]) {
-						if(bestTemplate) {
-							bestTemplate = 0;
-							break;
-						} else {
-							bestTemplate = template;
-						}
-					}
-				}
-				
-				if(bestTemplate) {
-					uniq_alignment_scores[bestTemplate] += read_score;
-				}
-			} else {
-				/* skip rest */
-				sfseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
-			}
-			
-			if(stats[2] < 0) {
-				sfread(stats, sizeof(int), 2, frag_in_raw);
-				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
-			}
-		}
-		rewind(frag_in_raw);
-		
-		/* choose the templates */
-		memset(w_scores, 0, DB_size * sizeof(long unsigned));
-		while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			flag = stats[4];
-			
-			sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-			sfread(header->seq, 1, header->len, frag_in_raw);
-			sfread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			
-			/* Several mapped templates, choose best according to sorting keys */
-			if(bestHits != 1) {
-				
-				bestTemplate = 0;
-				bestScore = 0;
-				start = 0;
-				end = 0;
-				
-				tot = 0;
-				i = bestHits;
-				while(i--) {
-					tot += uniq_alignment_scores[abs(bestTemplates[i])];
-				}
-				
-				if(tot && 16 <= qseq->len) {
-					/* get seed */
-					rand = qseq->seq[0];
-					i = -1;
-					j = qseq->len;
-					while(++i < 7) {
-						rand = (((rand << 2) | qseq->seq[i]) << 2) | qseq->seq[--j];
-					}
-					/* minimal standard */
-					rand = 16807 * (rand % 127773) - 2836 * (rand / 127773);
-					if (rand <= 0) {
-						rand += 0x7fffffff;
-					}
-					
-					tmp_score = rand;
-					tmp_score /= INT_MAX;
-					randScore = tmp_score * tot;
-					
-					score = 0;
-					i = 0;
-					while(i != bestHits) {
-						score += uniq_alignment_scores[abs(bestTemplates[i])];
-						if(randScore < score) {
-							bestTemplate = bestTemplates[i];
-							start = best_start_pos[i];
-							end = best_end_pos[i];
-							i = bestHits;
-						} else {
-							++i;
-						}
-					}
-					
-					if(bestTemplate == 0) {
-						tot = 0;
-					}
-				} else {
-					tot = 0;
-				}
-				
-				if(tot == 0) {
-					bestTemplate = -1;
-					best_read_score = 0;
-					bestNum = 0;
-					
-					/* iterate hits */
-					for(i = 0; i != bestHits; ++i) {
-						tmp_tmp_template = bestTemplates[i];
-						tmp_start = best_start_pos[i];
-						tmp_end = best_end_pos[i];
-						if(tmp_tmp_template < 0) {
-							tmp_template = -tmp_tmp_template;
-						} else {
-							tmp_template = tmp_tmp_template;
-						}
-						tmp_score = 1.0 * alignment_scores[tmp_template] / (template_lengths[tmp_template] - kmersize + 1);
-						//if(tmp_score > bestScore) {
-						if(alignment_scores[tmp_template] > best_read_score) {
-							bestTemplate = tmp_tmp_template;
-							best_read_score = alignment_scores[tmp_template];
-							bestScore = tmp_score;
-							bestNum = uniq_alignment_scores[tmp_template];
-							start = tmp_start;
-							end = tmp_end;
-						} else if(alignment_scores[tmp_template] == best_read_score) {
-						//} else if(tmp_score == bestScore) {
-							if(tmp_score > bestScore) {
-							//if(alignment_scores[tmp_template] > best_read_score) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-								start = tmp_start;
-								end = tmp_end;
-							} else if(tmp_score == bestScore && alignment_scores[tmp_template] > bestNum) {
-							//} else if(alignment_scores[tmp_template] == best_read_score) {
-								if(uniq_alignment_scores[tmp_template] > bestNum) {
-									bestTemplate = tmp_tmp_template;
-									best_read_score = alignment_scores[tmp_template];
-									bestScore = tmp_score;
-									bestNum = uniq_alignment_scores[tmp_template];
-									start = tmp_start;
-									end = tmp_end;
-								} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_template < abs(bestTemplate)) {
-									bestTemplate = tmp_tmp_template;
-									best_read_score = alignment_scores[tmp_template];
-									bestScore = tmp_score;
-									bestNum = uniq_alignment_scores[tmp_template];
-									start = tmp_start;
-									end = tmp_end;
-								}
-							}
-						}
-					}
-				}
-			} else {
-				bestTemplate = *bestTemplates;
-				start = *best_start_pos;
-				end = *best_end_pos;
-			}
-			
-			/* reverse complement seq */
-			if(bestTemplate < 0) {
-				bestTemplate = -bestTemplate;
-				strrc(qseq->seq, qseq->len);
-				flag |= 16;
-				
-				/* check and invert query bounds */
-				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
-					/* get q-bounds */
-					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
-					tmp_start = *qBoundPtr;
-					tmp_end = *++qBoundPtr;
-					/* invert */
-					*qBoundPtr = qseq->len - tmp_start;
-					*--qBoundPtr = qseq->len - tmp_end;
-				}
-			}
-			w_scores[bestTemplate] += read_score;
-			if(fragmentCounts) {
-				fragmentCounts[bestTemplate]++;
-				readCounts[bestTemplate]++;
-			}
-			
-			/* dump frag info */
-			alignFrag = smalloc(sizeof(Frag));
-			alignFrag->buffer[0] = qseq->len;
-			alignFrag->buffer[1] = bestHits;
-			alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-			alignFrag->buffer[3] = start;
-			alignFrag->buffer[4] = end;
-			alignFrag->buffer[5] = header->len;
-			alignFrag->buffer[6] = flag;
-			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-			alignFrag->header = ustrdup(header->seq, header->len);
-			alignFrag->next = alignFrags[bestTemplate];
-			alignFrags[bestTemplate] = alignFrag;
-			
-			++fragCount;
-			
-			if(stats[2] < 0) {
-				if(extendedFeatures) {
-					readCounts[bestTemplate]++;
-				}
-				sfread(stats, sizeof(int), 3, frag_in_raw);
-				qseq->len = stats[0];
-				header->len = stats[1];
-				flag = stats[2];
-				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-				sfread(header->seq, 1, header->len, frag_in_raw);
-				/* dump frag info */
-				alignFrag = smalloc(sizeof(Frag));
-				alignFrag->buffer[0] = qseq->len;
-				alignFrag->buffer[1] = bestHits;
-				alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-				alignFrag->buffer[3] = start;
-				alignFrag->buffer[4] = end;
-				alignFrag->buffer[5] = header->len;
-				alignFrag->buffer[6] = flag;
-				alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-				alignFrag->header = ustrdup(header->seq, header->len);
-				alignFrag->next = alignFrags[bestTemplate];
-				alignFrags[bestTemplate] = alignFrag;
-				
-				++fragCount;
-			}
-			
-			if(fragCount >= maxFrag) {
-				template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-				++fileCount;
-				fragCount = 0;
-				/* control fileamount */
-				if(fileCount >= DB_size) {
-					template_fragments = realloc(template_fragments, (fileCount + 1) * sizeof(FILE*));
-					if(!template_fragments) {
-						ERROR();
-					}
-				}
-			}
-		}
-		template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-		++fileCount;
+		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
+	} else {
+		fileCount = 0;
 	}
 	
-	fragCount = 0;
 	free(alignFrags);
 	free(best_start_pos);
 	free(best_end_pos);
@@ -1341,8 +817,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(tsv) {
-							/* here */
-							/* test ID = 0 */
 							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 						}
 						if(extendedFeatures) {
@@ -1408,17 +882,15 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	   at the cost it chooses best templates based on kmers
 	   instead of alignment score. */
 	
-	int i, j, tmp_template, tmp_tmp_template, file_len, score, rand, rc_flag;
-	int template, bestHits, t_len, start, delta, aln_len, fragCount, maxFrag;
-	int fileCount, coverScore, tmp_start, tmp_end, bestTemplate, status, tot;
-	int sparse, progress, seq_in_no, DB_size, end, flag, flag_r;
+	int i, file_len, rc_flag, template, bestHits, t_len, delta, aln_len, end;
+	int fileCount, coverScore, status, sparse, progress, seq_in_no, DB_size;
+	int flag, flag_r, *template_lengths;
 	int *matched_templates, *bestTemplates, *best_start_pos, *best_end_pos;
-	int *template_lengths, *qBoundPtr, stats[5];
-	unsigned randScore, *fragmentCounts, *readCounts;
+	unsigned *fragmentCounts, *readCounts;
 	long best_read_score, read_score, seq_seeker;
-	long unsigned Nhits, template_tot_ulen, bestNum, counter, seqin_size;
+	long unsigned Nhits, template_tot_ulen, counter, seqin_size;
 	long unsigned *w_scores, *uniq_alignment_scores, *alignment_scores;
-	double tmp_score, bestScore, id, cover, q_id, q_cover, p_value;
+	double id, cover, q_id, q_cover, p_value;
 	long double depth, q_value, expected;
 	FILE *inputfile, *frag_in_raw, *res_out, *tsv_out, *name_file;
 	FILE *alignment_out, *consensus_out, *frag_out_raw, **template_fragments;
@@ -1427,7 +899,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	FileBuff *frag_out, *frag_out_all, *matrix_out, *vcf_out;
 	Aln *aligned, *gap_align;
 	Assem *aligned_assem;
-	Frag **alignFrags, *alignFrag;
+	Frag **alignFrags;
 	CompDNA *qseq_comp, *qseq_r_comp;
 	Qseqs *qseq, *qseq_r, *header, *header_r, *template_name;
 	AssemInfo *matrix;
@@ -1709,9 +1181,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	if(!template_fragments) {
 		ERROR();
 	}
-	fragCount = 0;
-	fileCount = 0;
-	maxFrag = 1000000;
 	
 	/* Patricks features */
 	if(extendedFeatures) {
@@ -1755,513 +1224,13 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* ConClave */
 	if(ConClave == 1) {
-		while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			flag = stats[4];
-			
-			sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-			sfread(header->seq, 1, header->len, frag_in_raw);
-			sfread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			/* Several mapped templates, choose best */
-			if(bestHits > 1) {
-				bestTemplate = -1;
-				bestScore = 0;
-				best_read_score = 0;
-				bestNum = 0;
-				start = 0;
-				end = 0;
-				/* iterate hits */
-				for(i = 0; i != bestHits; ++i) {
-					tmp_tmp_template = bestTemplates[i];
-					tmp_start = best_start_pos[i];
-					tmp_end = best_end_pos[i];
-					if(tmp_tmp_template < 0) {
-						tmp_template = -tmp_tmp_template;
-					} else {
-						tmp_template = tmp_tmp_template;
-					}
-					tmp_score = 1.0 * alignment_scores[tmp_template] / (template_lengths[tmp_template] - kmersize + 1);
-					if(tmp_score > bestScore) {
-					//if(alignment_scores[tmp_template] > best_read_score) {
-						bestTemplate = tmp_tmp_template;
-						best_read_score = alignment_scores[tmp_template];
-						bestScore = tmp_score;
-						bestNum = uniq_alignment_scores[tmp_template];
-						start = tmp_start;
-						end = tmp_end;
-					//} else if(alignment_scores[tmp_template] == best_read_score) {
-					} else if(tmp_score == bestScore) {
-						//if(tmp_score > bestScore) {
-						if(alignment_scores[tmp_template] > best_read_score) {
-							bestTemplate = tmp_tmp_template;
-							best_read_score = alignment_scores[tmp_template];
-							bestScore = tmp_score;
-							bestNum = uniq_alignment_scores[tmp_template];
-							start = tmp_start;
-							end = tmp_end;
-						//} else if(tmp_score == bestScore && alignment_scores[tmp_template] > bestNum) {
-						} else if(alignment_scores[tmp_template] == best_read_score) {
-							if(uniq_alignment_scores[tmp_template] > bestNum) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-								start = tmp_start;
-								end = tmp_end;
-							} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_template < abs(bestTemplate)) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-								start = tmp_start;
-								end = tmp_end;
-							}
-						}
-					}
-				}
-			} else {
-				bestTemplate = *bestTemplates;
-				start = *best_start_pos;
-				end = *best_end_pos;
-			}
-			
-			/* reverse complement seq */
-			if(bestTemplate < 0) {
-				bestTemplate = -bestTemplate;
-				strrc(qseq->seq, qseq->len);
-				flag |= 16;
-				
-				/* check and invert query bounds */
-				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
-					/* get q-bounds */
-					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
-					tmp_start = *qBoundPtr;
-					tmp_end = *++qBoundPtr;
-					/* invert */
-					*qBoundPtr = qseq->len - tmp_start;
-					*--qBoundPtr = qseq->len - tmp_end;
-				}
-			}
-			w_scores[bestTemplate] += read_score;
-			if(fragmentCounts) {
-				fragmentCounts[bestTemplate]++;
-				readCounts[bestTemplate]++;
-			}
-			
-			/* dump frag info */
-			alignFrag = smalloc(sizeof(Frag));
-			alignFrag->buffer[0] = qseq->len;
-			alignFrag->buffer[1] = bestHits;
-			alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-			alignFrag->buffer[3] = start;
-			alignFrag->buffer[4] = end;
-			alignFrag->buffer[5] = header->len;
-			alignFrag->buffer[6] = flag;
-			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-			alignFrag->header = ustrdup(header->seq, header->len);
-			alignFrag->next = alignFrags[bestTemplate];
-			alignFrags[bestTemplate] = alignFrag;
-			
-			++fragCount;
-			
-			if(stats[2] < 0) {
-				if(extendedFeatures) {
-					readCounts[bestTemplate]++;
-				}
-				sfread(stats, sizeof(int), 3, frag_in_raw);
-				qseq->len = stats[0];
-				header->len = stats[1];
-				flag = stats[2];
-				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-				sfread(header->seq, 1, header->len, frag_in_raw);
-				/* dump frag info */
-				alignFrag = smalloc(sizeof(Frag));
-				alignFrag->buffer[0] = qseq->len;
-				alignFrag->buffer[1] = bestHits;
-				alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-				alignFrag->buffer[3] = start;
-				alignFrag->buffer[4] = end;
-				alignFrag->buffer[5] = header->len;
-				alignFrag->buffer[6] = flag;
-				alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-				alignFrag->header = ustrdup(header->seq, header->len);
-				alignFrag->next = alignFrags[bestTemplate];
-				alignFrags[bestTemplate] = alignFrag;
-				
-				++fragCount;
-			}
-			
-			if(fragCount >= maxFrag) {
-				template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-				++fileCount;
-				fragCount = 0;
-				/* control fileamount */
-				if(fileCount >= DB_size) {
-					template_fragments = realloc(template_fragments, (fileCount + 1) * sizeof(FILE*));
-					if(!template_fragments) {
-						ERROR();
-					}
-				}
-			}
-		}
-		template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-		++fileCount;
+		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
 	} else if(ConClave == 2) {
-		/* find potential template candidates */
-		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			
-			/* best templates, skip rest */
-			sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
-			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			
-			/* Several mapped templates, choose best */
-			if(bestHits > 1) {
-				bestTemplate = -1;
-				bestScore = 0;
-				best_read_score = 0;
-				bestNum = 0;
-				/* iterate hits */
-				for(i = 0; i != bestHits; ++i) {
-					tmp_tmp_template = bestTemplates[i];
-					if(tmp_tmp_template < 0) {
-						tmp_template = -tmp_tmp_template;
-					} else {
-						tmp_template = tmp_tmp_template;
-					}
-					tmp_score = 1.0 * alignment_scores[tmp_template] / (template_lengths[tmp_template] - kmersize + 1);
-					if(tmp_score > bestScore) {
-					//if(alignment_scores[tmp_template] > best_read_score) {
-						bestTemplate = tmp_tmp_template;
-						best_read_score = alignment_scores[tmp_template];
-						bestScore = tmp_score;
-						bestNum = uniq_alignment_scores[tmp_template];
-					//} else if(alignment_scores[tmp_template] == best_read_score) {
-					} else if(tmp_score == bestScore) {
-						//if(tmp_score > bestScore) {
-						if(alignment_scores[tmp_template] > best_read_score) {
-							bestTemplate = tmp_tmp_template;
-							best_read_score = alignment_scores[tmp_template];
-							bestScore = tmp_score;
-							bestNum = uniq_alignment_scores[tmp_template];
-						//} else if(tmp_score == bestScore && alignment_scores[tmp_template] > bestNum) {
-						} else if(alignment_scores[tmp_template] == best_read_score) {
-							if(uniq_alignment_scores[tmp_template] > bestNum) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-							} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_template < abs(bestTemplate)) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-							}
-						}
-					}
-				}
-			} else {
-				bestTemplate = *bestTemplates;
-			}
-			w_scores[abs(bestTemplate)] += read_score;
-			
-			if(stats[2] < 0) {
-				sfread(stats, sizeof(int), 2, frag_in_raw);
-				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
-			}
-		}
-		rewind(frag_in_raw);
-		
-		/* discard insignifiacant templates */
-		Nhits = 0;
-		template = DB_size;
-		while(--template) {
-			Nhits += w_scores[template];
-		}
-		
-		template = DB_size;
-		while(--template) {
-			if((read_score = w_scores[template])) {
-				t_len = template_lengths[template];
-				//expected = (Nhits - read_score) * (t_len / (template_tot_ulen - t_len + etta));
-				expected = t_len;
-				expected /= MAX(1, (template_tot_ulen - t_len));
-				expected *= (Nhits - read_score);
-				//q_value = pow(read_score - expected, 2) / (expected + read_score + etta);
-				q_value = read_score - expected;
-				q_value /= (expected + read_score);
-				q_value *= read_score - expected;
-				p_value  = p_chisqr(q_value);
-				if(cmp((p_value <= evalue && read_score > expected), (read_score >= scoreT * t_len)) == 0) {
-					w_scores[template] = 0;
-				}
-			}
-		}
-		
-		/* identify sorting keys */
-		while(fread(stats, sizeof(int), 4, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			
-			if(bestHits != 1) {
-				/* best templates, skip rest */
-				sfseek(frag_in_raw, qseq->len + header->len + (2 * bestHits + 1) * sizeof(int), SEEK_CUR);
-				sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-				bestTemplate = 0;
-				i = bestHits;
-				while(i--) {
-					template = abs(bestTemplates[i]);
-					if(w_scores[template]) {
-						if(bestTemplate) {
-							bestTemplate = 0;
-							break;
-						} else {
-							bestTemplate = template;
-						}
-					}
-				}
-				
-				if(bestTemplate) {
-					uniq_alignment_scores[bestTemplate] += read_score;
-				}
-			} else {
-				/* skip rest */
-				sfseek(frag_in_raw, qseq->len + header->len + 4 * sizeof(int), SEEK_CUR);
-			}
-			
-			if(stats[2] < 0) {
-				sfread(stats, sizeof(int), 2, frag_in_raw);
-				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
-			}
-		}
-		rewind(frag_in_raw);
-		
-		/* choose the templates */
-		memset(w_scores, 0, DB_size * sizeof(long unsigned));
-		while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
-			qseq->len = stats[0];
-			sparse = stats[1];
-			bestHits = abs(sparse);
-			read_score = abs(stats[2]);
-			header->len = stats[3];
-			flag = stats[4];
-			
-			sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-			sfread(header->seq, 1, header->len, frag_in_raw);
-			sfread(best_start_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(best_end_pos, sizeof(int), bestHits, frag_in_raw);
-			sfread(bestTemplates, sizeof(int), bestHits, frag_in_raw);
-			
-			/* Several mapped templates, choose best according to sorting keys */
-			if(bestHits != 1) {
-				bestTemplate = 0;
-				bestScore = 0;
-				start = 0;
-				end = 0;
-				
-				tot = 0;
-				i = bestHits;
-				while(i--) {
-					tot += uniq_alignment_scores[abs(bestTemplates[i])];
-				}
-				
-				if(tot && 16 <= qseq->len) {
-					/* get seed */
-					rand = qseq->seq[0];
-					i = -1;
-					j = qseq->len;
-					while(++i < 7) {
-						rand = (((rand << 2) | qseq->seq[i]) << 2) | qseq->seq[--j];
-					}
-					/* minimal standard */
-					rand = 16807 * (rand % 127773) - 2836 * (rand / 127773);
-					if (rand <= 0) {
-						rand += 0x7fffffff;
-					}
-					
-					tmp_score = rand;
-					tmp_score /= INT_MAX;
-					randScore = tmp_score * tot;
-					
-					score = 0;
-					i = 0;
-					while(i != bestHits) {
-						score += uniq_alignment_scores[abs(bestTemplates[i])];
-						if(randScore < score) {
-							bestTemplate = bestTemplates[i];
-							start = best_start_pos[i];
-							end = best_end_pos[i];
-							i = bestHits;
-						} else {
-							++i;
-						}
-					}
-					
-					if(bestTemplate == 0) {
-						tot = 0;
-					}
-				} else {
-					tot = 0;
-				}
-				
-				if(tot == 0) {
-					bestTemplate = -1;
-					best_read_score = 0;
-					bestNum = 0;
-					
-					/* iterate hits */
-					for(i = 0; i != bestHits; ++i) {
-						tmp_tmp_template = bestTemplates[i];
-						tmp_start = best_start_pos[i];
-						tmp_end = best_end_pos[i];
-						if(tmp_tmp_template < 0) {
-							tmp_template = -tmp_tmp_template;
-						} else {
-							tmp_template = tmp_tmp_template;
-						}
-						tmp_score = 1.0 * alignment_scores[tmp_template] / (template_lengths[tmp_template] - kmersize + 1);
-						if(tmp_score > bestScore) {
-						//if(alignment_scores[tmp_template] > best_read_score) {
-							bestTemplate = tmp_tmp_template;
-							best_read_score = alignment_scores[tmp_template];
-							bestScore = tmp_score;
-							bestNum = uniq_alignment_scores[tmp_template];
-							start = tmp_start;
-							end = tmp_end;
-						//} else if(alignment_scores[tmp_template] == best_read_score) {
-						} else if(tmp_score == bestScore) {
-							//if(tmp_score > bestScore) {
-							if(alignment_scores[tmp_template] > best_read_score) {
-								bestTemplate = tmp_tmp_template;
-								best_read_score = alignment_scores[tmp_template];
-								bestScore = tmp_score;
-								bestNum = uniq_alignment_scores[tmp_template];
-								start = tmp_start;
-								end = tmp_end;
-							//} else if(tmp_score == bestScore && alignment_scores[tmp_template] > bestNum) {
-							} else if(alignment_scores[tmp_template] == best_read_score) {
-								if(uniq_alignment_scores[tmp_template] > bestNum) {
-									bestTemplate = tmp_tmp_template;
-									best_read_score = alignment_scores[tmp_template];
-									bestScore = tmp_score;
-									bestNum = uniq_alignment_scores[tmp_template];
-									start = tmp_start;
-									end = tmp_end;
-								} else if(uniq_alignment_scores[tmp_template] == bestNum && tmp_template < abs(bestTemplate)) {
-									bestTemplate = tmp_tmp_template;
-									best_read_score = alignment_scores[tmp_template];
-									bestScore = tmp_score;
-									bestNum = uniq_alignment_scores[tmp_template];
-									start = tmp_start;
-									end = tmp_end;
-								}
-							}
-						}
-					}
-				}
-			} else {
-				bestTemplate = *bestTemplates;
-				start = *best_start_pos;
-				end = *best_end_pos;
-			}
-			
-			/* reverse complement seq */
-			if(bestTemplate < 0) {
-				bestTemplate = -bestTemplate;
-				strrc(qseq->seq, qseq->len);
-				flag |= 16;
-				
-				/* check and invert query bounds */
-				if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
-					/* get q-bounds */
-					qBoundPtr = (int*) (header->seq + (header->len - 2 * sizeof(int)));
-					tmp_start = *qBoundPtr;
-					tmp_end = *++qBoundPtr;
-					/* invert */
-					*qBoundPtr = qseq->len - tmp_start;
-					*--qBoundPtr = qseq->len - tmp_end;
-				}
-			}
-			w_scores[bestTemplate] += read_score;
-			if(fragmentCounts) {
-				fragmentCounts[bestTemplate]++;
-				readCounts[bestTemplate]++;
-			}
-			
-			/* dump frag info */
-			alignFrag = smalloc(sizeof(Frag));
-			alignFrag->buffer[0] = qseq->len;
-			alignFrag->buffer[1] = bestHits;
-			alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-			alignFrag->buffer[3] = start;
-			alignFrag->buffer[4] = end;
-			alignFrag->buffer[5] = header->len;
-			alignFrag->buffer[6] = flag;
-			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-			alignFrag->header = ustrdup(header->seq, header->len);
-			alignFrag->next = alignFrags[bestTemplate];
-			alignFrags[bestTemplate] = alignFrag;
-			
-			++fragCount;
-			
-			if(stats[2] < 0) {
-				if(extendedFeatures) {
-					readCounts[bestTemplate]++;
-				}
-				sfread(stats, sizeof(int), 3, frag_in_raw);
-				qseq->len = stats[0];
-				header->len = stats[1];
-				flag = stats[2];
-				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-				sfread(header->seq, 1, header->len, frag_in_raw);
-				/* dump frag info */
-				alignFrag = smalloc(sizeof(Frag));
-				alignFrag->buffer[0] = qseq->len;
-				alignFrag->buffer[1] = bestHits;
-				alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-				alignFrag->buffer[3] = start;
-				alignFrag->buffer[4] = end;
-				alignFrag->buffer[5] = header->len;
-				alignFrag->buffer[6] = flag;
-				alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-				alignFrag->header = ustrdup(header->seq, header->len);
-				alignFrag->next = alignFrags[bestTemplate];
-				alignFrags[bestTemplate] = alignFrag;
-				
-				++fragCount;
-			}
-			
-			if(fragCount >= maxFrag) {
-				template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-				++fileCount;
-				fragCount = 0;
-				/* control fileamount */
-				if(fileCount >= DB_size) {
-					template_fragments = realloc(template_fragments, (fileCount + 1) * sizeof(FILE*));
-					if(!template_fragments) {
-						ERROR();
-					}
-				}
-			}
-		}
-		template_fragments[fileCount] = printFrags(alignFrags, DB_size);
-		++fileCount;
+		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
+	} else {
+		fileCount = 0;
 	}
 	
-	fragCount = 0;
 	free(alignFrags);
 	free(best_start_pos);
 	free(best_end_pos);
@@ -2568,8 +1537,6 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(tsv) {
-							/* here */
-							/* test ID = 0 */
 							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 						}
 						if(extendedFeatures) {

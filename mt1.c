@@ -454,8 +454,6 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 				thread->template_name, read_score, 0, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) read_score, p_value);
 		if(tsv) {
-			/* here */
-			/* test ID = 0 */
 			printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, aligned_assem->readCountAln, read_score, 0, (double) read_score, p_value, read_score);
 		}
 	}

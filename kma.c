@@ -26,6 +26,7 @@
 #include "alnfrags.h"
 #include "assembly.h"
 #include "chain.h"
+#include "conclave.h"
 #include "hashmapkma.h"
 #include "kma.h"
 #include "kmapipe.h"
@@ -652,6 +653,8 @@ int kma_main(int argc, char *argv[]) {
 				proxiTestBest = &proxiTestBestScoreLen;
 				getBestAnker = &getBestAnkerScoreLen;
 				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
 			} else if(strcmp(argv[args], "-proxi") == 0) {
 				if(++args < argc) {
 					minFrac = strtod(argv[args], &exeBasic);
@@ -1075,6 +1078,14 @@ int kma_main(int argc, char *argv[]) {
 				mrc = 0.7; /* -mrc 0.7 */
 			 	scoreT = 0.25; /* -mrs 0.25 */
 			 	minQ = 10; /* -eq 10 */
+			 	/* -lc */
+			 	kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);

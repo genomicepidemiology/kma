@@ -25,7 +25,7 @@
 KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, const int*, const int, const int, int*, int*, int*, char*) = &getBestChainTemplates;
 int (*kmerAnkerScore)(KmerAnker*) = &ankerScore;
 const int (*testExtension)(const int, const int, const int) = &testExtensionScore;
-const int (*proxiTestBest)(const double, const int, const int, const int) = &proxiTestBestScore;
+const int (*proxiTestBest)(const double, const int, const int, const int, const int) = &proxiTestBestScore;
 KmerAnker * (*getBestAnker)(KmerAnker**, unsigned*, const int*) = &getBestAnkerScore;
 KmerAnker * (*getTieAnker)(int, KmerAnker*, const KmerAnker*) = &getTieAnkerScore;
 
@@ -46,12 +46,12 @@ const int testExtensionScoreLen(const int q_len, const int t_len, const int best
 	return (q_len < t_len ? q_len : t_len) == best_len;
 }
 
-const int proxiTestBestScore(const double proxiScore, const int score, const int len, const int best_len) {
+const int proxiTestBestScore(const double proxiScore, const int score, const int q_len, const int t_len, const int best_len) {
 	return (proxiScore <= score);
 }
 
-const int proxiTestBestScoreLen(const double proxiScore, const int score, const int len, const int best_len) {
-	return (proxiScore / best_len * len <= score);
+const int proxiTestBestScoreLen(const double proxiScore, const int score, const int q_len, const int t_len, const int best_len) {
+	return (proxiScore / best_len * (q_len < t_len ? q_len : t_len) <= score);
 }
 
 const int mrchain(int *bestTemaples, const int *template_lengths, const int q_len, const int maplen) {
@@ -217,7 +217,8 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 	
 	return j ? prev : 0;
 }
-
+/* here */
+#include <stdio.h>
 KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, int *bests, int *Score, int *extendScore, char *include) {
 	
 	/* get set of best templates and silences the chain, except for the initial anker */
@@ -324,7 +325,7 @@ KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, con
 	j = 0;
 	for(i = 1; i <= *bests; ++i) {
 		template = bests[i];
-		if(!include[template] && proxiTestBest(proxiScore, Score[template], template_lengths[template], target_len)) {
+		if(!include[template] && proxiTestBest(proxiScore, Score[template], q_len, template_lengths[template], target_len)) {
 			bests[++j] = template;
 			if(softProxi) {
 				softProxi[template] += Score[template];

@@ -5005,7 +5005,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	int i, j, j_u, rc, Wl, W1, U, M, MM, Ms, MMs, Us, W1s, score, gaps, HIT;
 	int start, end, pos, shifter, kmersize, mlen, cover, len, template, test;
 	int cStart, cStart_r, cPos, iPos, len_len, mPos, hLen, flag, seqend, SU;
-	int m, mm, *bests;
+	int *bests;
 	unsigned DB_size, hitCounter, hitCounter_r, ties, ties_len;
 	unsigned *values, *last;
 	short unsigned *values_s;
@@ -5170,70 +5170,6 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 							// unlikely deletion or random k-mer mismatch, 
 							// assume better and go random zero score
 						}*/
-						
-						/* here */
-						if(0) {
-						if(kmersize < gaps) {
-							/* insertion */
-							Ms += kmersize;
-							gaps -= kmersize;
-							if(gaps) {
-								/* go for best scenario */
-								if(gaps == 1) {
-									MMs += 2;
-								} else if((2 * MM + (gaps - 2) * M) < 0) {
-									Ms += (gaps - 2);
-									MMs += 2;
-								} else {
-									if(last) {
-										/* update and link between ankers */
-										V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
-										V_score->end = j - gaps + kmersize;
-										V_score->descend = V_score + 1;
-										++V_score;
-									}
-									V_score->start = j;
-									V_score->values = values;
-									V_score->descend = 0;
-									last = values;
-									Ms = kmersize;
-									MMs = 0;
-									Us = 0;
-									W1s = 0;
-									++hitCounter;
-								}
-							} else {
-								++MMs;
-							}
-						} else if(gaps) {
-							/* mismatch or indel */
-							if(gaps <= 2) {
-								mm = gaps;
-								m = 0;
-							} else {
-								mm = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-								mm = MAX(2, mm);
-								m = MIN(gaps - mm, kmersize);
-								m = MIN(m, mm);
-							}
-							
-							/* evaluate best option */
-							if((W1 + (gaps - 1) * U) <= (mm * MM + m * M)) {
-								MMs += mm;
-								Ms += m;
-							} else {
-								++W1s;
-								Us += (gaps -1);
-							}
-							/*
-							--gaps;
-							++W1s;
-							Us += gaps;
-							*/
-						} else {
-							++Ms;
-						}
-						}
 					} else {
 						if(last) {
 							/* update and link between ankers */
@@ -5352,70 +5288,6 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 							// unlikely deletion or random k-mer mismatch, 
 							// assume better and go random zero score
 						}*/
-						
-						/* here */
-						if(0) {
-						if(kmersize < gaps) {
-							/* insertion */
-							Ms += kmersize;
-							gaps -= kmersize;
-							if(gaps) {
-								/* go for best scenario */
-								if(gaps == 1) {
-									MMs += 2;
-								} else if((2 * MM + (gaps - 2) * M) < 0) {
-									Ms += (gaps - 2);
-									MMs += 2;
-								} else {
-									if(last) {
-										/* update and link between ankers */
-										V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
-										V_score->end = j - gaps + kmersize;
-										V_score->descend = V_score + 1;
-										++V_score;
-									}
-									V_score->start = j;
-									V_score->values = values;
-									V_score->descend = 0;
-									last = values;
-									Ms = kmersize;
-									MMs = 0;
-									Us = 0;
-									W1s = 0;
-									++hitCounter_r;
-								}
-							} else {
-								++MMs;
-							}
-						} else if(gaps) {
-							/* mismatch or indel */
-							if(gaps <= 2) {
-								mm = gaps;
-								m = 0;
-							} else {
-								mm = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-								mm = MAX(2, mm);
-								m = MIN(gaps - mm, kmersize);
-								m = MIN(m, mm);
-							}
-							
-							/* evaluate best option */
-							if((W1 + (gaps - 1) * U) <= (mm * MM + m * M)) {
-								MMs += mm;
-								Ms += m;
-							} else {
-								++W1s;
-								Us += (gaps -1);
-							}
-							/*
-							--gaps;
-							++W1s;
-							Us += gaps;
-							*/
-						} else {
-							++Ms;
-						}
-						}
 					} else {
 						if(last) {
 							/* update and link between ankers */
@@ -5985,8 +5857,8 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 	static double coverT = 0.5, mrs = 0.5;
 	static KmerAnker **tVF_scores;
 	static SeqmentTree **tSeqments;
-	int i, j, j_u, l, shifter, prefix_shifter, kmersize, DB_size, pos, start;
-	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, end, len, gaps, template, test, n;
+	int i, j, j_u, shifter, prefix_shifter, kmersize, DB_size, pos, start;
+	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, end, len, gaps, template, test;
 	int len_len, mlen, tflag, cPos, iPos, mPos, hLen, seqend, score, *bests;
 	unsigned SU, HIT, cover, hitCounter, ties, ties_len, prefix_len, flag;
 	unsigned *values, *last;
@@ -6288,61 +6160,6 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 								// unlikely deletion or random k-mer mismatch, 
 								// assume better and go random zero score
 							}*/
-							
-							/* here */
-							if(0) {
-							if(kmersize < gaps) {
-								Ms += kmersize;
-								gaps -= kmersize;
-								if(gaps) {
-									/* go for best scenario */
-									if(gaps == 1) {
-										MMs += 2;
-									} else if((MM * 2 + (gaps - 2) * M) < 0) {
-										Ms += (gaps - 2);
-										MMs += 2;
-									} else {
-										if(last) {
-											/* update and link between ankers */
-											V_score->weight = Ms * M + MMs * MM + Us * U + W1s * W1;
-											V_score->end = j - gaps + kmersize;
-											V_score->descend = V_score + 1;
-											++V_score;
-										}
-										V_score->start = j;
-										V_score->values = values;
-										V_score->descend = 0;
-										last = values;
-										Ms = kmersize;
-										MMs = 0;
-										Us = 0;
-										W1s = 0;
-										++hitCounter;
-									}
-								} else {
-									++MMs;
-								}
-							} else if(gaps) {
-								/* mismatch or indel */
-								if(gaps <= 2) {
-									MMs += gaps;
-								} else {
-									l = gaps / kmersize + (gaps % kmersize ? 1 : 0);
-									l = MAX(2, l);
-									MMs += l;
-									n = MIN(gaps - l, kmersize);
-									Ms += MIN(n, l);
-								}
-								/*
-								--gaps;
-								++W1s;
-								Us += gaps;
-								*/
-							} else {
-								++Ms;
-							}
-							gaps = 0;
-							}
 						} else {
 							if(last) {
 								/* update and link between ankers */

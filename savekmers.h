@@ -88,6 +88,3 @@ void ankerAndClean(int *regionTemplates, int *Score, int *Score_r, char *include
 void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, char *include, int *template_lengths, unsigned **VF_scores, unsigned **VR_scores, int *tmpNs, CompDNA *qseq, int HIT, int bestScore, int start_cut, int end_cut, Qseqs *header, volatile int *excludeOut, FILE *out);
 int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
 int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out);
-
-/* here */
-void printKmer(long unsigned kmer, int kmersize);

@@ -164,7 +164,6 @@ int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inpu
 	
 	static int infoSize[7] = {0, 0, 0, 0, 0, 0, 0};
 	
-	/* here */
 	if(infoSize[0] < 0) {
 		*out_Tem = -infoSize[0];
 		return 0;

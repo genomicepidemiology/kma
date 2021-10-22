@@ -256,7 +256,6 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		/* print number of fragments and send terminating signal*/
 		sfwrite(&(int){-bestTemplates[2]}, sizeof(int), 1, out);
 	}
-	/* here */
 	if(softProxi) {
 		sfwrite(softProxi, sizeof(int), 6, out);
 		sfwrite(softProxi, sizeof(long unsigned), templates->DB_size, out);

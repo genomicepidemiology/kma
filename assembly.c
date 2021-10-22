@@ -1651,7 +1651,7 @@ void * assemble_KMA(void *arg) {
 	Assemble_thread *thread = arg;
 	int i, minlen, aln_len, kmersize, sam, chunk, ef, template;
 	int read_score, asm_len, nextTemplate, file_i, file_count, delta, status;
-	int thread_num, mq, bcd, start, end, q_start, q_end;
+	int thread_num, mq, bcd, start, end, q_start, q_end, Wl;
 	int stats[5], buffer[8], *qBoundPtr;
 	short unsigned *counts;
 	double score, scoreT, mrc, evalue;
@@ -1696,6 +1696,7 @@ void * assemble_KMA(void *arg) {
 	thread_num = thread->thread_num;
 	seq_in = thread->seq_in;
 	kmersize = thread->kmersize;
+	Wl = points->rewards->Wl;
 	
 	if(template != -2) {
 		wait_atomic(thread_begin);
@@ -1889,9 +1890,20 @@ void * assemble_KMA(void *arg) {
 						aln_len = alnStat.len;
 						start = alnStat.pos;
 						end = start + aln_len - alnStat.tGaps;
+						if(t_len < end) {
+							/* circular aln */
+							end -= t_len;
+						}
 						
 						/* Get normed score check read coverage */
 						read_score = alnStat.score;
+						/* full gene award */
+						if(start == 0) {
+							read_score += Wl;
+						}
+						if(end == t_len) {
+							read_score += Wl;
+						}
 						if(minlen <= aln_len && mrcheck(mrc, alnStat, qseq->len, t_len)) {
 							score = 1.0 * read_score / aln_len;
 						} else {
