@@ -661,7 +661,7 @@ int kma_main(int argc, char *argv[]) {
 					if(*exeBasic != 0 || minFrac < -1 || 1 < minFrac) {
 						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
 						exit(1);
-					} else {
+					} else if(minFrac != 1.0 && minFrac != -1.0) {
 						/* set proximity parameter */
 						getMatch = &getProxiMatch;
 						getMatchSparse = &getProxiMatchSparse;
@@ -978,7 +978,7 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-nf") == 0) {
 				nf = 1;
 			} else if(strcmp(argv[args], "-cge") == 0) {
-				scoreT = 0.75;
+				scoreT = 0.5;
 				rewards->M = 1;
 				rewards->MM = -3;
 				rewards->W1 = -5;
@@ -1066,6 +1066,7 @@ int kma_main(int argc, char *argv[]) {
 				significantBase = &significantAndSupport;
 				support = 0.7; /* -bc 0.7 */
 			 	coverT = 0.1; /* -mct 0.1 */
+			 	bcd = 10; /* -bcd 10 */
 			 	/* -proxi -0.9 */
 				minFrac = -0.9;
 			 	getMatch = &getProxiMatch;
@@ -1086,6 +1087,48 @@ int kma_main(int argc, char *argv[]) {
 				getTieAnker = &getTieAnkerScoreLen;
 				ConClavePtr = &runConClave_lc;
 				ConClave2Ptr = &runConClave2_lc;
+				/* -ts 5 */
+				ts = 5;
+			} else if(strcmp(argv[args], "-ill") == 0) {
+				/* -1t1 */
+				kmerScan = &save_kmers;
+				one2one = 1;
+				/* -cge */
+				/*
+				scoreT = 0.5;
+				rewards->M = 1;
+				rewards->MM = -3;
+				rewards->W1 = -5;
+				rewards->U = -1;
+				rewards->PE = 17;
+				*/
+				/* -mrc 0.7 */
+				mrc = 0.7;
+				/* -apm p */
+				alnFragsPE = &alnFragsPenaltyPE;
+				save_kmers_pair = &save_kmers_penaltyPair;
+				/* -lc */
+				kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
+				/* -proxi -0.99 */
+				minFrac = -0.99;
+				getMatch = &getProxiMatch;
+				getMatchSparse = &getProxiMatchSparse;
+				getSecondForce = &getSecondProxiForce;
+				getSecondPen = &getSecondProxiPen;
+				getF = &getF_Proxi;
+				getR = &getR_Proxi;
+				getChainTemplates = &getProxiChainTemplates;
+				/* -bc 0.9 */
+				significantBase = &significantAndSupport;
+				support = 0.9;
+				/* -bcd 10 */
+				bcd = 10;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);

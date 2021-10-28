@@ -546,10 +546,13 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 									++W1s;
 									Us += (gaps -1);
 								}
-							} /*else {
-								// unlikely deletion or random k-mer mismatch, 
-								// assume better and go random zero score
-							}*/
+							} else {
+								Ms += gaps;
+								++MMs;
+								/* unlikely deletion or random k-mer mismatch, 
+								unless minimizers or homopolymer compression,
+								assume better and go random zero score else. */
+							}
 							
 							HIT = j;
 							gaps = 0;
@@ -598,10 +601,12 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 											} else {
 												Scores[template] += score + (W1 + (gaps - 1) * U);
 											}
-										} /*else {
-											// unlikely deletion or random k-mer mismatch, 
-											// assume better and go random zero score
-										}*/
+										} else {
+											Scores[template] += gaps * M + MM;
+											/* unlikely deletion or random k-mer mismatch, 
+											unless minimizers or homopolymer compression,
+											assume better and go random zero score else. */
+										}
 									} else {
 										Scores[template] = score;
 										if(include[template] == 0) {
@@ -1102,10 +1107,13 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 								++W1s;
 								Us += (gaps -1);
 							}
-						} /*else {
-							// unlikely deletion or random k-mer mismatch, 
-							// assume better and go random zero score
-						}*/
+						} else {
+							Ms += gaps;
+							++MMs;
+							/* unlikely deletion or random k-mer mismatch, 
+							unless minimizers or homopolymer compression,
+							assume better and go random zero score else. */
+						}
 						
 						HIT = j;
 						gaps = 0;
@@ -1154,10 +1162,12 @@ int get_kmers_for_pair_pseoudoSparse(const HashMapKMA *templates, const Penaltie
 										} else {
 											Scores[template] += score + (W1 + (gaps - 1) * U);
 										}
-									} /*else {
-										// unlikely deletion or random k-mer mismatch, 
-										// assume better and go random zero score
-									}*/
+									} else {
+										Scores[template] += gaps * M + MM;
+										/* unlikely deletion or random k-mer mismatch, 
+										unless minimizers or homopolymer compression,
+										assume better and go random zero score else. */
+									}
 								} else {
 									Scores[template] = score;
 									if(include[template] == 0) {
@@ -2238,10 +2248,13 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 								++W1s;
 								Us += (gaps -1);
 							}
-						} /*else {
-							// unlikely deletion or random k-mer mismatch, 
-							// assume better and go random zero score
-						}*/
+						} else {
+							Ms += gaps;
+							++MMs;
+							/* unlikely deletion or random k-mer mismatch, 
+							unless minimizers or homopolymer compression,
+							assume better and go random zero score else. */
+						}
 						
 						HIT = j;
 						gaps = 0;
@@ -2290,10 +2303,12 @@ int save_kmers_pseuodeSparse(const HashMapKMA *templates, const Penalties *rewar
 										} else {
 											Score[template] += score + (W1 + (gaps - 1) * U);
 										}
-									} /*else {
-										// unlikely deletion or random k-mer mismatch, 
-										// assume better and go random zero score
-									}*/
+									} else {
+										Score[template] += gaps * M + MM;
+										/* unlikely deletion or random k-mer mismatch, 
+										unless minimizers or homopolymer compression,
+										assume better and go random zero score else. */
+									}
 								} else {
 									Score[template] = score;
 									if(include[template] == 0) {
@@ -2516,10 +2531,13 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								++W1s;
 								Us += (gaps -1);
 							}
-						} /*else {
-							// unlikely deletion or random k-mer mismatch, 
-							// assume better and go random zero score
-						}*/
+						} else {
+							Ms += gaps;
+							++MMs;
+							/* unlikely deletion or random k-mer mismatch, 
+							unless minimizers or homopolymer compression,
+							assume better and go random zero score else. */
+						}
 						
 						HIT = j;
 						gaps = 0;
@@ -2568,10 +2586,12 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 										} else {
 											Score[template] += score + (W1 + (gaps - 1) * U);
 										}
-									} /*else {
-										// unlikely deletion or random k-mer mismatch, 
-										// assume better and go random zero score
-									}*/
+									} else {
+										Score[template] += gaps * M + MM;
+										/* unlikely deletion or random k-mer mismatch, 
+										unless minimizers or homopolymer compression,
+										assume better and go random zero score else. */
+									}
 								} else {
 									Score[template] = score;
 									if(include[template] == 0) {
@@ -2746,10 +2766,13 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 								++W1s;
 								Us += (gaps -1);
 							}
-						} /*else {
-							// unlikely deletion or random k-mer mismatch, 
-							// assume better and go random zero score
-						}*/
+						} else {
+							Ms += gaps;
+							++MMs;
+							/* unlikely deletion or random k-mer mismatch, 
+							unless minimizers or homopolymer compression,
+							assume better and go random zero score else. */
+						}
 						
 						HIT = j;
 						gaps = 0;
@@ -2798,10 +2821,12 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 										} else {
 											Score_r[template] += score + (W1 + (gaps - 1) * U);
 										}
-									} /*else {
-										// unlikely deletion or random k-mer mismatch, 
-										// assume better and go random zero score
-									}*/
+									} else {
+										Score_r[template] += gaps * M + MM;
+										/* unlikely deletion or random k-mer mismatch, 
+										unless minimizers or homopolymer compression,
+										assume better and go random zero score else. */
+									}
 								} else {
 									Score_r[template] = score;
 									if(include[template] == 0) {
@@ -5420,15 +5445,9 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 						} else {
 							score += V_score->weight + (W1 + (gaps - 1) * U);
 						}
-					} else if(gaps == 0) {
-						score += V_score->weight + W1;
 					} else {
-						/* deletion */
-						/*
-						gaps = -gaps;
-						score += V_score->weight - gaps * M + (W1 + (gaps - 1) * U);
-						*/
-						score += V_score->weight + gaps * M + (W1 - (gaps + 1) * U);
+						/* snp */
+						score += V_score->weight + gaps * M + MM;
 					}
 					
 					/* verify extension */
@@ -6273,15 +6292,9 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 					} else {
 						score += V_score->weight + (W1 + (gaps - 1) * U);
 					}
-				} else if(gaps == 0) {
-					score += V_score->weight + W1;
 				} else {
-					/* deletion */
-					/*
-					gaps = -gaps;
-					score += V_score->weight - gaps * M + (W1 + (gaps - 1) * U);
-					*/
-					score += V_score->weight + gaps * M + (W1 - (gaps + 1) * U);
+					/* snp */
+					score += V_score->weight + gaps * M + MM;
 				}
 				
 				/* verify extension */

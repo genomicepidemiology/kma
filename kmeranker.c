@@ -158,20 +158,29 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 					score = node->weight;
 				} else {
 					if(gaps == -kmersize) {
+						/* Perfect match */
 						score += node->weight - (kmersize - 1) * M;
-					} else if(2 < gaps) {
-						MMs = gaps / kmersize + ((gaps % kmersize) ? 1 : 0);
-						MMs = 2 < MMs ? MMs : 2;
-						gaps -= MMs;
-						Ms = gaps < kmersize ? gaps : kmersize;
-						Ms = Ms < MMs ? Ms : MMs;
-						score += node->weight + Ms * M + MMs * MM;
-					} else if(gaps == 0) {
-						score += node->weight + W1;
-					} else if(gaps < 0) {
-						score += (W1 + (-gaps - 1) * U) + node->weight + gaps * M;
+					} else if(0 < gaps) {
+						/* mismatch or insersion */
+						if(gaps <= 2) {
+							MMs = gaps;
+							Ms = 0;
+						} else {
+							MMs = gaps / kmersize + ((gaps % kmersize) ? 1 : 0);
+							MMs = 2 < MMs ? MMs : 2;
+							Ms = (gaps - MMs) < kmersize ? (gaps - MMs) : kmersize;
+							Ms = Ms < MMs ? Ms : MMs;
+						}
+						
+						/* evaluate best option */
+						if((W1 + (gaps - 1) * U) <= (MMs * MM + Ms * M)) {
+							score += node->weight + Ms * M + MMs * MM;
+						} else {
+							score += node->weight + (W1 + (gaps - 1) * U);
+						}
 					} else {
-						score += node->weight + gaps * MM;
+						/* snp */
+						score += node->weight + gaps * M + MM;
 					}
 					
 					/* mark as used */
@@ -204,7 +213,7 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 	j = 0;
 	for(i = 1; i <= *bests; ++i) {
 		template = bests[i];
-		if(include[template] == 1 && Score[template] == bestScore && testExtension(q_len, template_lengths[template], target_len)) {
+		if(include[template] == 1 && proxiTestBest(bestScore, Score[template], q_len, template_lengths[template], target_len)) {
 			bests[++j] = template;
 		}
 		
@@ -217,8 +226,7 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 	
 	return j ? prev : 0;
 }
-/* here */
-#include <stdio.h>
+
 KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, int *bests, int *Score, int *extendScore, char *include) {
 	
 	/* get set of best templates and silences the chain, except for the initial anker */
@@ -280,20 +288,29 @@ KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, con
 				bests[++*bests] = template;
 			} else {
 				if(gaps == -kmersize) {
+					/* Perfect match */
 					score += node->weight - (kmersize - 1) * M;
-				} else if(2 < gaps) {
-					MMs = gaps / kmersize + ((gaps % kmersize) ? 1 : 0);
-					MMs = 2 < MMs ? MMs : 2;
-					gaps -= MMs;
-					Ms = gaps < kmersize ? gaps : kmersize;
-					Ms = Ms < MMs ? Ms : MMs;
-					score += node->weight + Ms * M + MMs * MM;
-				} else if(gaps == 0) {
-					score += node->weight + W1;
-				} else if(gaps < 0) {
-					score += (W1 + (-gaps - 1) * U) + node->weight + gaps * M;
+				} else if(0 < gaps) {
+					/* mismatch or insersion */
+					if(gaps <= 2) {
+						MMs = gaps;
+						Ms = 0;
+					} else {
+						MMs = gaps / kmersize + ((gaps % kmersize) ? 1 : 0);
+						MMs = 2 < MMs ? MMs : 2;
+						Ms = (gaps - MMs) < kmersize ? (gaps - MMs) : kmersize;
+						Ms = Ms < MMs ? Ms : MMs;
+					}
+					
+					/* evaluate best option */
+					if((W1 + (gaps - 1) * U) <= (MMs * MM + Ms * M)) {
+						score += node->weight + Ms * M + MMs * MM;
+					} else {
+						score += node->weight + (W1 + (gaps - 1) * U);
+					}
 				} else {
-					score += node->weight + gaps * MM;
+					/* snp */
+					score += node->weight + gaps * M + MM;
 				}
 				
 				/* mark as used */
