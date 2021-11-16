@@ -1142,18 +1142,25 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 		/* penalty for non complete mapping */
 		read_score = alnStat.score;
 		/* full gene award */
-		if(start == 0) {
+		if(q_len <= aln_len || t_len <= aln_len) {
 			read_score += Wl;
-		}
-		if(end == t_len) {
-			read_score += Wl;
+			score = aln_len;
+		} else {
+			if(start == 0) {
+				read_score += Wl;
+			}
+			if(end == t_len) {
+				read_score += Wl;
+			}
+			score = q_len < t_len ? q_len : t_len;
 		}
 		//read_score += (((start != 0) + (end != template_lengths[abs(template)])) * Wl);
 		
 		/* Get normed score check read coverage */
 		read_score = alnStat.score;
 		if(minlen <= aln_len && mrcheck(mrc, alnStat, q_len, t_len)) {
-			score = 1.0 * read_score / aln_len;
+			//score = 1.0 * read_score / aln_len;
+			score = read_score / score;
 		} else {
 			read_score = 0;
 			score = 0;
@@ -1169,6 +1176,16 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 			++bestHits;
 			
 			/* save best scores */
+			/*
+			if(*best_read_score < read_score) {
+				bestScore = score;
+				*best_read_score = read_score;
+				bestLen = aln_len;
+			} else if(*best_read_score == read_score && bestScore < score) {
+				bestScore = score;
+				bestLen = aln_len;
+			}
+			*/
 			if(bestScore < score) {
 				bestScore = score;
 				*best_read_score = read_score;

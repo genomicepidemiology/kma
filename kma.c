@@ -173,6 +173,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ex_mode", "Searh kmers exhaustively", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-fpm", "Pairing method (p,u,f)", "u");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mq", "Minimum mapping quality", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-localopen", "Penalty for local opening", "6");
 	
 	fprintf(out, "#\n# Alignment:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ca", "Circular alignments", "False");
@@ -1076,8 +1077,16 @@ int kma_main(int argc, char *argv[]) {
 				getF = &getF_Proxi;
 				getR = &getR_Proxi;
 				getChainTemplates = &getProxiChainTemplates;
-				mrc = 0.7; /* -mrc 0.7 */
-			 	scoreT = 0.25; /* -mrs 0.25 */
+				/* -cge */
+				/*
+				rewards->M = 1;
+				rewards->MM = -3;
+				rewards->W1 = -5;
+				rewards->U = -1;
+				rewards->PE = 17;
+				*/
+				scoreT = 0.25; /* -mrs 0.25 */
+			 	mrc = 0.7; /* -mrc 0.7 */
 			 	minQ = 10; /* -eq 10 */
 			 	/* -lc */
 			 	kmerAnkerScore = &ankerScoreLen;
@@ -1087,23 +1096,21 @@ int kma_main(int argc, char *argv[]) {
 				getTieAnker = &getTieAnkerScoreLen;
 				ConClavePtr = &runConClave_lc;
 				ConClave2Ptr = &runConClave2_lc;
-				/* -ts 5 */
-				ts = 5;
+				/* -ts 2 */
+				ts = 2;
 			} else if(strcmp(argv[args], "-ill") == 0) {
 				/* -1t1 */
 				kmerScan = &save_kmers;
 				one2one = 1;
 				/* -cge */
-				/*
 				scoreT = 0.5;
 				rewards->M = 1;
 				rewards->MM = -3;
 				rewards->W1 = -5;
 				rewards->U = -1;
 				rewards->PE = 17;
-				*/
-				/* -mrc 0.7 */
-				mrc = 0.7;
+				/* -mrc 0.1 */
+				mrc = 0.1;
 				/* -apm p */
 				alnFragsPE = &alnFragsPenaltyPE;
 				save_kmers_pair = &save_kmers_penaltyPair;
@@ -1115,8 +1122,8 @@ int kma_main(int argc, char *argv[]) {
 				getTieAnker = &getTieAnkerScoreLen;
 				ConClavePtr = &runConClave_lc;
 				ConClave2Ptr = &runConClave2_lc;
-				/* -proxi -0.99 */
-				minFrac = -0.99;
+				/* -proxi -0.98 */
+				minFrac = -0.98;
 				getMatch = &getProxiMatch;
 				getMatchSparse = &getProxiMatchSparse;
 				getSecondForce = &getSecondProxiForce;

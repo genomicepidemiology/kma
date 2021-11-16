@@ -147,7 +147,6 @@ void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, 
 				*++bestTemplates = *++templates;
 				*++bestStart = *++start;
 				*++bestEnd = *++end;
-				
 				/* update ConClave scores */
 				alignment_scores[abs(*templates)] += score;
 			} else {

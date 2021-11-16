@@ -180,7 +180,7 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 						}
 					} else {
 						/* snp */
-						score += node->weight + gaps * M + MM;
+						score += node->weight + (gaps + 1) * M + MM;
 					}
 					
 					/* mark as used */
@@ -310,7 +310,7 @@ KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, con
 					}
 				} else {
 					/* snp */
-					score += node->weight + gaps * M + MM;
+					score += node->weight + (gaps + 1) * M + MM;
 				}
 				
 				/* mark as used */
