@@ -106,7 +106,7 @@ void update_Scores_pe_MEM(unsigned char *qseq, int q_len, unsigned char *qseq_r,
 	}
 }
 
-void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, int bestScore, int bestLen, int *start, int *end, int *templates, int *Scores, int *Lengths, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+void update_Scores_nanoold(unsigned char *qseq, int q_len, double minFrac, int counter, int bestScore, int bestLen, int *start, int *end, int *templates, int *Scores, int *Lengths, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
 	
 	int i, score, buffer[5];
 	int *bestTemplates, *bestStart, *bestEnd;
@@ -189,6 +189,101 @@ void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, 
 	buffer[0] = q_len;
 	buffer[1] = counter;
 	buffer[2] = bestScore;
+	buffer[3] = header->len;
+	buffer[4] = flag;
+	counter = abs(counter);
+	sfwrite(buffer, sizeof(int), 5, frag_out_raw);
+	sfwrite(qseq, 1, q_len, frag_out_raw);
+	sfwrite(header->seq, 1, header->len, frag_out_raw);
+	sfwrite(bestStart, sizeof(int), counter, frag_out_raw);
+	sfwrite(bestEnd, sizeof(int), counter, frag_out_raw);
+	sfwrite(bestTemplates, sizeof(int), counter, frag_out_raw);
+}
+
+void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, int bestReadScore, double bestScore, int *start, int *end, int *templates, int *Scores, int *Lengths, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+	
+	int i, score, buffer[5];
+	int *bestTemplates, *bestStart, *bestEnd;
+	double minScore;
+	
+	/* get best hits, and update ConClave scores */
+	bestTemplates = --templates;
+	bestStart = --start;
+	bestEnd = --end;
+	--Scores;
+	--Lengths;
+	i = counter + 1;
+	counter = 0;
+	if(minFrac == 1.0) {
+		while(--i) {
+			score = *++Scores;
+			minScore = score / *++Lengths;
+			if(minScore == bestScore || score == bestReadScore) {
+				++counter;
+				*++bestTemplates = *++templates;
+				*++bestStart = *++start;
+				*++bestEnd = *++end;
+				
+				/* update ConClave scores */
+				alignment_scores[abs(*templates)] += score;
+			} else {
+				++templates;
+				++start;
+				++end;
+			}
+		}
+	} else if(minFrac < 0) {
+		minScore = (-minFrac) * bestScore;
+		minFrac = (-minFrac) * bestReadScore;
+		while(--i) {
+			score = *++Scores;
+			if((*++Lengths * minScore <= score) || minFrac <= score) {
+				++counter;
+				*++bestTemplates = *++templates;
+				*++bestStart = *++start;
+				*++bestEnd = *++end;
+				/* update ConClave scores */
+				alignment_scores[abs(*templates)] += score;
+			} else {
+				++templates;
+				++start;
+				++end;
+			}
+		}
+	} else {
+		minScore = (-minFrac) * bestScore;
+		minFrac = (-minFrac) * bestReadScore;
+		while(--i) {
+			score = *++Scores;
+			if((*++Lengths * minScore <= score) || minFrac <= score) {
+				++counter;
+				*++bestTemplates = *++templates;
+				*++bestStart = *++start;
+				*++bestEnd = *++end;
+				
+				/* update ConClave scores */
+				alignment_scores[abs(*templates)] += bestReadScore;
+			} else {
+				++templates;
+				++start;
+				++end;
+			}
+		}
+	}
+	
+	/* uniq hit */
+	if(counter == 1) {
+		uniq_alignment_scores[abs(*bestTemplates)] += bestReadScore;
+	} else {
+		bestTemplates -= counter - 1;
+		bestStart -= counter - 1;
+		bestEnd -= counter - 1;
+	}
+	
+	/* print frag */
+	buffer[0] = q_len;
+	buffer[1] = counter;
+	buffer[2] = bestReadScore;
 	buffer[3] = header->len;
 	buffer[4] = flag;
 	counter = abs(counter);

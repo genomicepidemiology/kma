@@ -51,7 +51,7 @@ const int proxiTestBestScore(const double proxiScore, const int score, const int
 }
 
 const int proxiTestBestScoreLen(const double proxiScore, const int score, const int q_len, const int t_len, const int best_len) {
-	return (proxiScore / best_len * (q_len < t_len ? q_len : t_len) <= score);
+	return (proxiScore / best_len * (q_len < t_len ? q_len : t_len) <= score) || proxiScore <= score;
 }
 
 const int mrchain(int *bestTemaples, const int *template_lengths, const int q_len, const int maplen) {

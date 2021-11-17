@@ -1186,20 +1186,31 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 				bestLen = aln_len;
 			}
 			*/
+			
 			if(bestScore < score) {
+				bestScore = score;
+				bestLen = aln_len;
+			}
+			if(*best_read_score < read_score) {
+				*best_read_score = read_score;
+			}
+			
+			/* org */
+			/*if(bestScore < score) {
 				bestScore = score;
 				*best_read_score = read_score;
 				bestLen = aln_len;
 			} else if(bestScore == score && *best_read_score < read_score) {
 				*best_read_score = read_score;
 				bestLen = aln_len;
-			}
+			}*/
 		}
 	}
 	
 	if(*best_read_score > kmersize) {
 		lock(excludeOut);
-		update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestLen, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+		//update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestLen, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+		update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestScore, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 		unlock(excludeOut);
 		return 0;
 	} else {
