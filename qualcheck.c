@@ -44,6 +44,7 @@ int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, dou
 		if((qseq->seqlen - templates->kmersize + 1) * 2 < MinKlen) {
 			return 0;
 		} else {
+			comp_rc(qseq);
 			return 1;
 		}
 	}
