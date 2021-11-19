@@ -153,7 +153,7 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 				qseq->N[0]--;
 			}
 		}
-		if(prefix_len == 0) {
+		if(prefix_len == 0 && !prefix) {
 			comp_rc(qseq);
 		}
 		return 1;
