@@ -69,6 +69,10 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 	char *update;
 	const char bases[6] = "ACGTN-";
 	
+	if(!q_len) {
+		return;
+	}
+	
 	lock(lock);
 	check = q_len;
 	avail = dest->bytes;
@@ -157,7 +161,13 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 		update += check;
 	}
 	
-	check = header->len + 1;
+	/* q-bound */
+	if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
+		i = header->len - 2 * sizeof(int) - 1;
+	} else {
+		i = header->len;
+	}
+	check = i + 1;
 	if(avail < check) {
 		dest->bytes = avail;
 		writeGzFileBuff(dest);
@@ -165,9 +175,9 @@ void updateAllFrag(unsigned char *qseq, int q_len, int bestHits, int best_read_s
 		update = (char *) dest->next;
 	}
 	*update++ = '\t';
-	header->seq[header->len - 1] = '\n';
-	memcpy(update, header->seq, header->len);
-	update += header->len;
+	memcpy(update, header->seq, i--);
+	update += i;
+	*update++ = '\n';
 	
 	dest->bytes = avail - check;
 	dest->next = (unsigned char *) update;

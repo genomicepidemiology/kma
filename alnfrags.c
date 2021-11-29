@@ -1140,7 +1140,7 @@ void * alnFrags_threaded(void * arg) {
 		}
 		
 		/* dump seq to all */
-		if(frag_out_all && unmapped) {
+		if(frag_out_all) {
 			if((unmapped & 1) == 0) {
 				updateAllFrag(qseq->seq, qseq->len, *matched_templates, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			}
