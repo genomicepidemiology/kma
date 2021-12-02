@@ -1226,7 +1226,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				}
 				
 				if(tot == 0) {
-					bestTemplate = -1;
+					bestTemplate = 0;
 					best_read_score = 0;
 					bestNum = 0;
 					
@@ -1291,38 +1291,14 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				bestTemplate = -bestTemplate;
 				strrc(qseq->seq, qseq->len);
 			}
-			w_scores[bestTemplate] += read_score;
-			if(fragmentCounts) {
-				fragmentCounts[bestTemplate]++;
-				readCounts[bestTemplate]++;
-			}
 			
-			/* dump frag info */
-			alignFrag = smalloc(sizeof(Frag));
-			alignFrag->buffer[0] = qseq->len;
-			alignFrag->buffer[1] = bestHits;
-			alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
-			alignFrag->buffer[3] = start;
-			alignFrag->buffer[4] = end;
-			alignFrag->buffer[5] = header->len;
-			alignFrag->buffer[6] = flag;
-			alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
-			alignFrag->header = ustrdup(header->seq, header->len);
-			alignFrag->next = alignFrags[bestTemplate];
-			alignFrags[bestTemplate] = alignFrag;
-			
-			++fragCount;
-			
-			if(stats[2] < 0) {
-				if(extendedFeatures) {
+			if(bestTemplate) {
+				w_scores[bestTemplate] += read_score;
+				if(fragmentCounts) {
+					fragmentCounts[bestTemplate]++;
 					readCounts[bestTemplate]++;
 				}
-				sfread(stats, sizeof(int), 3, frag_in_raw);
-				qseq->len = stats[0];
-				header->len = stats[1];
-				flag = stats[2];
-				sfread(qseq->seq, 1, qseq->len, frag_in_raw);
-				sfread(header->seq, 1, header->len, frag_in_raw);
+				
 				/* dump frag info */
 				alignFrag = smalloc(sizeof(Frag));
 				alignFrag->buffer[0] = qseq->len;
@@ -1338,7 +1314,38 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				alignFrags[bestTemplate] = alignFrag;
 				
 				++fragCount;
+				
+				if(stats[2] < 0) {
+					if(extendedFeatures) {
+						readCounts[bestTemplate]++;
+					}
+					sfread(stats, sizeof(int), 3, frag_in_raw);
+					qseq->len = stats[0];
+					header->len = stats[1];
+					flag = stats[2];
+					sfread(qseq->seq, 1, qseq->len, frag_in_raw);
+					sfread(header->seq, 1, header->len, frag_in_raw);
+					/* dump frag info */
+					alignFrag = smalloc(sizeof(Frag));
+					alignFrag->buffer[0] = qseq->len;
+					alignFrag->buffer[1] = bestHits;
+					alignFrag->buffer[2] = (sparse < 0) ? 0 : read_score;
+					alignFrag->buffer[3] = start;
+					alignFrag->buffer[4] = end;
+					alignFrag->buffer[5] = header->len;
+					alignFrag->buffer[6] = flag;
+					alignFrag->qseq = ustrdup(qseq->seq, qseq->len);
+					alignFrag->header = ustrdup(header->seq, header->len);
+					alignFrag->next = alignFrags[bestTemplate];
+					alignFrags[bestTemplate] = alignFrag;
+					
+					++fragCount;
+				}
+			} else if(stats[2] < 0) {
+				sfread(stats, sizeof(int), 2, frag_in_raw);
+				sfseek(frag_in_raw, stats[0] + stats[1] + sizeof(int), SEEK_CUR);
 			}
+			
 			
 			if(fragCount >= maxFrag) {
 				template_fragments[fileCount] = printFrags(alignFrags, DB_size);
