@@ -1052,7 +1052,7 @@ int alnFragsForcePE_old(HashMapCCI **templates_index, int *matched_templates, in
 int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *template_lengths, int mq, double scoreT, double mrc, double minFrac, int minlen, int rc_flag, CompDNA *qseq_comp, CompDNA *qseq_r_comp, unsigned char *qseq, unsigned char *qseq_r, int q_len, int kmersize, Qseqs *header, int *bestTemplates, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *Scores, int *Lengths, int *best_start_pos, int *best_end_pos, int *flag, int *best_read_score, int seq_in, long *seq_indexes, FILE *frag_out_raw, AlnPoints *points, NWmat *NWmatrices, volatile int *excludeOut, volatile int *excludeDB) {
 	
 	int t_i, template, read_score, bestHits, aln_len, start, end, Wl, arc, rc;
-	int q_start, q_end, t_len, bestLen, *qBoundPtr;
+	int q_start, q_end, t_len, *qBoundPtr;
 	double score, bestScore;
 	AlnScore alnStat;
 	
@@ -1073,7 +1073,6 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 	
 	bestScore = 0;
 	*best_read_score = 0;
-	bestLen = 0;
 	bestHits = 0;
 	Wl = -NWmatrices->rewards->Wl;
 	arc = points->len;
@@ -1189,7 +1188,6 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 			
 			if(bestScore < score) {
 				bestScore = score;
-				bestLen = aln_len;
 			}
 			if(*best_read_score < read_score) {
 				*best_read_score = read_score;
@@ -2216,6 +2214,7 @@ void * alnFrags_threaded(void * arg) {
 		points->len = rc_flag < 0;
 		if(*matched_templates) { // SE
 			read_score = 0;
+			qseq_r->len = 0;
 		} else { // PE
 			read_score = get_ankers(matched_templates, qseq_r_comp, header_r, &flag_r, inputfile);
 			read_score = labs(read_score);
@@ -2275,7 +2274,7 @@ void * alnFrags_threaded(void * arg) {
 		}
 		
 		/* dump seq to all */
-		if(frag_out_all && unmapped) {
+		if(frag_out_all) {
 			if((unmapped & 1) == 0) {
 				updateAllFrag(qseq->seq, qseq->len, *matched_templates, best_read_score, best_start_pos, best_end_pos, bestTemplates, header, frag_out_all);
 			}
