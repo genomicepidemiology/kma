@@ -27,7 +27,7 @@
 FILE * tmpF(const char *location) {
 	
 	static int tmpNum = 0;
-	static char *tmpname, *dirname = 0, *filename = 0;
+	static char *tmpname = 0, *dirname = 0, *filename = 0;
 	static volatile int Lock = 0;
 	volatile int *lock = &Lock;
 	int fd;
@@ -66,11 +66,22 @@ FILE * tmpF(const char *location) {
 		strcpy(tmpname, "XXXXXX");
 	} else if(filename) {
 		/* open tmpfile on previous location */
-		sprintf(tmpname, "%d", tmpNum++);
+		fd = sprintf(tmpname, "%d", tmpNum++);
 		if((file = fopen(filename, "wb+"))) {
 			unlink(filename);
 		}
 		*tmpname = 0;
+	} else if(!tmpNum) {
+		/* set default according to TMPDIR */
+		if((tmpname = getenv("TMPDIR"))) {
+			dirname = smalloc(strlen(tmpname) + 13);
+			tmpname = dirname + sprintf(dirname, "%s/.kma-", tmpname);
+			strcpy(tmpname, "XXXXXX");
+		}
+		tmpNum = 1;
+		unlock(lock);
+		
+		return tmpF(0);
 	} else {
 		/* open a "normal" tmp file */
 		file = tmpfile();
@@ -79,13 +90,3 @@ FILE * tmpF(const char *location) {
 	
 	return file;
 }
-
-
-
-
-
-
-
-
-
-
