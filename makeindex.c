@@ -18,6 +18,7 @@
 */
 #define _XOPEN_SOURCE 600
 #include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -124,7 +125,8 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 			}
 		} else {
 			fprintf(stderr, "Unsupported format for file:\t%s\n", filename);
-			exit(1);
+			errno |= 1;
+			//exit(1);
 		}
 		
 		/* close file buffer */
@@ -155,7 +157,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 		fprintf(stderr, "# Templates key-value pairs:\t%lu.\n", templates->n);// / 1048576);
 	} else {
 		fprintf(stderr, "DB is empty!!!\n");
-		exit(1);
+		exit((errno | 1));
 	}
 	
 	/* clean */

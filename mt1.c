@@ -40,6 +40,7 @@
 #include "stdstat.h"
 #include "tsv.h"
 #include "vcf.h"
+#include "version.h"
 #include "xml.h"
 
 void printFsaMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out) {
@@ -245,6 +246,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	fclose(DB_file);
 	
 	if(sam) {
+		fprintf(stdout, "@PG\tID:KMA\tPN:kma\tVN:%s\tCL:%s\n", KMA_VERSION, exePrev);
 		fprintf(stdout, "@SQ\tSN:%s\tLN:%d\n", template_name->seq, *template_lengths);
 	}
 	

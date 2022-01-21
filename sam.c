@@ -25,6 +25,7 @@
 #include "runkma.h"
 #include "sam.h"
 #include "threader.h"
+#include "version.h"
 
 char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	
@@ -96,9 +97,14 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	return cigar;
 }
 
-void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size) {
+void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size, char *cmd) {
 	
 	fprintf(stdout, "@HD\tVN:1.6\tGO:reference\n");
+	if(cmd) {
+		fprintf(stdout, "@PG\tID:KMA\tPN:kma\tVN:%s\tCL:%s\n", KMA_VERSION, cmd);
+	} else {
+		fprintf(stdout, "@PG\tID:KMA\tPN:kma\tVN:%s\n", KMA_VERSION);
+	}
 	while(--DB_size) {
 		fprintf(stdout, "@SQ\tSN:%s\tLN:%d\n", nameLoad(template_name, name_file), *++template_lengths);
 	}

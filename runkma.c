@@ -170,7 +170,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	
 	/* print sam-header */
 	if(sam) {
-		saminit(template_name, name_file, template_lengths, DB_size);
+		saminit(template_name, name_file, template_lengths, DB_size, exePrev);
 	}
 	
 	/* open pipe */
@@ -928,7 +928,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* print sam-header */
 	if(sam) {
-		saminit(template_name, name_file, template_lengths, DB_size);
+		saminit(template_name, name_file, template_lengths, DB_size, exePrev);
 	}
 	
 	/* open pipe */

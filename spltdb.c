@@ -467,7 +467,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 			strcat(templatefilename, ".name");
 			name_file = sfopen(templatefilename, "rb");
 			templatefilename[file_len] = 0;
-			saminit(template_name, name_file, template_lengths + dbBiases[i], bias);
+			saminit(template_name, name_file, template_lengths + dbBiases[i], bias, 0);
 			fclose(name_file);
 		}
 	}
