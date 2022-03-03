@@ -162,9 +162,16 @@ int printPair(int *out_Tem, CompDNA *qseq, int bestScore, const Qseqs *header, C
 
 int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inputfile) {
 	
-	static int infoSize[7];
+	static int infoSize[7] = {0, 0, 0, 0, 0, 0, 0};
 	
-	if(fread(infoSize, sizeof(int), 7, inputfile) == 7) {
+	if(infoSize[0] < 0) {
+		*out_Tem = -infoSize[0];
+		return 0;
+	} else if(fread(infoSize, sizeof(int), 7, inputfile) == 7) {
+		if(infoSize[0] < 0) {
+			*out_Tem = -infoSize[0];
+			return 0;
+		}
 		qseq->seqlen = infoSize[0];
 		qseq->complen = infoSize[1];
 		*out_Tem = infoSize[4];
@@ -204,7 +211,7 @@ int get_ankers(int *out_Tem, CompDNA *qseq, Qseqs *header, int *flag, FILE *inpu
 		sfread(out_Tem + 1, sizeof(int), *out_Tem, inputfile);
 		sfread(header->seq, 1, header->len, inputfile);
 	} else {
-		*out_Tem = infoSize[0];
+		*out_Tem = -infoSize[0];
 		return 0;
 	}
 	

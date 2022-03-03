@@ -70,7 +70,7 @@ HashMap * hashMapKMA_openChains(HashMapKMA *src) {
 	if(src->mask != src->size) {
 		free(src->exist);
 	}
-	dest = hashMap_initialize(src->size + 1, src->kmersize);
+	dest = hashMap_initialize(src->size + 1, src->kmersize, src->mlen, src->flag);
 	dest->prefix = src->prefix;
 	dest->prefix_len = src->prefix_len;
 	dest->DB_size = src->DB_size;

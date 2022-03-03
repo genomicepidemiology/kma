@@ -30,8 +30,8 @@ int (*QualCheck)(HashMap *templates, CompDNA *, int, double, double, unsigned *,
 
 int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header) {
 	
-	int i, j, end, rc, thisKlen, prefix_len, prefix_shifter;
-	long unsigned prefix;
+	int i, j, end, rc, thisKlen, prefix_len, prefix_shifter, cPos, iPos;
+	long unsigned prefix, kmer;
 	
 	thisKlen = MinKlen;
 	prefix = templates->prefix;
@@ -61,7 +61,8 @@ int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, dou
 		for(i = 1, j = 0; i <= qseq->N[0] && thisKlen != 0; ++i) {
 			end = qseq->N[i] - prefix_len - templates->kmersize + 1;
 			for(;j < end && thisKlen != 0; ++j) {
-				if(getKmer(qseq->seq, j, prefix_shifter) == prefix) {
+				getKmer_macro(kmer, qseq->seq, j, cPos, iPos, prefix_shifter);
+				if(kmer == prefix) {
 					--thisKlen;
 				}
 			}
@@ -80,10 +81,10 @@ int lengthCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, dou
 int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, double homT, unsigned *template_ulengths, Qseqs *header) {
 	
 	static unsigned *Scores_tot = 0, *bestTemplates = 0;
-	int i, j, end, rc, template;
+	int i, j, end, rc, template, cPos, iPos, mlen, flag, mPos, hLen;
 	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, *values;
 	double bestQ, thisQ;
-	long unsigned prefix;
+	long unsigned mmask, prefix, kmer, cmer;
 	void (*updateScoreAndTemplate_ptr)(unsigned *, unsigned *, unsigned *);
 	
 	thisKlen = 0;
@@ -98,6 +99,9 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 	prefix_shifter = sizeof(long unsigned) * sizeof(long unsigned) - (prefix_len << 1);
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
 	DB_size = templates->DB_size;
+	mlen = templates->mlen;
+	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
+	flag = templates->flag;
 	
 	/* realloc */
 	if(!bestTemplates) {
@@ -140,7 +144,10 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 			for(;j < end; ++j) {
 				if(prefix_len == 0 || getKmer(qseq->seq, j, prefix_shifter) == prefix) {
 					++thisKlen;
-					if((values = hashMapGet(templates, getKmer(qseq->seq, j + prefix_len, shifter)))) {
+					getKmer_macro(kmer, qseq->seq, (j + prefix_len), cPos, iPos, shifter);
+					cmer = flag ? getCmer(kmer, &mPos, &hLen, shifter, mlen, mmask) : kmer;
+					
+					if((values = hashMapGet(templates, cmer))) {
 						updateScoreAndTemplate_ptr(Scores_tot, bestTemplates, values);
 					}
 				}
@@ -183,10 +190,11 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	
 	static unsigned *Scores = 0, *Scores_tot = 0, *bestTemplates = 0;
 	static HashMap_kmers *foundKmers = 0;
-	int i, j, end, rc, templateQ, templateT;
-	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, *values;
+	int i, j, end, rc, templateQ, templateT, cPos, iPos, mlen, mPos, hLen;
+	unsigned thisKlen, prefix_len, prefix_shifter, shifter, DB_size, flag;
+	unsigned *values;
 	double bestQ, thisQ, bestT, thisT;
-	long unsigned key, prefix;
+	long unsigned mmask, key, prefix, cmer;
 	void (*updateScoreAndTemplate_ptr)(unsigned *, unsigned *, unsigned *);
 	void (*addUscore_ptr)(unsigned *, unsigned *);
 	
@@ -202,6 +210,9 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	prefix_shifter = sizeof(long unsigned) * sizeof(long unsigned) - (prefix_len << 1);
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (templates->kmersize << 1);
 	DB_size = templates->DB_size;
+	mlen = templates->mlen;
+	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
+	flag = templates->flag;
 	
 	if(DB_size < USHRT_MAX) {
 		updateScoreAndTemplate_ptr = &updateScoreAndTemplateHU;
@@ -255,10 +266,12 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 			for(;j < end; ++j) {
 				if(prefix_len == 0 || getKmer(qseq->seq, j, prefix_shifter) == prefix) {
 					++thisKlen;
-					key = getKmer(qseq->seq, j + prefix_len, shifter);
-					if((values = hashMapGet(templates, key))) {
+					getKmer_macro(key, qseq->seq, (j + prefix_len), cPos, iPos, shifter);
+					cmer = flag ? getCmer(key, &mPos, &hLen, shifter, mlen, mmask) : key;
+					
+					if((values = hashMapGet(templates, cmer))) {
 						updateScoreAndTemplate_ptr(Scores_tot, bestTemplates, values);
-						if(hashMap_CountKmer(foundKmers, key)) {
+						if(hashMap_CountKmer(foundKmers, cmer)) {
 							addUscore_ptr(Scores, values);
 						}
 					}

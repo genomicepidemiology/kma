@@ -54,7 +54,8 @@ int intpos_bin(const unsigned *str1, const int str2) {
 HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, long unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits) {
 	
 	int template, SU;
-	unsigned i, j, *value;
+	long unsigned i;
+	unsigned j, *value;
 	short unsigned *values_s;
 	HashTable_kmers *node, *node_next;
 	HashTable *kmerNode, *kmerList;
@@ -71,7 +72,7 @@ HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, long un
 	kmerList = 0;
 	kmerNode = 0;
 	
-	for(i = 0; i < foundKmers->size; ++i) {
+	for(i = 0; i <= foundKmers->size; ++i) {
 		for(node = foundKmers->table[i]; node != 0; node = node_next) {
 			node_next = node->next;
 			value = hashMap_get(templates, node->key);
@@ -121,7 +122,8 @@ HashTable * collect_Kmers(const HashMapKMA *templates, unsigned *Scores, long un
 HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, long unsigned *Scores_tot, HashMap_kmers *foundKmers, Hit *hits, int contamination) {
 	
 	int template, SU;
-	unsigned i, j, n, *value;
+	long unsigned i;
+	unsigned j, n, *value;
 	short unsigned *value_s;
 	HashTable_kmers *node, *node_next;
 	HashTable *kmerNode, *kmerList;
@@ -146,7 +148,7 @@ HashTable ** collect_Kmers_deCon(const HashMapKMA *templates, unsigned *Scores, 
 	
 	Returner = smalloc(sizeof(HashTable *) << 1);
 	
-	for(i = 0; i < foundKmers->size; ++i) {
+	for(i = 0; i <= foundKmers->size; ++i) {
 		for(node = foundKmers->table[i]; node != 0; node = node_next) {
 			node_next = node->next;
 			if((value = hashMap_get(templates, node->key))) {

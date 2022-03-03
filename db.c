@@ -29,10 +29,10 @@
 void dbInfo(char *filename) {
 	
 	const char bases[6] = "ACGTN-";
-	int i, filename_len, min, max, index;
+	int i, filename_len, min, max;
 	unsigned *values, *value_index;
 	short unsigned *values_s;
-	long unsigned ntcount, prefix, ntax, v_index, n, size;
+	long unsigned ntcount, prefix, ntax, v_index, n, size, index;
 	long unsigned *value_index_l;
 	double mean, var, tmp;
 	char Prefix[33];
@@ -46,7 +46,7 @@ void dbInfo(char *filename) {
 	filename_len = strlen(filename);
 	strcpy(filename + filename_len, ".seq.b");
 	dbfile = sfopen(filename, "rb");
-	fseek(dbfile, 0, SEEK_END);
+	sfseek(dbfile, 0, SEEK_END);
 	ntcount = 4 * ftell(dbfile);
 	fclose(dbfile);
 	filename[filename_len] = 0;
@@ -64,8 +64,10 @@ void dbInfo(char *filename) {
 	filename[filename_len] = 0;
 	
 	/* get basic statistics */
-	fprintf(stdout, "# templates:\t%d\n", templates->DB_size);
+	fprintf(stdout, "# templates:\t%d\n", templates->DB_size - 1);
 	fprintf(stdout, "k:\t%d\n", templates->kmersize);
+	fprintf(stdout, "m:\t%d\n", templates->mlen);
+	fprintf(stdout, "hc:\t%d\n", templates->flag & 1);
 	/* get prefix */
 	if(templates->prefix_len) {
 		prefix = templates->prefix;
@@ -75,13 +77,14 @@ void dbInfo(char *filename) {
 			Prefix[i] = bases[prefix & 3];
 			prefix >>= 2;
 		}
-		fprintf(stderr, "prefix:\t%s\n", Prefix);
+		fprintf(stdout, "prefix:\t%s\n", Prefix);
 	} else if(templates->prefix != 0) {
-		fprintf(stderr, "prefix:\t-\n");
+		fprintf(stdout, "prefix:\t-\n");
 	}
 	fprintf(stdout, "# uniq k-mers:\t%lu\n", templates->n);
-	fprintf(stdout, "k-mer fraqtion covered:\t%f\n", templates->n / power(4, templates->kmersize));
+	fprintf(stdout, "k-mer fraction covered:\t%f\n", templates->n / power(4, templates->kmersize));
 	fprintf(stdout, "inferred tax size:\t%lu\n", templates->v_index);
+	fflush(stdout);
 	
 	/* get number of unique inferred tax */
 	ntax = 0;
@@ -103,7 +106,8 @@ void dbInfo(char *filename) {
 			values += i;
 		}
 	}
-	fprintf(stderr, "# inferred taxids:\t%lu\n", ntax);
+	fprintf(stdout, "# inferred taxids:\t%lu\n", ntax);
+	fflush(stdout);
 	
 	/* get min, max, mean and variance of k-mer uniqueness */
 	if((templates->size - 1) == templates->mask) {
@@ -159,10 +163,11 @@ void dbInfo(char *filename) {
 	mean /= n;
 	var -= mean * mean;
 	
-	fprintf(stderr, "k-mer co-occurence var:\t%f\n", var);
-	fprintf(stderr, "k-mer co-occurence mean:\t%f\n", mean);
-	fprintf(stderr, "k-mer co-occurence min:\t%d\n", min);
-	fprintf(stderr, "k-mer co-occurence max:\t%d\n", max);
+	fprintf(stdout, "k-mer co-occurence var:\t%f\n", var);
+	fprintf(stdout, "k-mer co-occurence mean:\t%f\n", mean);
+	fprintf(stdout, "k-mer co-occurence min:\t%d\n", min);
+	fprintf(stdout, "k-mer co-occurence max:\t%d\n", max);
+	fflush(stdout);
 }
 
 static void helpMessage(int exeStatus) {

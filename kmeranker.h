@@ -25,17 +25,32 @@ typedef struct kmerAnker KmerAnker;
 struct kmerAnker {
 	int score;
 	int weight;
+	int score_len;
+	int len_len;
 	unsigned start;
 	unsigned end;
-	unsigned ties;
 	unsigned *values;
 	struct kmerAnker *descend; /* descending anker */
 };
 #endif
 
-extern KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, int, int*, int*, int*, char*);
-KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include);
-KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, int kmersize, int *bests, int *Score, int *extendScore, char *include);
+extern KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, const int*, const int, const int, int*, int*, int*, char*);
+extern int (*kmerAnkerScore)(KmerAnker*);
+extern const int (*testExtension)(const int, const int, const int);
+extern const int (*proxiTestBest)(const double, const int, const int, const int, const int);
+extern KmerAnker * (*getBestAnker)(KmerAnker**, unsigned*, const int*);
+extern KmerAnker * (*getTieAnker)(int, KmerAnker*, const KmerAnker*);
+int ankerScore(KmerAnker *src);
+int ankerScoreLen(KmerAnker *src);
+const int testExtensionScore(const int q_len, const int t_len, const int best_len);
+const int testExtensionScoreLen(const int q_len, const int t_len, const int best_len);
+const int proxiTestBestScore(const double proxiScore, const int score, const int q_len, const int t_len, const int best_len);
+const int proxiTestBestScoreLen(const double proxiScore, const int score, const int q_len, const int t_len, const int best_len);
+const int mrchain(int *bestTemaples, const int *template_lengths, const int q_len, const int maplen);
+KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, int *bests, int *Score, int *extendScore, char *include);
+KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, int *bests, int *Score, int *extendScore, char *include);
 KmerAnker * pruneAnkers(KmerAnker *V_score, int kmersize);
-KmerAnker * getBestAnker(KmerAnker **src, unsigned *ties);
-KmerAnker * getTieAnker(int stop, KmerAnker *src, int score);
+KmerAnker * getBestAnkerScore(KmerAnker **src, unsigned *ties, const int *template_lengths);
+KmerAnker * getBestAnkerScoreLen(KmerAnker **src, unsigned *ties, const int *template_lengths);
+KmerAnker * getTieAnkerScore(int stop, KmerAnker *src, const KmerAnker *bestScore);
+KmerAnker * getTieAnkerScoreLen(int stop, KmerAnker *src, const KmerAnker *bestScore);

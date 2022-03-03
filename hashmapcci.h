@@ -18,7 +18,6 @@
 */
 #define _XOPEN_SOURCE 600
 #include <stdio.h>
-#define murmur(index, kmer) index = (3323198485ul ^ kmer) * 0x5bd1e995; index ^= index >> 15;
 
 #ifndef HASHMAPCCI
 typedef struct hashMapCCI HashMapCCI;

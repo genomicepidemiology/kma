@@ -33,6 +33,7 @@
 #include "makeindex.h"
 #include "pherror.h"
 #include "qualcheck.h"
+#include "stdnuc.h"
 #include "stdstat.h"
 #include "updateindex.h"
 #include "valueshash.h"
@@ -55,8 +56,8 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-batchD\t\tBatch decon file\n");
 	fprintf(helpOut, "#\t-t_db\t\tAdd to existing DB\t\t\tNone/False\n");
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t\t16\n");
-	fprintf(helpOut, "#\t-k_t\t\tKmersize for template identification\t16\n");
-	fprintf(helpOut, "#\t-k_i\t\tKmersize for indexing\t\t\t16\n");
+	fprintf(helpOut, "#\t-m\t\tMinimizer size\t\t\t\t16/False\n");
+	fprintf(helpOut, "#\t-hc\t\tHomopolymer compression\t\t\t\tFalse\n");
 	fprintf(helpOut, "#\t-ML\t\tMinimum length of templates\t\tkmersize (16)\n");
 	fprintf(helpOut, "#\t-CS\t\tStart Chain size\t\t\t1 M\n");
 	fprintf(helpOut, "#\t-ME\t\tMega DB\t\t\t\t\tFalse\n");
@@ -76,7 +77,7 @@ int index_main(int argc, char *argv[]) {
 	
 	int i, args, stop, filecount, deconcount, sparse_run, size, mapped_cont;
 	int file_len, appender, prefix_len, MinLen, MinKlen;
-	unsigned kmersize, kmerindex, megaDB, **Values;
+	unsigned kmersize, mlen, flag, kmerindex, megaDB, **Values;
 	unsigned *template_lengths, *template_slengths, *template_ulengths;
 	long unsigned initialSize, prefix, mask;
 	double homQ, homT;
@@ -101,6 +102,8 @@ int index_main(int argc, char *argv[]) {
 	templates = 0;
 	kmersize = 16;
 	kmerindex = 16;
+	mlen = 0;
+	flag = 0;
 	sparse_run = 0;
 	appender = 0;
 	MinLen = 0;
@@ -238,6 +241,23 @@ int index_main(int argc, char *argv[]) {
 				}
 				kmerindex = kmersize;
 			}
+		} else if(strcmp(argv[args], "-m") == 0) {
+			++args;
+			if(args < argc) {
+				mlen = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0 || mlen == 0) {
+					fprintf(stderr, "# Invalid minimizer size parsed\n");
+					exit(1);
+				} else if(mlen > 30) {
+					mlen = 30;
+				}
+			} else {
+				fprintf(stderr, "# Missing minimizer size\n");
+				exit(1);
+			}
+			flag |= 2;
+		} else if(strcmp(argv[args], "-hc") == 0) {
+			flag |= 1;
 		} else if(strcmp(argv[args], "-k_t") == 0) {
 			++args;
 			if(args < argc) {
@@ -326,7 +346,7 @@ int index_main(int argc, char *argv[]) {
 			++args;
 			if(args < argc) {
 				inputfile = sfopen(argv[args], "rb");
-				fseek(inputfile, 0, SEEK_END);
+				sfseek(inputfile, 0, SEEK_END);
 				size = ftell(inputfile) + 1;
 				rewind(inputfile);
 				
@@ -376,7 +396,7 @@ int index_main(int argc, char *argv[]) {
 			++args;
 			if(args < argc) {
 				inputfile = sfopen(argv[args], "rb");
-				fseek(inputfile, 0, SEEK_END);
+				sfseek(inputfile, 0, SEEK_END);
 				size = ftell(inputfile) + 1;
 				rewind(inputfile);
 				
@@ -481,17 +501,24 @@ int index_main(int argc, char *argv[]) {
 	} else if(outputfilename == 0) {
 		fprintf(stderr, "Output destination not defined.\n");
 		helpMessage(-1);
+	} else if(kmersize <= mlen) {
+		fprintf(stderr, "Minimizer size cannot be smaller than kmersize.\n");
+		exit(1);
 	}
 	file_len = strlen(outputfilename);
 	
+	if(!mlen) {
+		mlen = kmersize;
+	}
 	mask = 0;
-	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (kmersize << 1));
+	mask = (~mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (mlen << 1));
 	if(megaDB) {
 		initialSize = mask + 1;
 	} else if(initialSize >= (mask + 1)) {
 		initialSize = (mask + 1);
 		megaDB = 1;
 	}
+	setCmerPointers(flag);
 	
 	/* load DB */
 	if(templatefilename != 0) {
@@ -586,7 +613,7 @@ int index_main(int argc, char *argv[]) {
 			templates = hashMapKMA_openChains(finalDB);
 		} else {
 			/* create */
-			templates = hashMap_initialize(initialSize, kmersize);
+			templates = hashMap_initialize(initialSize, kmersize, mlen, flag);
 			template_lengths = smalloc(1024 * sizeof(unsigned));;
 			if(sparse_run) {
 				templates->prefix = prefix;

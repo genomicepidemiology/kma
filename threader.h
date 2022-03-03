@@ -22,7 +22,7 @@
 #include <time.h>
 #define sleepSpec(time)((const struct timespec[]){{0, time}})
 #define lock(exclude) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(sleepSpec(100000),NULL);}}
-#define lockTime(exclude, time) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(sleepSpec(1000 * time),NULL);}}
+#define lockTime(exclude, time) while(__sync_lock_test_and_set(exclude, 1)) {while(*exclude) {nanosleep(sleepSpec((time << 10)),NULL);}}
 #define unlock(exclude) (__sync_lock_release(exclude))
 #define wait_atomic(src) while(src) {nanosleep(sleepSpec(100000),NULL);}
 #else

@@ -76,33 +76,54 @@ int megaMap_addCont(HashMapKMA *dest, long unsigned index, int value, unsigned *
 
 int deConNode(CompDNA *qseq, HashMapKMA *finalDB, unsigned **Values) {
 	
-	int i, j, end, mapped_cont, shifter, DB_size;
+	int i, j, end, mapped_cont, shifter, DB_size, mPos, hLen;
+	unsigned kmersize, mlen, flag, cPos, iPos;
+	long unsigned mask, mmask, kmer, cmer, hmer, *seq;
 	
 	if(qseq->seqlen < finalDB->kmersize) {
 		return 0;
 	}
 	
+	/* set parameters */
 	DB_size = finalDB->DB_size;
 	mapped_cont = 0;
 	shifter = sizeof(long unsigned) * sizeof(long unsigned) - (finalDB->kmersize << 1);
 	qseq->N[0]++;
 	qseq->N[qseq->N[0]] = qseq->seqlen;
+	seq = qseq->seq;
+	kmersize = finalDB->kmersize;
+	shifter = 64 - (kmersize << 1);
+	mask = 0xFFFFFFFFFFFFFFFF >> shifter;
+	mlen = finalDB->mlen;
+	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
+	flag = finalDB->flag;
+	
 	j = 0;
 	for(i = 1; i <= qseq->N[0]; ++i) {
-		end = qseq->N[i] - finalDB->kmersize + 1;
-		for(;j < end; ++j) {
-			mapped_cont += addCont(finalDB, getKmer(qseq->seq, j, shifter), DB_size, Values);
+		/* init k-mer */
+		getKmer_macro(kmer, seq, j, cPos, iPos, (shifter + 2));
+		cmer = flag ? initCmer(kmer, &mPos, &hmer, &hLen, shifter + 2, kmersize, mlen, mmask) : kmer;
+		end = qseq->N[i];
+		for(j += kmersize - 1;j < end; ++j) {
+			/* update k-mer */
+			kmer = updateKmer_macro(kmer, seq, j, mask);
+			cmer = flag ? updateCmer(cmer, &mPos, &hmer, &hLen, kmer, kmersize, mlen, mmask) : kmer;
+			
+			/* update hashMap */
+			mapped_cont += addCont(finalDB, cmer, DB_size, Values);
 		}
-		j = qseq->N[i] + 1;
+		j = end + 1;
 	}
 	qseq->N[0]--;
+	
 	return mapped_cont;
 }
 
 int deConNode_sparse(CompDNA *qseq, HashMapKMA *finalDB, unsigned **Values) {
 	
-	int i, j, end, mapped_cont, prefix_len, prefix_shifter, shifter, DB_size;
-	long unsigned prefix;
+	int i, j, end, mapped_cont, DB_size, shifter, prefix_len, prefix_shifter;
+	int mlen, flag, mPos, hLen, cPos, iPos;
+	long unsigned mmask, prefix, kmer, cmer;
 	
 	if(qseq->seqlen < finalDB->kmersize) {
 		return 0;
@@ -115,12 +136,20 @@ int deConNode_sparse(CompDNA *qseq, HashMapKMA *finalDB, unsigned **Values) {
 	mapped_cont = 0;
 	qseq->N[0]++;
 	qseq->N[qseq->N[0]] = qseq->seqlen;
+	mlen = finalDB->mlen;
+	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
+	flag = finalDB->flag;
 	j = 0;
 	for(i = 1; i <= qseq->N[0]; ++i) {
 		end = qseq->N[i] - prefix_len - finalDB->kmersize + 1;
 		for(;j < end; ++j) {
 			if(prefix_len == 0 || getKmer(qseq->seq, j, prefix_shifter) == prefix) {
-				mapped_cont += addCont(finalDB, getKmer(qseq->seq, j + prefix_len, shifter), DB_size, Values);
+				/* get kmer */
+				getKmer_macro(kmer, qseq->seq, (j + prefix_len), cPos, iPos, shifter);
+				cmer = flag ? getCmer(kmer, &mPos, &hLen, shifter, mlen, mmask) : kmer;
+				
+				/* update hashMap */
+				mapped_cont += addCont(finalDB, cmer, DB_size, Values);
 			}
 		}
 		j = qseq->N[i] + 1;

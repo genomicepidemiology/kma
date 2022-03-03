@@ -25,6 +25,8 @@ struct penalties {
 	int MM;
 	int U;
 	int W1;
+	int U2;
+	int W2;
 	int Wl;
 	int Mn;
 	int PE;

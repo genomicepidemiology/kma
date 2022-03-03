@@ -26,6 +26,7 @@
 #include "alnfrags.h"
 #include "assembly.h"
 #include "chain.h"
+#include "conclave.h"
 #include "hashmapkma.h"
 #include "kma.h"
 #include "kmapipe.h"
@@ -116,12 +117,14 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-vcf", "Output vcf file, 2 to apply FT", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-sam", "Output sam, 4/2096 for mapped/aligned", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-nc", "No consensus file", "False");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-nc", "No aln file", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-na", "No aln file", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-nf", "No frag file", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-matrix", "Output assembly matrix", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-a", "Output all template mappings", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-and", "Use both mrs and p-value on consensus", "or");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-oa", "Use neither mrs or p-value on consensus", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-tsv", "Tsv flag", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-tsvh", "Help on -tsv", "");
 	
 	fprintf(out, "#\n# Consensus:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-bc", "Minimum support to call bases", "0");
@@ -129,6 +132,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-bcd", "Minimum depth to cal bases", "1");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-bcg", "Maintain insignificant gaps", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ID", "Minimum consensus ID", "1.0%");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-md", "Minimum depth", "0.0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-dense", "Skip insertion in consensus", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ref_fsa", "Use n's on indels", "False");
 	
@@ -156,8 +160,11 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-Mt1", "Map everything to one template", "False/0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-pm", "Pairing method (p,u,f)", "u");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-1t1", "One query to one template", "False");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-hmm", "Use a HMM to assign template(s)", "True");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-hmm", "Use a HMM to assign template(s)", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ck", "Count k-mers over pseudo alignment", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-localopen", "Penalty for openning a local chain", "6");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mct", "Max overlap between templates", "0.1");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-lc", "Length corrected template chaining", "False");
 	
 	fprintf(out, "#\n# Chaining:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-k", "K-mersize", "DB defined");
@@ -166,6 +173,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ex_mode", "Searh kmers exhaustively", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-fpm", "Pairing method (p,u,f)", "u");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mq", "Minimum mapping quality", "0");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-localopen", "Penalty for local opening", "6");
 	
 	fprintf(out, "#\n# Alignment:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ca", "Circular alignments", "False");
@@ -196,6 +204,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-cge", "Set CGE penalties and rewards", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mint2", "Set 2ng gen Mintyper preset", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mint3", "Set 3rd gen Mintyper preset", "False");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-ont", "Set 3rd gen genefinding preset", "False");
 	
 	fprintf(out, "#\n");
 	
@@ -227,12 +236,13 @@ int kma_main(int argc, char *argv[]) {
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
 	static int sparse_run, ts, maxlen, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
+	static long unsigned tsv;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
-	static double ID_t, scoreT, coverT, mrc, evalue, minFrac, support;
+	static double ID_t, Depth_t, scoreT, coverT, mrc, evalue, minFrac, support;
 	static Penalties *rewards;
 	int i, j, args, exe_len, fileCount, size, escape, tmp, step1, step2;
-	unsigned totFrags;
+	long unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
 	FILE *templatefile, *ioStream;
 	time_t t0, t1;
@@ -251,6 +261,7 @@ int kma_main(int argc, char *argv[]) {
 		/* SET DEFAULTS */
 		ConClave = 1;
 		verbose = 0;
+		tsv = 0;
 		vcf = 0;
 		xml = 0;
 		sam = 0;
@@ -285,8 +296,9 @@ int kma_main(int argc, char *argv[]) {
 		bcd = 1;
 		scoreT = 0.5;
 		coverT = 0.1;
-		mrc = 0.1;
+		mrc = 0.0;
 		ID_t = 1.0;
+		Depth_t = 0.0;
 		one2one = 0;
 		ss = 'q';
 		mem_mode = 0;
@@ -618,7 +630,7 @@ int kma_main(int argc, char *argv[]) {
 				if(++args < argc && *(argv[args]) != '-') {
 					ref_fsa = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-ref_fsa\".\n");
+						fprintf(stderr, "Invalid argument at \"-3p\".\n");
 						exit(4);
 					} else if(ref_fsa == 0) {
 						ref_fsa = 2;
@@ -636,13 +648,21 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-hmm") == 0) {
 				kmerScan = &save_kmers_HMM;
 				one2one = 0;
+			} else if(strcmp(argv[args], "-lc") == 0) {
+				kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
 			} else if(strcmp(argv[args], "-proxi") == 0) {
 				if(++args < argc) {
 					minFrac = strtod(argv[args], &exeBasic);
-					if(*exeBasic != 0 || minFrac < 0 || 1 < minFrac) {
+					if(*exeBasic != 0 || minFrac < -1 || 1 < minFrac) {
 						fprintf(stderr, "Invalid argument at \"-proxi\".\n");
 						exit(1);
-					} else {
+					} else if(minFrac != 1.0 && minFrac != -1.0) {
 						/* set proximity parameter */
 						getMatch = &getProxiMatch;
 						getMatchSparse = &getProxiMatchSparse;
@@ -651,19 +671,11 @@ int kma_main(int argc, char *argv[]) {
 						getF = &getF_Proxi;
 						getR = &getR_Proxi;
 						getChainTemplates = &getProxiChainTemplates;
-						getMatch((int *)(&minFrac), 0);
-						getMatchSparse((int *)(&minFrac), 0, 0, 0, 0, 0);
-						getSecondPen((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0);
-						getF((int *)(&minFrac), 0, 0, 0, 0);
-						ankerAndClean((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-						ankerAndClean_MEM((int *)(&minFrac), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-						getProxiChainTemplates(0, (const Penalties *)(&minFrac), 0, 0, 0, 0, 0);
 					}
 				} else {
 					fprintf(stderr, "Need argument at: \"-proxi\".\n");
 					exit(1);
 				}
-				
 			} else if(strcmp(argv[args], "-ca") == 0) {
 				chainSeedsPtr = &chainSeeds_circular;
 			} else if(strcmp(argv[args], "-ss") == 0) {
@@ -724,6 +736,15 @@ int kma_main(int argc, char *argv[]) {
 					ID_t = strtod(argv[args], &exeBasic);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-ID\".\n");
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-md") == 0) {
+				++args;
+				if(args < argc) {
+					Depth_t = strtod(argv[args], &exeBasic);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "Invalid argument at \"-md\".\n");
 						exit(1);
 					}
 				}
@@ -853,6 +874,7 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-oa") == 0) {
 				cmp = &cmp_true;
 				ID_t = 0.0;
+				Depth_t = 0.0;
 			} else if(strcmp(argv[args], "-boot") == 0) {
 				printFsa_ptr = &bootFsa;
 			} else if(strcmp(argv[args], "-Mt1") == 0) {
@@ -875,7 +897,7 @@ int kma_main(int argc, char *argv[]) {
 					++args;
 					extendedFeatures = strtol(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
-						fprintf(stderr, "Invalid argument at \"-ef\".\n");
+						fprintf(stderr, "Invalid argument at \"-Mt1\".\n");
 						exit(1);
 					}
 				} else {
@@ -894,6 +916,40 @@ int kma_main(int argc, char *argv[]) {
 						--args;
 					}
 				}
+			} else if(strcmp(argv[args], "-tsv") == 0) {
+				tsv = 0xffffffffffffffff;
+				if(++args < argc) {
+					if(argv[args][0] != '-') {
+						tsv = strtol(argv[args], &exeBasic, 10);
+						if(*exeBasic != 0) {
+							fprintf(stderr, "Invalid argument at \"-tsv\".\n");
+							exit(1);
+						}
+					} else {
+						--args;
+					}
+				}
+			} else if(strcmp(argv[args], "-tsvh") == 0) {
+				fprintf(stdout, "# Tsv flags, add to combine:\n");
+				fprintf(stdout, "#\n");
+				fprintf(stdout, "# %-8s\t%s\n", "1", "Template_Name");
+				fprintf(stdout, "# %-8s\t%s\n", "2", "Template_Length");
+				fprintf(stdout, "# %-8s\t%s\n", "4", "Template_Identity");
+				fprintf(stdout, "# %-8s\t%s\n", "8", "Template_Coverage");
+				fprintf(stdout, "# %-8s\t%s\n", "16", "Template_Depth");
+				fprintf(stdout, "# %-8s\t%s\n", "32", "Query_Identity");
+				fprintf(stdout, "# %-8s\t%s\n", "64", "Query_Coverage");
+				fprintf(stdout, "# %-8s\t%s\n", "128", "Query_Depth");
+				fprintf(stdout, "# %-8s\t%s\n", "256", "Read_Count_Map");
+				fprintf(stdout, "# %-8s\t%s\n", "512", "Read_Count_Aln");
+				fprintf(stdout, "# %-8s\t%s\n", "1024", "Score");
+				fprintf(stdout, "# %-8s\t%s\n", "2048", "Expected");
+				fprintf(stdout, "# %-8s\t%s\n", "4096", "q_value");
+				fprintf(stdout, "# %-8s\t%s\n", "8192", "p_value");
+				fprintf(stdout, "# %-8s\t%s\n", "16384", "ConClave_Score");
+				fprintf(stdout, "# %-8s\t%s\n", "32768", "ConClave_Quality");
+				fprintf(stdout, "#\n");
+				return 0;
 			} else if(strcmp(argv[args], "-xml") == 0) {
 				xml = 1;
 				if(++args < argc) {
@@ -923,7 +979,7 @@ int kma_main(int argc, char *argv[]) {
 			} else if(strcmp(argv[args], "-nf") == 0) {
 				nf = 1;
 			} else if(strcmp(argv[args], "-cge") == 0) {
-				scoreT = 0.75;
+				scoreT = 0.5;
 				rewards->M = 1;
 				rewards->MM = -3;
 				rewards->W1 = -5;
@@ -985,7 +1041,7 @@ int kma_main(int argc, char *argv[]) {
 				extendedFeatures = 1;
 			} else if(strcmp(argv[args], "-mint3") == 0) {
 				/* equivalent to:
-				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa, -dense, 
+				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa 2, -dense, 
 				-bcNano, -bcd 10, -bc 0.7, -vcf -ef */
 				kmerScan = &save_kmers;
 				one2one = 1;
@@ -1002,6 +1058,87 @@ int kma_main(int argc, char *argv[]) {
 				significantAndSupport(0, 0, 0.7);
 				vcf = 1;
 				extendedFeatures = 1;
+			} else if(strcmp(argv[args], "-ont") == 0) {
+				/* -bcNano */
+				if(significantBase == &significantNuc) {
+					significantBase = &significantAnd90Nuc;
+				}
+				baseCall = &nanoCaller;
+				/* -bc 0.7 */
+				significantBase = &significantAndSupport;
+				support = 0.7;
+				significantAndSupport(0, 0, support);
+			 	coverT = 0.1; /* -mct 0.1 */
+			 	bcd = 10; /* -bcd 10 */
+			 	/* -proxi -0.9 */
+				minFrac = -0.9;
+			 	getMatch = &getProxiMatch;
+				getMatchSparse = &getProxiMatchSparse;
+				getSecondForce = &getSecondProxiForce;
+				getSecondPen = &getSecondProxiPen;
+				getF = &getF_Proxi;
+				getR = &getR_Proxi;
+				getChainTemplates = &getProxiChainTemplates;
+				/* -cge */
+				/*
+				rewards->M = 1;
+				rewards->MM = -3;
+				rewards->W1 = -5;
+				rewards->U = -1;
+				rewards->PE = 17;
+				*/
+				scoreT = 0.25; /* -mrs 0.25 */
+			 	mrc = 0.7; /* -mrc 0.7 */
+			 	minQ = 10; /* -eq 10 */
+			 	/* -lc */
+			 	kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
+				/* -ts 2 */
+				ts = 2;
+			} else if(strcmp(argv[args], "-ill") == 0) {
+				/* -1t1 */
+				kmerScan = &save_kmers;
+				one2one = 1;
+				/* -cge */
+				scoreT = 0.5;
+				rewards->M = 1;
+				rewards->MM = -3;
+				rewards->W1 = -5;
+				rewards->U = -1;
+				rewards->PE = 17;
+				/* -mrc 0.1 */
+				mrc = 0.1;
+				/* -apm p */
+				alnFragsPE = &alnFragsPenaltyPE;
+				save_kmers_pair = &save_kmers_penaltyPair;
+				/* -lc */
+				kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
+				/* -proxi -0.98 */
+				minFrac = -0.98;
+				getMatch = &getProxiMatch;
+				getMatchSparse = &getProxiMatchSparse;
+				getSecondForce = &getSecondProxiForce;
+				getSecondPen = &getSecondProxiPen;
+				getF = &getF_Proxi;
+				getR = &getR_Proxi;
+				getChainTemplates = &getProxiChainTemplates;
+				/* -bc 0.9 */
+				significantBase = &significantAndSupport;
+				support = 0.9;
+				significantAndSupport(0, 0, support);
+			 	/* -bcd 10 */
+				bcd = 10;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
@@ -1019,6 +1156,7 @@ int kma_main(int argc, char *argv[]) {
 		}
 		preseed(0, 0, exhaustive);
 		trimSeedsPtr(0, ts);
+		mrchain((int *)(&mrc), 0, 0, 0);
 		
 		if(sam && kmaPipe != &kmaPipeThread) {
 			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");
@@ -1032,6 +1170,10 @@ int kma_main(int argc, char *argv[]) {
 			}
 			kmerScan = &save_kmers;
 			one2one = 1;
+			if(minFrac < 0) {
+				fprintf(stderr, "spltDB cannot be used in combination with soft proximity matching, minFrac < 0\n");
+				exit(1);
+			}
 		}
 		
 		if(get_kmers_for_pair_ptr == &get_kmers_for_pair_count) {
@@ -1293,11 +1435,11 @@ int kma_main(int argc, char *argv[]) {
 				strcpy(myTemplatefilename, templatefilename);
 				strcat(myTemplatefilename, ".length.b");
 				templatefile = sfopen(myTemplatefilename, "rb");
-				fseek(templatefile, (Mt1 + 1) * sizeof(int), SEEK_CUR);
+				sfseek(templatefile, (Mt1 + 1) * sizeof(int), SEEK_CUR);
 				sfread(&qseq.len, sizeof(int), 1, templatefile);
 				fclose(templatefile);
-				printFsaMt1(0, &qseq, 0, ioStream);
-				printFsa_pairMt1(0, &qseq, 0, 0, 0, ioStream);
+				printFsaMt1(0, &qseq, 0, 0, ioStream);
+				printFsa_pairMt1(0, &qseq, 0, 0, 0, 0, 0, ioStream);
 			} else {
 				myTemplatefilename = 0;
 			}
@@ -1318,6 +1460,8 @@ int kma_main(int argc, char *argv[]) {
 				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
 			
+			fprintf(stderr, "#\n# Total number of query fragment after trimming:\t%lu\n", totFrags);
+			
 			status |= errno;
 			
 			if(Mt1) {
@@ -1336,18 +1480,18 @@ int kma_main(int argc, char *argv[]) {
 	} else if(Mt1) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, mq, scoreT, mrc, evalue, support, bcd, Mt1, ref_fsa, print_matrix, vcf, xml, sam, nc, nf, thread_num);
+		runKMA_Mt1(myTemplatefilename, outputfilename, strjoin(argv, argc), kmersize, minlen, rewards, ID_t, Depth_t, mq, scoreT, mrc, evalue, support, bcd, Mt1, ref_fsa, print_matrix, tsv, vcf, xml, sam, nc, nf, thread_num);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else if(step2) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status |= save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT);
+		status |= save_kmers_batch(myTemplatefilename, "-s1", shm, thread_num, exhaustive, rewards, ioStream, sam, minlen, scoreT, coverT, (!mem_mode && minFrac < 0) ? -minFrac : minFrac);
 		free(myTemplatefilename);
 	} else if(sparse_run) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
-		status |= save_kmers_sparse_batch(myTemplatefilename, outputfilename, "-s1", ID_t, evalue, ss, shm);
+		status |= save_kmers_sparse_batch(myTemplatefilename, outputfilename, "-s1", ID_t, Depth_t, evalue, ss, shm);
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
 	} else {
@@ -1355,11 +1499,11 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else if(mem_mode) {
-			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

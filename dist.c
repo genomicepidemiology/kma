@@ -46,7 +46,7 @@ HashMapKMA * loadValues(const char *filename) {
 	
 	/* load sizes */
 	sfread(&dest->DB_size, sizeof(unsigned), 1, file);
-	sfread(&dest->kmersize, sizeof(unsigned), 1, file);
+	sfread(&dest->mlen, sizeof(unsigned), 1, file);
 	sfread(&dest->prefix_len, sizeof(unsigned), 1, file);
 	sfread(&dest->prefix, sizeof(long unsigned), 1, file);
 	sfread(&dest->size, sizeof(long unsigned), 1, file);
@@ -55,7 +55,7 @@ HashMapKMA * loadValues(const char *filename) {
 	sfread(&dest->null_index, sizeof(long unsigned), 1, file);
 	
 	dest->mask = 0;
-	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->kmersize << 1));
+	dest->mask = (~dest->mask) >> (sizeof(long unsigned) * sizeof(long unsigned) - (dest->mlen << 1));
 	dest->shmFlag = 0;
 	
 	/* simple check for old indexing */
@@ -96,7 +96,7 @@ HashMapKMA * loadValues(const char *filename) {
 		/* skip */
 		dest->exist = 0;
 		dest->exist_l = 0;
-		fseek(file, size, SEEK_CUR);
+		sfseek(file, size, SEEK_CUR);
 	}
 	
 	/* values */
@@ -118,39 +118,43 @@ HashMapKMA * loadValues(const char *filename) {
 	dest->values_s = (short unsigned *)(dest->values);
 	
 	/* check for megaMap */
-	if(dest->exist) {
-		fclose(file);
-		return dest;
+	if(!dest->exist) {
+		/* skip kmers */
+		size = dest->n + 1;
+		if(dest->mlen <= 16) {
+			size *= sizeof(unsigned);
+		} else {
+			size *= sizeof(long unsigned);
+		}
+		dest->key_index = 0;
+		dest->key_index_l = 0;
+		sfseek(file, size, SEEK_CUR);
+		
+		/* value indexes */
+		size = dest->n;
+		if(dest->v_index < UINT_MAX) {
+			size *= sizeof(unsigned);
+		} else {
+			size *= sizeof(long unsigned);
+		}
+		dest->exist = smalloc(size);
+		check = fread(dest->exist, 1, size, file);
+		if(check != size) {
+			free(dest);
+			free(dest->exist);
+			free(dest->values);
+			fclose(file);
+			return 0;
+		}
+		dest->exist_l = (long unsigned *)(dest->exist);
 	}
 	
-	/* skip kmers */
-	size = dest->n + 1;
-	if(dest->kmersize <= 16) {
-		size *= sizeof(unsigned);
+	if(fread(&dest->kmersize, sizeof(unsigned), 1, file)) {
+		sfread(&dest->flag, sizeof(unsigned), 1, file);
 	} else {
-		size *= sizeof(long unsigned);
+		dest->kmersize = dest->mlen;
+		dest->flag = 0;
 	}
-	dest->key_index = 0;
-	dest->key_index_l = 0;
-	fseek(file, size, SEEK_CUR);
-	
-	/* value indexes */
-	size = dest->n;
-	if(dest->v_index < UINT_MAX) {
-		size *= sizeof(unsigned);
-	} else {
-		size *= sizeof(long unsigned);
-	}
-	dest->exist = smalloc(size);
-	check = fread(dest->exist, 1, size, file);
-	if(check != size) {
-		free(dest);
-		free(dest->exist);
-		free(dest->values);
-		fclose(file);
-		return 0;
-	}
-	dest->exist_l = (long unsigned *)(dest->exist);
 	
 	fclose(file);
 	return dest;
@@ -411,7 +415,7 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 		unlock(lock);
 		wait_atomic(*thread_wait);
 	} else {
-		fseek(name_file, 0, SEEK_SET);
+		sfseek(name_file, 0, SEEK_SET);
 		row_bias = 0;
 		unlock(lock);
 	}
@@ -566,7 +570,7 @@ void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 		unlock(lock);
 		wait_atomic(*thread_wait);
 	} else {
-		fseek(name_file, 0, SEEK_SET);
+		sfseek(name_file, 0, SEEK_SET);
 		row_bias = 0;
 		unlock(lock);
 	}
@@ -578,7 +582,7 @@ long unsigned getPhySize(int flag, int format, long unsigned n, long unsigned *l
 	
 	/* get name name */
 	if(format & 1) {
-		fseek(name_file, 0, SEEK_END);
+		sfseek(name_file, 0, SEEK_END);
 		size = ftell(name_file);
 		rewind(name_file);
 	} else {
@@ -940,7 +944,7 @@ int dist_main(int argc, char *argv[]) {
 				fprintf(stdout, "#%9d\t%s\n", 256, "Cosine distance");
 				fprintf(stdout, "#%9d\t%s\n", 512, "Cosine similarity");
 				fprintf(stdout, "#%9d\t%s\n", 1024, "Szymkiewicz–Simpson similarity");
-				fprintf(stdout, "#%9d\t%s\n", 2048, "Szymkiewicz–Simpson dissimilarity");
+				fprintf(stdout, "#%9d\t%s\n", 2048, "Szymkiewicz–Simpson distance");
 				fprintf(stdout, "#%9d\t%s\n", 4096, "Chi-square distance");
 				fprintf(stdout, "#\n");
 				return 0;
@@ -982,7 +986,7 @@ int dist_main(int argc, char *argv[]) {
 	}
 	if(!outputfilename) {
 		outputfilename = smalloc(file_len + 64);
-		sprintf(outputfilename, "%s.phy", templatefilename);
+		file_len = sprintf(outputfilename, "%s.phy", templatefilename);
 	}
 	
 	runDist(templatefilename, outputfilename, flag, format, mmap, thread_num);

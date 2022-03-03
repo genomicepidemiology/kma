@@ -30,6 +30,7 @@ struct nWmat {
 	unsigned char *E;
 	int *D[2];
 	int *P[2];
+	int *P2[2];
 	Penalties *rewards;
 };
 

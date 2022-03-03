@@ -20,12 +20,13 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/param.h>
+//#include <sys/param.h>
 #include "compress.h"
 #include "hashmap.h"
 #include "hashmapkma.h"
 #include "pherror.h"
 #include "valueshash.h"
+#include "stdstat.h"
 #ifdef _WIN32
 #define mmap(addr, len, prot, flags, fd, offset) (0; fprintf(stderr, "mmap not available on windows.\n"); exit(1););
 #define munmap(addr, len) (-1);
@@ -37,19 +38,23 @@ unsigned (*valuesSize)(unsigned *);
 
 static void mmapinit(HashMapKMA *finalDB, long unsigned size, FILE *out) {
 	
+	unsigned char *data;
+	unsigned *udata;
+	
 	/* allocate file */
-	fseek(out, size - 1, SEEK_SET);
+	sfseek(out, size - 1, SEEK_SET);
 	putc(0, out);
 	rewind(out);
 	
 	/* map file */
-	finalDB->exist = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(out), 0);
+	data = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(out), 0);
+	finalDB->exist = (unsigned *) data;
 	if(finalDB->exist == MAP_FAILED) {
 		ERROR();
 	}
 	posix_madvise(finalDB->exist, size, POSIX_MADV_SEQUENTIAL);
 	*finalDB->exist++ = finalDB->DB_size;
-	*finalDB->exist++ = finalDB->kmersize;
+	*finalDB->exist++ = finalDB->mlen;
 	*finalDB->exist++ = finalDB->prefix_len;
 	finalDB->exist_l = (long unsigned *) finalDB->exist;
 	*finalDB->exist_l++ = finalDB->prefix;
@@ -59,6 +64,10 @@ static void mmapinit(HashMapKMA *finalDB, long unsigned size, FILE *out) {
 	*finalDB->exist_l++ = finalDB->null_index;
 	finalDB->exist = (unsigned *) finalDB->exist_l;
 	
+	data += size - 2 * sizeof(unsigned);
+	udata = (unsigned *) data;
+	*udata++ = finalDB->kmersize;
+	*udata++ = finalDB->flag;
 }
 
 static void rmemcpy(unsigned char *dst, unsigned char *src, size_t n) {
@@ -76,7 +85,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	unsigned char *data;
 	long unsigned i, j, check, size, v_size;
 	long unsigned index, t_index, v_index, new_index, null_index;
-	unsigned swap, *values, *finalV;
+	unsigned flag, swap, *values, *finalV;
 	short unsigned *values_s, *finalV_s;
 	HashMapKMA *finalDB;
 	ValuesHash *shmValues;
@@ -99,7 +108,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	/* prepare final DB */
 	swap = 0;
 	v_size = 0;
-	size = 3 * sizeof(unsigned) + 5 * sizeof(long unsigned);
+	size = 5 * sizeof(unsigned) + 5 * sizeof(long unsigned);
 	check = 0;
 	check = ~check;
 	check >>= 32;
@@ -113,6 +122,8 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	finalDB->prefix = templates->prefix;
 	finalDB->kmersize = templates->kmersize;
 	finalDB->DB_size = templates->DB_size;
+	finalDB->mlen = templates->mlen;
+	flag = (finalDB->flag = templates->flag);
 	
 	/* allocate existence */
 	if(finalDB->n <= check) {
@@ -127,7 +138,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 		hashMapKMA_addExist_ptr = &hashMapKMA_addExistL;
 	}
 	
-	if(finalDB->kmersize <= 16) {
+	if(finalDB->mlen <= 16) {
 		finalDB->key_index = malloc((finalDB->n + 1) * sizeof(unsigned));
 		finalDB->key_index_l = 0;
 		size += (finalDB->n + 1) * sizeof(unsigned);
@@ -161,7 +172,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 			finalDB->exist = 0;
 			finalDB->key_index = (unsigned *) (finalDB->exist_l + finalDB->size);
 		}
-		if(16 < finalDB->kmersize) {
+		if(16 < finalDB->mlen) {
 			finalDB->key_index_l = (long unsigned *) finalDB->key_index;
 			finalDB->key_index = 0;
 			finalDB->value_index = (unsigned *) (finalDB->key_index_l + (finalDB->n + 1));
@@ -188,10 +199,16 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	v_index = 0;
 	while(node_t != 0) {
 		/* get index */
-		index = (node_t->key & finalDB->size);
+		if(flag) {
+			murmur(index, node_t->key);
+			index &= finalDB->size;
+		} else {
+			index = (node_t->key & finalDB->size);
+		}
 		hashMapKMA_addExist_ptr(finalDB, index, t_index);
+		
 		/* mv chain */
-		while(node_t != 0 && (node_t->key & finalDB->size) == index) {
+		do {
 			next_t = node_t->next;
 			
 			/* add kmer */
@@ -222,7 +239,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 						
 						/* prep new size */
 						size += finalDB->n * (sizeof(long unsigned) - sizeof(unsigned));
-						fseek(out, size, SEEK_SET);
+						sfseek(out, size, SEEK_SET);
 						fputc(0, out);
 						rewind(out);
 						
@@ -245,7 +262,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 						}
 						finalDB->value_index = finalDB->key_index + (finalDB->n + 1);
 						finalDB->value_index_l = (long unsigned *) finalDB->value_index;
-						if(16 < finalDB->kmersize) {
+						if(16 < finalDB->mlen) {
 							finalDB->key_index_l = (long unsigned *) finalDB->key_index;
 							finalDB->key_index = 0;
 						}
@@ -272,7 +289,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 								finalDB->key_index = (unsigned *) (finalDB->exist_l + finalDB->size);
 							}
 							
-							if(16 < finalDB->kmersize) {
+							if(16 < finalDB->mlen) {
 								finalDB->key_index_l = (long unsigned *) finalDB->key_index;
 								finalDB->key_index = 0;
 								memcpy(finalDB->key_index_l, values, (finalDB->n + 1) * sizeof(long unsigned));
@@ -307,8 +324,18 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 			
 			/* clean */
 			free(node_t);
-			node_t = next_t;
-		}
+			if((node_t = next_t)) {
+				if(flag) {
+					murmur(new_index, node_t->key);
+					new_index &= finalDB->size;
+				} else {
+					new_index = node_t->key & finalDB->size;
+				}
+			} else {
+				/* break chain */
+				new_index = ~index;
+			}
+		} while(new_index == index);
 	}
 	/* convert valuesHash to a linked list */
 	table = 0;
@@ -380,7 +407,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 				getSizePtr = &getSize;
 			}
 			
-			if(finalDB->kmersize <= 16) {
+			if(finalDB->mlen <= 16) {
 				memcpy(data, finalDB->key_index, (finalDB->n + 1) * sizeof(unsigned));
 				data += (finalDB->n + 1) * sizeof(unsigned);
 				free(finalDB->key_index);
@@ -442,7 +469,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 		} else {
 			finalDB->key_index = finalDB->values + finalDB->v_index;
 		}
-		if(finalDB->kmersize <= 16) {
+		if(finalDB->mlen <= 16) {
 			finalDB->value_index = finalDB->key_index + (finalDB->n + 1);
 		} else {
 			finalDB->key_index_l = (long unsigned *) finalDB->key_index;
@@ -457,7 +484,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	/* move pieces to correct location, rmemcpy */
 	if(swap == 2) {
 		/* value_index */
-		if(finalDB->kmersize <= 16) {
+		if(finalDB->mlen <= 16) {
 			values = finalDB->values + (finalDB->n + 1);
 		} else {
 			values = (unsigned *) (((long unsigned *) finalDB->values) + (finalDB->n + 1));
@@ -466,7 +493,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 		rmemcpy((unsigned char *) finalDB->value_index, (unsigned char *) values, v_size);
 		
 		/* key_index */
-		v_size = (finalDB->n + 1) * (finalDB->kmersize <= 16 ? sizeof(unsigned) : sizeof(long unsigned));
+		v_size = (finalDB->n + 1) * (finalDB->mlen <= 16 ? sizeof(unsigned) : sizeof(long unsigned));
 		rmemcpy((unsigned char *) finalDB->key_index, (unsigned char *) finalDB->values, v_size);
 		
 		swap = 1;
@@ -521,19 +548,42 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 	
 	/* add terminating key */
 	i = 0;
-	if(finalDB->kmersize <= 16) { 
-		j = finalDB->key_index[finalDB->n - 1] & finalDB->size;
-		while(j == (finalDB->key_index[i] & finalDB->size)) {
-			++i;
+	if(finalDB->flag) {
+		if(finalDB->mlen <= 16) { 
+			murmur(j, finalDB->key_index[finalDB->n - 1]);
+			j &= finalDB->size;
+			do {
+				murmur(index, finalDB->key_index[i]);
+				index &= finalDB->size;
+				++i;
+			} while(j == index);
+			finalDB->key_index[finalDB->n] = finalDB->key_index[i];
+		} else {
+			murmur(j, finalDB->key_index_l[finalDB->n - 1]);
+			j &= finalDB->size;
+			do {
+				murmur(index, finalDB->key_index_l[i]);
+				index &= finalDB->size;
+				++i;
+			} while(j == index);
+			finalDB->key_index_l[finalDB->n] = finalDB->key_index_l[i];
 		}
-		finalDB->key_index[finalDB->n] = finalDB->key_index[i];
 	} else {
-		j = finalDB->key_index_l[finalDB->n - 1] & finalDB->size;
-		while(j == (finalDB->key_index_l[i] & finalDB->size)) {
-			++i;
+		if(finalDB->mlen <= 16) { 
+			j = finalDB->key_index[finalDB->n - 1] & finalDB->size;
+			while(j == (finalDB->key_index[i] & finalDB->size)) {
+				++i;
+			}
+			finalDB->key_index[finalDB->n] = finalDB->key_index[i];
+		} else {
+			j = finalDB->key_index_l[finalDB->n - 1] & finalDB->size;
+			while(j == (finalDB->key_index_l[i] & finalDB->size)) {
+				++i;
+			}
+			finalDB->key_index_l[finalDB->n] = finalDB->key_index_l[i];
 		}
-		finalDB->key_index_l[finalDB->n] = finalDB->key_index_l[i];
 	}
+	
 	/* dump final DB */
 	fprintf(stderr, "# Dumping compressed DB\n");	
 	++finalDB->size;
@@ -550,7 +600,7 @@ HashMapKMA * compressKMA_DB(HashMap *templates, FILE *out) {
 		*--finalDB->exist_l = finalDB->prefix;
 		finalDB->exist = (unsigned *) finalDB->exist_l;
 		*--finalDB->exist = finalDB->prefix_len;
-		*--finalDB->exist = finalDB->kmersize;
+		*--finalDB->exist = finalDB->mlen;
 		*--finalDB->exist = finalDB->DB_size;
 		msync(finalDB->exist, size, MS_ASYNC);
 		munmap(finalDB->exist, size);
@@ -587,6 +637,8 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 	finalDB->prefix = templates->prefix;
 	finalDB->kmersize = templates->kmersize;
 	finalDB->DB_size = templates->DB_size;
+	finalDB->mlen = templates->mlen;
+	finalDB->flag = templates->flag;
 	
 	/* allocate existence */
 	finalDB->exist = malloc(finalDB->size * sizeof(unsigned));
@@ -596,7 +648,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 		swap = 1;
 		
 		/* map file */
-		size = 3 * sizeof(unsigned) + 5 * sizeof(long unsigned) + finalDB->size * sizeof(unsigned);
+		size = 5 * sizeof(unsigned) + 5 * sizeof(long unsigned) + finalDB->size * sizeof(unsigned);
 		mmapinit(finalDB, size, out);
 	}
 	finalDB->exist_l = 0;
@@ -672,8 +724,8 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 			munmap(finalDB->exist, size);
 			
 			/* allocate file */
-			size = 3 * sizeof(unsigned) + 5 * sizeof(long unsigned) + finalDB->size * sizeof(long unsigned);
-			fseek(out, size, SEEK_SET);
+			size = 5 * sizeof(unsigned) + 5 * sizeof(long unsigned) + finalDB->size * sizeof(long unsigned);
+			sfseek(out, size, SEEK_SET);
 			fputc(0, out);
 			rewind(out);
 			
@@ -692,7 +744,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 				fprintf(stderr, "Fail over to swap.\n");
 				swap |= 1;
 				/* map file */
-				size = 3 * sizeof(unsigned) + 5 * sizeof(long unsigned) + finalDB->size * sizeof(long unsigned);
+				size = 5 * sizeof(unsigned) + 5 * sizeof(long unsigned) + finalDB->size * sizeof(long unsigned);
 				values = finalDB->exist;
 				mmapinit(finalDB, size, out);
 				memcpy(finalDB->exist_l, values, finalDB->size * sizeof(unsigned));
@@ -770,7 +822,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 		
 		if(swap & 2) {
 			/* free exist */
-			size = 3 * sizeof(unsigned) + 5 * sizeof(long unsigned);
+			size = 5 * sizeof(unsigned) + 5 * sizeof(long unsigned);
 			if(swap & 1) {
 				/* save prev mapping */
 				finalDB->exist_l = (long unsigned *) finalDB->exist;
@@ -781,7 +833,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 				*--finalDB->exist_l = finalDB->prefix;
 				finalDB->exist = (unsigned *) finalDB->exist_l;
 				*--finalDB->exist = finalDB->prefix_len;
-				*--finalDB->exist = finalDB->kmersize;
+				*--finalDB->exist = finalDB->mlen;
 				*--finalDB->exist = finalDB->DB_size;
 				msync(finalDB->exist, size, MS_ASYNC);
 				munmap(finalDB->exist, size);
@@ -793,7 +845,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 			} else {
 				/* dump piece of DB */
 				cfwrite(&finalDB->DB_size, sizeof(unsigned), 1, out);
-				cfwrite(&finalDB->kmersize, sizeof(unsigned), 1, out);
+				cfwrite(&finalDB->mlen, sizeof(unsigned), 1, out);
 				cfwrite(&finalDB->prefix_len, sizeof(unsigned), 1, out);
 				cfwrite(&finalDB->prefix, sizeof(long unsigned), 1, out);
 				cfwrite(&finalDB->size, sizeof(long unsigned), 1, out);
@@ -833,7 +885,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 		} else {
 			size += v_index * sizeof(unsigned);
 		}
-		fseek(out, size, SEEK_SET);
+		sfseek(out, size, SEEK_SET);
 		fputc(0, out);
 		rewind(out);
 		finalDB->values = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(out), 0);

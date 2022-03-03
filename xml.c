@@ -227,17 +227,4 @@ void hitXML(FILE *out, const int template, const unsigned char *template_name, c
 	fprintf(out, "\t</Hit_hsps>\n");
 	fprintf(out, "</Hit>\n");
 	unlock(lock);
-	
-	/* here */
-	/*
-	fprintf(stdout, "%s\n", template_name);
-	i = 0;
-	for(i = 0; i < aligned->len; i += 60) {
-		fprintf(stdout, "t:\t%.60s\n", aligned->t + i);
-		fprintf(stdout, "s:\t%.60s\n", aligned->s + i);
-		fprintf(stdout, "q:\t%.60s\n\n", aligned->q + i);
-	}
-	fprintf(stdout, "\n\n");
-	*/
-	
 }

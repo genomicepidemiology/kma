@@ -628,11 +628,11 @@ void * assemble_KMA_threaded(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -1091,11 +1091,11 @@ void * assemble_KMA_dense_threaded(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -1299,10 +1299,10 @@ void * skip_assemble_KMA(void *arg) {
 				++file_i;
 			} else if(nextTemplate < template) {
 				/* Move pointer forward */
-				fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+				sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 			} else {
 				/* Move pointer back */
-				fseek(file, (-8) * sizeof(int), SEEK_CUR);
+				sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 				++file_i;
 			}
 		} else {
@@ -1651,7 +1651,7 @@ void * assemble_KMA(void *arg) {
 	Assemble_thread *thread = arg;
 	int i, minlen, aln_len, kmersize, sam, chunk, ef, template;
 	int read_score, asm_len, nextTemplate, file_i, file_count, delta, status;
-	int thread_num, mq, bcd, start, end, q_start, q_end;
+	int thread_num, mq, bcd, start, end, q_start, q_end, Wl;
 	int stats[5], buffer[8], *qBoundPtr;
 	short unsigned *counts;
 	double score, scoreT, mrc, evalue;
@@ -1686,8 +1686,8 @@ void * assemble_KMA(void *arg) {
 	delta = qseq->size;
 	mq = thread->mq;
 	minlen = thread->minlen;
-	mrc = thread->mrc;
 	scoreT = thread->scoreT;
+	mrc = thread->mrc;
 	evalue = thread->evalue;
 	bcd = thread->bcd;
 	sam = thread->sam;
@@ -1696,10 +1696,10 @@ void * assemble_KMA(void *arg) {
 	thread_num = thread->thread_num;
 	seq_in = thread->seq_in;
 	kmersize = thread->kmersize;
+	Wl = points->rewards->Wl;
 	
 	if(template != -2) {
 		wait_atomic(thread_begin);
-		
 		
 		/* all assemblies done, 
 		signal threads to return */
@@ -1890,9 +1890,20 @@ void * assemble_KMA(void *arg) {
 						aln_len = alnStat.len;
 						start = alnStat.pos;
 						end = start + aln_len - alnStat.tGaps;
+						if(t_len < end) {
+							/* circular aln */
+							end -= t_len;
+						}
 						
 						/* Get normed score check read coverage */
 						read_score = alnStat.score;
+						/* full gene award */
+						if(start == 0) {
+							read_score += Wl;
+						}
+						if(end == t_len) {
+							read_score += Wl;
+						}
 						if(minlen <= aln_len && mrcheck(mrc, alnStat, qseq->len, t_len)) {
 							score = 1.0 * read_score / aln_len;
 						} else {
@@ -1967,11 +1978,11 @@ void * assemble_KMA(void *arg) {
 					++file_i;
 				} else if(nextTemplate < template) {
 					/* Move pointer forward */
-					fseek(file, buffer[1] + buffer[6], SEEK_CUR);
+					sfseek(file, buffer[1] + buffer[6], SEEK_CUR);
 					unlock(excludeIn);
 				} else {
 					/* Move pointer back */
-					fseek(file, (-8) * sizeof(int), SEEK_CUR);
+					sfseek(file, (-8) * sizeof(int), SEEK_CUR);
 					unlock(excludeIn);
 					++file_i;
 				}
@@ -2038,9 +2049,9 @@ void * assemble_KMA(void *arg) {
 		t = aligned_assem->t;
 		s = aligned_assem->s;
 		q = aligned_assem->q;
-		t_next = t;
-		s_next = s;
-		q_next = q;
+		t_next = t--;
+		s_next = s--;
+		q_next = q--;
 		i = aligned_assem->len;
 		asm_len = i++;
 		while(--i) {
@@ -2050,14 +2061,14 @@ void * assemble_KMA(void *arg) {
 				++s_next;
 				++q_next;
 			} else {
-				*t++ = *t_next++;
-				*s++ = *s_next++;
-				*q++ = *q_next++;
+				*++t = *t_next++;
+				*++s = *s_next++;
+				*++q = *q_next++;
 			}
 		}
-		*t = 0;
-		*s = 0;
-		*q = 0;
+		*++t = 0;
+		*++s = 0;
+		*++q = 0;
 		aligned_assem->len = asm_len;
 	} else {
 		aligned_assem->t[asm_len] = 0;

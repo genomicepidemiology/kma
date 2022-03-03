@@ -1,4 +1,4 @@
-/* Philip T.L.C. Clausen Jan 2017 plan@dtu.dk */
+/* Philip T.L.C. Clausen May 2021 plan@dtu.dk */
 
 /*
  * Copyright (c) 2017, Philip Clausen, Technical University of Denmark
@@ -16,18 +16,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
+#include <stdio.h>
+#include "compdna.h"
+#include "qseqs.h"
 
-#define MIN(X, Y) ((X < Y) ? X : Y)
-#define MAX(X, Y) ((X < Y) ? Y : X)
-#define murmur(index, kmer) index = (3323198485ul ^ kmer) * 0x5bd1e995; index ^= index >> 15;
-
-extern int (*cmp)(int, int);
-int cmp_or(int t, int q);
-int cmp_and(int t, int q);
-int cmp_true(int t, int q);
-double fastp(long double q);
-double p_chisqr(long double q);
-double power(double x, unsigned n);
-double binP(int n, int k, double p);
-unsigned minimum(unsigned *src, unsigned n);
-unsigned eQual(unsigned char *qual, const int len, const int minQ, const double *prob);
+void printTrimFsa(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out);
+void printTrimFsa_pair(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, Qseqs *qseq_r, Qseqs *qual_r, CompDNA *compressor, FILE *out);
+int trim_main(int argc, char *argv[]);

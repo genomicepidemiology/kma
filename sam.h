@@ -22,5 +22,5 @@
 #include "qseqs.h"
 
 char * makeCigar(Qseqs *Cigar, const Aln *aligned);
-void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size);
+void saminit(Qseqs *template_name, FILE *name_file, int *template_lengths, int DB_size, char *cmd);
 int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rname, const Aln *aligned, const int *stats);
