@@ -68,10 +68,10 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 				if(qseq->len <= maxlen) {
 					/* trim */
 					seq = qual->seq;
-					start = fiveClip;
 					end = qseq->len - 1 - threeClip;
 					end = end < 0 ? 0 : end;
-					while(end >= 0 && seq[end] < phredCut) {
+					start = end < fiveClip ? end : fiveClip;
+					while(end >= start && seq[end] < phredCut) {
 						--end;
 					}
 					++end;
@@ -198,10 +198,10 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile2, header2, qseq2, qual2, trans))) {
 				/* trim forward */
 				seq = qual->seq;
-				start = fiveClip;
 				end = qseq->len - 1 - threeClip;
 				end = end < 0 ? 0 : end;
-				while(end >= 0 && seq[end] < phredCut) {
+				start = end < fiveClip ? end : fiveClip;
+				while(end >= start && seq[end] < phredCut) {
 					--end;
 				}
 				++end;
@@ -220,9 +220,9 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				
 				/* trim reverse */
 				seq = qual2->seq;
-				start2 = fiveClip;
-				end = qseq2->len - 1;
-				while(end >= 0 && seq[end] < phredCut) {
+				end = qseq2->len - 1 - threeClip;
+				start2 = end < fiveClip ? end : fiveClip;
+				while(end >= start2 && seq[end] < phredCut) {
 					--end;
 				}
 				++end;
@@ -382,10 +382,10 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile, header2, qseq2, qual2, trans))) {
 				/* trim forward */
 				seq = qual->seq;
-				start = fiveClip;
 				end = qseq->len - 1 - threeClip;
 				end = end < 0 ? 0 : end;
-				while(end >= 0 && seq[end] < phredCut) {
+				start = end < fiveClip ? end : fiveClip;
+				while(end >= start && seq[end] < phredCut) {
 					--end;
 				}
 				++end;
@@ -404,9 +404,9 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				
 				/* trim reverse */
 				seq = qual2->seq;
-				start2 = fiveClip;
-				end = qseq2->len - 1;
-				while(end >= 0 && seq[end] < phredCut) {
+				end = qseq2->len - 1 - threeClip;
+				start2 = end < fiveClip ? end : fiveClip;
+				while(end >= start2 && seq[end] < phredCut) {
 					--end;
 				}
 				++end;
