@@ -1064,8 +1064,10 @@ int kma_main(int argc, char *argv[]) {
 					significantBase = &significantAnd90Nuc;
 				}
 				baseCall = &nanoCaller;
+				/* -bc 0.7 */
 				significantBase = &significantAndSupport;
-				support = 0.7; /* -bc 0.7 */
+				support = 0.7;
+				significantAndSupport(0, 0, support);
 			 	coverT = 0.1; /* -mct 0.1 */
 			 	bcd = 10; /* -bcd 10 */
 			 	/* -proxi -0.9 */
@@ -1134,7 +1136,8 @@ int kma_main(int argc, char *argv[]) {
 				/* -bc 0.9 */
 				significantBase = &significantAndSupport;
 				support = 0.9;
-				/* -bcd 10 */
+				significantAndSupport(0, 0, support);
+			 	/* -bcd 10 */
 				bcd = 10;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);

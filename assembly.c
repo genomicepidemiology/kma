@@ -2049,9 +2049,9 @@ void * assemble_KMA(void *arg) {
 		t = aligned_assem->t;
 		s = aligned_assem->s;
 		q = aligned_assem->q;
-		t_next = t;
-		s_next = s;
-		q_next = q;
+		t_next = t--;
+		s_next = s--;
+		q_next = q--;
 		i = aligned_assem->len;
 		asm_len = i++;
 		while(--i) {
@@ -2061,14 +2061,14 @@ void * assemble_KMA(void *arg) {
 				++s_next;
 				++q_next;
 			} else {
-				*t++ = *t_next++;
-				*s++ = *s_next++;
-				*q++ = *q_next++;
+				*++t = *t_next++;
+				*++s = *s_next++;
+				*++q = *q_next++;
 			}
 		}
-		*t = 0;
-		*s = 0;
-		*q = 0;
+		*++t = 0;
+		*++s = 0;
+		*++q = 0;
 		aligned_assem->len = asm_len;
 	} else {
 		aligned_assem->t[asm_len] = 0;

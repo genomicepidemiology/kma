@@ -390,7 +390,6 @@ int trim_main(int argc, char *argv[]) {
 		*inputfiles = "--";
 	}
 	
-	
 	/* SE */
 	if(fileCounter > 0) {
 		totFrags += run_input(inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, out);
