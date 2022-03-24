@@ -104,7 +104,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
 				if(qseq->len <= maxlen) {
 					/* remove leading and trailing N's */
-					seq = qual->seq;
+					seq = qseq->seq;
 					end = qseq->len - 1 - threeClip;
 					end = end < 0 ? 0 : end;
 					start = end < fiveClip ? end : fiveClip;
@@ -270,7 +270,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile2, header2, qseq2, trans))) {
 				/* remove leading and trailing N's */
-				seq = qual->seq;
+				seq = qseq->seq;
 				end = qseq->len - 1 - threeClip;
 				end = end < 0 ? 0 : end;
 				start = end < fiveClip ? end : fiveClip;
@@ -284,7 +284,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				qseq->len = end - start;
 				
 				/* trim reverse */
-				seq = qual2->seq;
+				seq = qseq2->seq;
 				end = qseq2->len - 1 - threeClip;
 				end = end < 0 ? 0 : end;
 				start2 = end < fiveClip ? end : fiveClip;
@@ -456,7 +456,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile, header2, qseq2, trans))) {
 				/* remove leading and trailing N's */
-				seq = qual->seq;
+				seq = qseq->seq;
 				end = qseq->len - 1 - threeClip;
 				end = end < 0 ? 0 : end;
 				start = end < fiveClip ? end : fiveClip;
@@ -470,7 +470,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				qseq->len = end - start;
 				
 				/* trim reverse */
-				seq = qual2->seq;
+				seq = qseq2->seq;
 				end = qseq2->len - 1 - threeClip;
 				end = end < 0 ? 0 : end;
 				start2 = end < fiveClip ? end : fiveClip;
