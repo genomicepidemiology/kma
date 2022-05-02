@@ -1088,10 +1088,10 @@ int kma_main(int argc, char *argv[]) {
 				rewards->PE = 17;
 				*/
 				scoreT = 0.25; /* -mrs 0.25 */
-			 	mrc = 0.7; /* -mrc 0.7 */
-			 	minQ = 10; /* -eq 10 */
-			 	/* -lc */
-			 	kmerAnkerScore = &ankerScoreLen;
+				mrc = 0.7; /* -mrc 0.7 */
+				minQ = 10; /* -eq 10 */
+				/* -lc */
+				kmerAnkerScore = &ankerScoreLen;
 				testExtension = &testExtensionScoreLen;
 				proxiTestBest = &proxiTestBestScoreLen;
 				getBestAnker = &getBestAnkerScoreLen;
@@ -1105,12 +1105,14 @@ int kma_main(int argc, char *argv[]) {
 				kmerScan = &save_kmers;
 				one2one = 1;
 				/* -cge */
+				/*
 				scoreT = 0.5;
 				rewards->M = 1;
 				rewards->MM = -3;
 				rewards->W1 = -5;
 				rewards->U = -1;
 				rewards->PE = 17;
+				*/
 				/* -mrc 0.1 */
 				mrc = 0.1;
 				/* -apm p */
@@ -1157,6 +1159,7 @@ int kma_main(int argc, char *argv[]) {
 		preseed(0, 0, exhaustive);
 		trimSeedsPtr(0, ts);
 		mrchain((int *)(&mrc), 0, 0, 0);
+		chooseChain(0, 0, 0, 0, (int *)(&coverT), (int *)(&minFrac));
 		
 		if(sam && kmaPipe != &kmaPipeThread) {
 			fprintf(stderr, "\"-sam\" and \"-status\" cannot coincide.\n");

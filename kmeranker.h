@@ -54,3 +54,4 @@ KmerAnker * getBestAnkerScore(KmerAnker **src, unsigned *ties, const int *templa
 KmerAnker * getBestAnkerScoreLen(KmerAnker **src, unsigned *ties, const int *template_lengths);
 KmerAnker * getTieAnkerScore(int stop, KmerAnker *src, const KmerAnker *bestScore);
 KmerAnker * getTieAnkerScoreLen(int stop, KmerAnker *src, const KmerAnker *bestScore);
+int chooseChain(const KmerAnker *bestScore, const KmerAnker *bestScore_r, int cStart, int cStart_r, int *Start, int *Len);

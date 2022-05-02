@@ -498,3 +498,88 @@ KmerAnker * getTieAnkerScoreLen(int stop, KmerAnker *src, const KmerAnker *bestS
 	
 	return 0;
 }
+
+int chooseChain(const KmerAnker *best_score, const KmerAnker *best_score_r, int cStart, int cStart_r, int *Start, int *Len) {
+	
+	static double coverT = 0.5, proxi = 1.0;
+	int rc, start, end;
+	
+	if(!best_score) {
+		coverT = *((double *)(Start));
+		proxi = *((double *)(Len));
+		proxi = proxi < 0 ? -proxi : proxi;
+		return 0;
+	}
+	
+	/* check scores */
+	if(proxi == 1.0) {
+		rc = best_score_r->score < best_score->score ? 1 : best_score->score < best_score_r->score ? 2 : 3;
+	} else if(best_score_r->score <= best_score->score) {
+		/* forward best, check proxi reverse */
+		rc = (proxi * best_score->score <= best_score_r->score) ? 3 : 1;
+	} else {
+		/* reverse best, check proxi forward */
+		rc = (proxi * best_score_r->score <= best_score->score) ? 3 : 2;
+	}
+	
+	/* get coordinates */
+	if(rc == 1) {
+		//tmp_score = getChainTemplates(best_score, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates, Score, extendScore, include);
+		start = cStart;
+		end = best_score->end;
+	} else if(rc == 2) {
+		//tmp_score = getChainTemplates(best_score_r, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates_r, Score, extendScore, include);
+		start = cStart_r;
+		end = best_score_r->end;
+	} else {
+		/* check overlap */
+		/*
+		tmp_score = getChainTemplates(best_score, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates, Score, extendScore, include);
+		cStart = tmp_score->start;
+		tmp_score = getChainTemplates(best_score_r, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates_r, Score, extendScore, include);
+		cStart_r = tmp_score->start;;
+		*/
+		if(best_score->end < cStart_r) { /* no overlaps */
+			start = cStart;
+			end = best_score->end;
+			rc = 1;
+		} else if(best_score_r->end < cStart) {
+			start = cStart_r;
+			end = best_score_r->end;
+			rc = 2;
+		} else if(cStart <= cStart_r && best_score_r->end <= best_score->end) { /* contained or complete overlaps */
+			start = cStart;
+			end = best_score->end;
+		} else if(cStart_r <= cStart && best_score->end <= best_score_r->end) {
+			start = cStart_r;
+			end = best_score_r->end;
+		} else if(best_score_r->end < best_score->end) { /* check partial overlaps */
+			start = best_score->end - cStart;
+			end = best_score_r->end - cStart_r;
+			end = start < end ? start : end;
+			start = cStart_r;
+			if(coverT * end <= best_score_r->end - cStart) {
+				end = best_score->end;
+			} else {
+				end = best_score_r->end;
+				rc = 2;
+			}
+		} else {
+			start = best_score->end - cStart;
+			end = best_score_r->end - cStart_r;
+			end = start < end ? start : end;
+			start = cStart;
+			if(coverT * end <= best_score->end - cStart_r) {
+				end = best_score_r->end;
+			} else {
+				end = best_score->end;
+				rc = 1;
+			}
+		}
+	}
+	
+	*Start = start;
+	*Len = end - start;
+	return rc;
+}
+
