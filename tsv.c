@@ -25,6 +25,9 @@
 
 void initsv(FILE *outfile, long unsigned flag) {
 	
+	/* mask off invalid flags */
+	flag &= 65535;
+	
 	printsvField(flag, outfile, "%s%c", "Template_Name");
 	printsvField(flag, outfile, "%s%c", "Template_Length");
 	printsvField(flag, outfile, "%s%c", "Template_Identity");
@@ -46,6 +49,9 @@ void initsv(FILE *outfile, long unsigned flag) {
 void printsv(FILE *outfile, long unsigned flag, char *template_name, Assem *aligned_assem, int t_len, unsigned readCount, long unsigned read_score, double expected, double q_value, double p_value, long unsigned ConClave_Score) {
 	
 	//printsv(tsv_out, tsv, template_name, aligned_assem, t_len, readCount, read_score, expected, q_value, p_value, alignment_scores[template]);
+	
+	/* mask off invalid flags */
+	flag &= 65535;
 	
 	/* 0 no file */
 	if(!flag) {

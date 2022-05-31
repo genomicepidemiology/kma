@@ -1151,7 +1151,7 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 			if(end == t_len) {
 				read_score += Wl;
 			}
-			score = aln_len;//q_len < t_len ? q_len : t_len;
+			score = q_len < t_len ? q_len : t_len;
 		}
 		//read_score += (((start != 0) + (end != template_lengths[abs(template)])) * Wl);
 		

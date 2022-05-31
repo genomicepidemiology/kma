@@ -1116,8 +1116,10 @@ int kma_main(int argc, char *argv[]) {
 				/* -mrc 0.1 */
 				mrc = 0.1;
 				/* -apm p */
+				/*
 				alnFragsPE = &alnFragsPenaltyPE;
 				save_kmers_pair = &save_kmers_penaltyPair;
+				*/
 				/* -lc */
 				kmerAnkerScore = &ankerScoreLen;
 				testExtension = &testExtensionScoreLen;
