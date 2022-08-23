@@ -65,14 +65,14 @@ void printFsa_pairMt1(Qseqs *header, Qseqs *qseq, Qseqs *qual, Qseqs *header_r, 
 	if(header) {
 		buff[1] = qseq->len;
 		buff[6] = header->len;
-		buff[7] = 97;
+		buff[7] = 97; /* 64 32 1 FirstInPair MateRC PE */
 		sfwrite(buff, sizeof(int), 8, out);
 		sfwrite(qseq->seq, 1, qseq->len, out);
 		sfwrite(header->seq + 1, 1, header->len, out);
 		
 		buff[1] = qseq_r->len;
 		buff[6] = header_r->len;
-		buff[7] = 145;
+		buff[7] = 145; /* 128 16 1 LastInPair RC PE */
 		strrc(qseq_r->seq, qseq_r->len);
 		sfwrite(buff, sizeof(int), 8, out);
 		sfwrite(qseq_r->seq, 1, qseq_r->len, out);

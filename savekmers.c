@@ -37,7 +37,7 @@
 #include "threader.h"
 
 void (*ankerPtr)(int*, int*, int*, char*, int*, unsigned**, unsigned**, int*, CompDNA*, int, int, int, int, Qseqs*, volatile int*, FILE*) = &ankerAndClean;
-int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_chain; /* here */ // = &save_kmers_HMM;
+int (*kmerScan)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, CompDNA*, CompDNA*, Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_chain;
 int (*save_kmers_pair)(const HashMapKMA *, const Penalties *, int*, int*, int*, int*, int*, int*, CompDNA*, CompDNA*, const Qseqs*, const Qseqs*, int*, const int, volatile int*, FILE*) = &save_kmers_unionPair;
 int (*get_kmers_for_pair_ptr)(const HashMapKMA *, const Penalties *, int *, int *, int *, int *, CompDNA *, int *, int) = &get_kmers_for_pair;
 int (*getMatch)(int*, int*) = &getBestMatch;
@@ -5020,24 +5020,6 @@ void ankerAndClean_MEM(int *regionTemplates, int *Score, int *Score_r, char *inc
 	header->len = l;
 }
 
-/* here */
-void checker(int *bestTemplates) {
-	
-	int i, n, check;
-	
-	check = 0;
-	n = *bestTemplates;
-	for(i = 1; i < n; ++i) {
-		if(bestTemplates[i] == 1702 || bestTemplates[i] == -1702) {
-			++check;
-		}
-	}
-	
-	if(check > 1) {
-		fprintf(stderr, "NONO, %d\n", check);
-	}
-}
-
 int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int *bestTemplates, int *bestTemplates_r, int *Score, int *Score_r, CompDNA *qseq, CompDNA *qseq_r, Qseqs *header, int *extendScore, const int exhaustive, volatile int *excludeOut, FILE *out) {
 	
 	/* return 0 for match, 1 otherwise */
@@ -5570,7 +5552,6 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		best_score_len_r = 0;
 	}
 	
-	/* here */
 	/* proxi might be off */
 	cStart = -1;
 	cStart_r = -1;
@@ -5595,46 +5576,6 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 		cStart_r = tmp_score->start;;
 		rc = chooseChain(best_score, best_score_r, cStart, cStart_r, &start, &len);
 	}
-	/*
-	if(best_score_r->score < best_score->score) {
-		tmp_score = getChainTemplates(best_score, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates, Score, extendScore, include);
-		score = best_score->score;
-		cStart = (start = tmp_score->start);
-		cStart_r = -1;
-		len = best_score->end - start;
-		rc = 1;
-	} else if(best_score->score < best_score_r->score) {
-		tmp_score = getChainTemplates(best_score_r, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates_r, Score, extendScore, include);
-		score = best_score_r->score;
-		cStart = -1;
-		cStart_r = (start = tmp_score->start);
-		len = best_score_r->end - start;
-		rc = 2;
-	} else if(best_score->end == best_score_r->end) {
-		tmp_score = getChainTemplates(best_score, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates, Score, extendScore, include);
-		cStart = (start = tmp_score->start);
-		len = best_score->end - start;
-		score = best_score->score;
-		tmp_score = getChainTemplates(best_score_r, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates_r, Score, extendScore, include);
-		cStart_r = tmp_score->start;
-		start = MIN(cStart, cStart_r);
-		rc = 3;
-	} else if(best_score->end < best_score_r->end) {
-		tmp_score = getChainTemplates(best_score_r, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates_r, Score, extendScore, include);
-		score = best_score_r->score;
-		cStart = -1;
-		cStart_r = (start = tmp_score->start);
-		len = best_score_r->end - start;
-		rc = 2;
-	} else {
-		tmp_score = getChainTemplates(best_score, rewards, template_lengths, qseq->seqlen, kmersize, bestTemplates, Score, extendScore, include);
-		score = best_score->score;
-		cStart = (start = tmp_score->start);
-		cStart_r = -1;
-		len = best_score->end - start;
-		rc = 1;
-	}
-	*/
 	
 	score = MAX(best_score->score, best_score_r->score);
 	if(len < minlen || score < kmersize) {
@@ -5766,16 +5707,12 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 					best_score_r->score = 0;
 					*bestTemplates_r = 0;
 				}
-				/* here */
-				//checker(bestTemplates);
 				lock(excludeOut);
 				i = deConPrintPtr(bestTemplates, qseq, best_score->score, header, 0, out);
 				unlock(excludeOut);
 				best_score->score = 0;
 				*bestTemplates = 0;
 			} else {
-				/* here */
-				//checker(bestTemplates_r);
 				lock(excludeOut);
 				i = deConPrintPtr(bestTemplates_r, qseq_r, best_score_r->score, header, 0, out);
 				unlock(excludeOut);
@@ -5878,47 +5815,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			*include = 0;
 			return 0;
 		} else if(best_score && best_score_r) {
-			/* here */
-			/*
-			if(!best_score->score || !best_score_r->score) {
-				if(best_score->score) {
-					start = cStart;
-					len = best_score->end - start;
-					rc = 1;
-				} else {
-					start = cStart_r;
-					len = best_score_r->end - start;
-					rc = 2;
-				}
-			} else {
-				rc = chooseChain(best_score, best_score_r, cStart, cStart_r, &start, &len);
-			}
-			*/
 			rc = chooseChain(best_score, best_score_r, cStart, cStart_r, &start, &len);
-			/* proxi might be off */
-			/*
-			if(best_score_r->score < best_score->score) {
-				rc = 1;
-				start = cStart;
-				len = best_score->end - start;
-			} else if(best_score->score < best_score_r->score) {
-				rc = 2;
-				start = cStart_r;
-				len = best_score_r->end - start;
-			} else if(best_score->end == best_score_r->end) {
-				rc = 3;
-				start = MIN(cStart, cStart_r);
-				len = best_score->end - start;
-			} else if(best_score->end < best_score_r->end) {
-				rc = 2;
-				start = cStart_r;
-				len = best_score_r->end - start;
-			} else {
-				rc = 1;
-				start = cStart;
-				len = best_score->end - start;
-			}
-			*/
 		} else if(best_score) {
 			rc = 1;
 			start = cStart;

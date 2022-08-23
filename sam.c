@@ -33,8 +33,8 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	char op, pop, *s, *cigar;
 	unsigned char *t, *q;
 	
-	if(Cigar->size < (aligned->len << 1)) {
-		Cigar->size = (aligned->len << 1);
+	if(Cigar->size < (aligned->len << 1) + 20) {
+		Cigar->size = (aligned->len << 1) + 20;
 		free(Cigar->seq);
 		Cigar->seq = smalloc(Cigar->size);
 	} else if(aligned->len == 0) {
@@ -200,14 +200,9 @@ int samwrite(const Qseqs *qseq, const Qseqs *header, const Qseqs *Qual, char *rn
 	}
 	if(aligned) {
 		cigar = makeCigar(Cigar, aligned);
-		if(2 * sizeof(int) + 1 < header->len && header->seq[header->len - 2 * sizeof(int) - 1] == 0) {
-			cigar = (char *) Cigar->seq;
-			Cigar->len += sprintf(cigar, "%dS", *((int*) (header->seq + (header->len - 2 * sizeof(int)))));
-		}
 	}
 	size = fprintf(stdout, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tET:i:%d\tAS:i:%d\n", qname, flag, rname, pos, mapQ, cigar, rnext, pnext, tlen, (char *) seq, qual, et, score);
 	unlock(lock);
-	
 	if(tab < 0) {
 		qname[-tab] = '\t';
 	}

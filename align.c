@@ -43,6 +43,10 @@ AlnScore skipLeadAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, c
 	Stat.qGaps = 0;
 	Stat.pos = t_e;
 	
+	if(aligned) {
+		aligned->start = q_e;
+	}
+	
 	return Stat;
 }
 
@@ -128,7 +132,7 @@ AlnScore leadTailAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, c
 
 void skipTrailAln(Aln *aligned, Aln *Frag_align, AlnScore *Stat, const long unsigned *tseq, const unsigned char *qseq, int t_s, int t_len, int q_s, int q_len, const int bandwidth, NWmat *matrices) {
 	if(aligned) {
-		aligned->end = 0;
+		aligned->end = q_len - q_s;
 		Frag_align->end = 0;
 	}
 }
@@ -961,8 +965,17 @@ int anker_rc(const HashMapCCI *template_index, unsigned char *qseq, int q_len, i
 		bestScore = 0;
 		points->len = 0;
 	} else if(bestScore == score) {
+		/* forward match */
 		strrc(qseq, q_len);
 	} else {
+		/* apply sam-flag */
+		/* reverse match */
+		/*
+		if(flag | 64) { // Forward read
+			flag ^= 32;
+		}
+		flag ^= 16;
+		*/
 		/* move mems down */
 		if(points->len) {
 			intcpy(points->tStart, points->tStart + points->len, mem_count);

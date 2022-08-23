@@ -585,14 +585,6 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		template_tot_ulen += template_lengths[i];
 	}
 	
-	/* here */
-	/* debug scores */
-	/*
-	for(i = 1; i < DB_size; ++i) {
-		fprintf(stdout, "%lu\t%lu\t%d\n", alignment_scores[i], uniq_alignment_scores[i], readCounts[i]);
-	}
-	*/
-	
 	/* ConClave */
 	if(ConClave == 1) {
 		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
