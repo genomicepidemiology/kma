@@ -5591,7 +5591,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			if(rc & 1) {
 				score = best_score->score;
 				V_score = best_score;
-				while((V_score = getTieAnker(start, V_score, best_score))) {
+				while((V_score = getTieAnker(start < VF_scores->start ? VF_scores->start : start, V_score, best_score))) {
 					/*
 					1. tie anker -> tie_len == best_len
 					2. Best match is last on seq -> tie_start < best_start
@@ -5631,7 +5631,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			if(rc & 2) {
 				score = best_score_r->score;
 				V_score = best_score_r;
-				while((V_score = getTieAnker(start, V_score, best_score_r))) {
+				while((V_score = getTieAnker(start < VR_scores->start ? VR_scores->start : start, V_score, best_score_r))) {
 					/*
 					1. tie anker -> tie_len == best_len
 					2. Best match is last on seq -> tie_start < best_start
@@ -5811,6 +5811,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 				}
 			}
 		}
+		
 		if(!best_score && !best_score_r) {
 			*include = 0;
 			return 0;

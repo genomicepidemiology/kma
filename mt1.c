@@ -138,21 +138,20 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 		} else {
 			frag_out = 0;
 		}
-		if(nc == 0) {
+		alignment_out = 0;
+		consensus_out = 0;
+		if((nc & 1) == 0) {
+			strcat(outputfilename, ".fsa");
+			consensus_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		}
+		if((nc & 2) == 0) {
 			strcat(outputfilename, ".aln");
 			alignment_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
 			strcat(outputfilename, ".fsa");
 			consensus_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
-		} else if(nc == 2) {
-			alignment_out = 0;
-			strcat(outputfilename, ".fsa");
-			consensus_out = sfopen(outputfilename, "w");
-			outputfilename[file_len] = 0;
-		} else {
-			alignment_out = 0;
-			consensus_out = 0;
 		}
 		if(print_matrix) {
 			matrix_out = gzInitFileBuff(CHUNK);
@@ -439,7 +438,7 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 			if(tsv) {
 				printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, aligned_assem->readCountAln, read_score, 0, (double) read_score, p_value, read_score);
 			}
-			if(nc != 1) {
+			if(consensus_out) {
 				printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 			}
 			/* print matrix */
@@ -480,9 +479,11 @@ void runKMA_Mt1(char *templatefilename, char *outputfilename, char *exePrev, int
 	if(tsv) {
 		fclose(tsv_out);
 	}
+	if(consensus_out) {
+		fclose(consensus_out);
+	}
 	if(alignment_out) {
 		fclose(alignment_out);
-		fclose(consensus_out);
 	}
 	if(frag_out) {
 		destroyGzFileBuff(frag_out);

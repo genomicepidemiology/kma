@@ -239,21 +239,20 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		} else {
 			frag_out = 0;
 		}
-		if(nc == 0) {
+		alignment_out = 0;
+		consensus_out = 0;
+		if((nc & 1) == 0) {
+			strcat(outputfilename, ".fsa");
+			consensus_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		}
+		if((nc & 2) == 0) {
 			strcat(outputfilename, ".aln");
 			alignment_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
 			strcat(outputfilename, ".fsa");
 			consensus_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
-		} else if(nc == 2) {
-			alignment_out = 0;
-			strcat(outputfilename, ".fsa");
-			consensus_out = sfopen(outputfilename, "w");
-			outputfilename[file_len] = 0;
-		} else {
-			alignment_out = 0;
-			consensus_out = 0;
 		}
 		frag_out_raw = tmpF(0);
 		if(!frag_out_raw) {
@@ -787,7 +786,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 					if(tsv) {
 						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 					}
-					if(nc != 1) {
+					if(consensus_out) {
 						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 					}
 					/* print matrix */
@@ -851,6 +850,8 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	}
 	if(alignment_out) {
 		fclose(alignment_out);
+	}
+	if(consensus_out) {
 		fclose(consensus_out);
 	}
 	fclose(name_file);
@@ -992,21 +993,20 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 		} else {
 			frag_out = 0;
 		}
-		if(nc == 0) {
+		alignment_out = 0;
+		consensus_out = 0;
+		if((nc & 1) == 0) {
+			strcat(outputfilename, ".fsa");
+			consensus_out = sfopen(outputfilename, "w");
+			outputfilename[file_len] = 0;
+		}
+		if((nc & 2) == 0) {
 			strcat(outputfilename, ".aln");
 			alignment_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
 			strcat(outputfilename, ".fsa");
 			consensus_out = sfopen(outputfilename, "w");
 			outputfilename[file_len] = 0;
-		} else if(nc == 2) {
-			alignment_out = 0;
-			strcat(outputfilename, ".fsa");
-			consensus_out = sfopen(outputfilename, "w");
-			outputfilename[file_len] = 0;
-		} else {
-			alignment_out = 0;
-			consensus_out = 0;
 		}
 		frag_out_raw = tmpF(0);
 		if(!frag_out_raw) {
@@ -1502,7 +1502,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 					if(tsv) {
 						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 					}
-					if(nc != 1) {
+					if(consensus_out) {
 						printConsensus(aligned_assem, thread->template_name, alignment_out, consensus_out, ref_fsa);
 					}
 					/* print matrix */
@@ -1578,6 +1578,8 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	}
 	if(alignment_out) {
 		fclose(alignment_out);
+	}
+	if(consensus_out) {
 		fclose(consensus_out);
 	}
 	fclose(name_file);

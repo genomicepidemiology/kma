@@ -973,9 +973,9 @@ int kma_main(int argc, char *argv[]) {
 					}
 				}
 			} else if(strcmp(argv[args], "-nc") == 0) {
-				nc = 1;
+				nc |= 2;
 			} else if(strcmp(argv[args], "-na") == 0) {
-				nc = 2;
+				nc |= 1;
 			} else if(strcmp(argv[args], "-nf") == 0) {
 				nf = 1;
 			} else if(strcmp(argv[args], "-cge") == 0) {
