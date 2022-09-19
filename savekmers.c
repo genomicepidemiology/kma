@@ -5030,7 +5030,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	int i, j, j_u, rc, Wl, W1, U, M, MM, Ms, MMs, Us, W1s, score, gaps, HIT;
 	int start, end, pos, shifter, kmersize, mlen, cover, len, template, test;
 	int cStart, cStart_r, cPos, iPos, len_len, mPos, hLen, flag, seqend, SU;
-	int *bests;
+	int VF_start, VR_start, *bests;
 	unsigned DB_size, hitCounter, hitCounter_r, ties, ties_len;
 	unsigned *values, *last;
 	short unsigned *values_s;
@@ -5530,6 +5530,8 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 	}
 	
 	/* prune hits */
+	VF_start = VF_scores ? VF_scores->start : 0;
+	VR_start = VR_scores ? VR_scores->start : 0;
 	if(!(VF_scores = pruneAnkers(VF_scores, kmersize))) {
 		best_score->score = 0;
 	}
@@ -5591,7 +5593,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			if(rc & 1) {
 				score = best_score->score;
 				V_score = best_score;
-				while((V_score = getTieAnker(start < VF_scores->start ? VF_scores->start : start, V_score, best_score))) {
+				while((V_score = getTieAnker(start < VF_start ? VF_start : start, V_score, best_score))) {
 					/*
 					1. tie anker -> tie_len == best_len
 					2. Best match is last on seq -> tie_start < best_start
@@ -5631,7 +5633,7 @@ int save_kmers_chain(const HashMapKMA *templates, const Penalties *rewards, int 
 			if(rc & 2) {
 				score = best_score_r->score;
 				V_score = best_score_r;
-				while((V_score = getTieAnker(start < VR_scores->start ? VR_scores->start : start, V_score, best_score_r))) {
+				while((V_score = getTieAnker(start < VR_start ? VR_start : start, V_score, best_score_r))) {
 					/*
 					1. tie anker -> tie_len == best_len
 					2. Best match is last on seq -> tie_start < best_start
