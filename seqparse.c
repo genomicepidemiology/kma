@@ -66,7 +66,7 @@ int openAndDetermine(FileBuff *inputfile, char *filename) {
 int FileBuffgetFsa(FileBuff *src, Qseqs *header, Qseqs *qseq, char *trans) {
 	
 	unsigned char *buff, *seq;
-	unsigned size, avail;
+	int size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -161,7 +161,7 @@ int FileBuffgetFsa(FileBuff *src, Qseqs *header, Qseqs *qseq, char *trans) {
 int FileBuffgetFsaSeq(FileBuff *src, Qseqs *qseq, char *trans) {
 	
 	unsigned char *buff, *seq;
-	unsigned size, avail;
+	int size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -241,7 +241,7 @@ int FileBuffgetFsaSeq(FileBuff *src, Qseqs *qseq, char *trans) {
 int FileBuffgetFq(FileBuff *src, Qseqs *header, Qseqs *qseq, Qseqs *qual, char *trans) {
 	
 	unsigned char *buff, *seq;
-	unsigned size, avail;
+	int size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -396,7 +396,7 @@ int FileBuffgetFq(FileBuff *src, Qseqs *header, Qseqs *qseq, Qseqs *qual, char *
 int FileBuffgetFqSeq(FileBuff *src, Qseqs *qseq, Qseqs *qual, char *trans) {
 	
 	unsigned char *buff, *seq;
-	unsigned size, avail;
+	int size, avail;
 	
 	/* init */
 	avail = src->bytes;
@@ -532,11 +532,12 @@ int FileBuffgetFqSeq(FileBuff *src, Qseqs *qseq, Qseqs *qual, char *trans) {
 
 int getPhredFileBuff(FileBuff *dest) {
 	
-	int seek, avail, scale;
+	int seek, avail, scale, len, maxlen;
 	unsigned char *buff;
 	
 	avail = dest->bytes;
 	scale = 33;
+	maxlen = 0;
 	buff = dest->next;
 	
 	while(avail) {
@@ -547,6 +548,7 @@ int getPhredFileBuff(FileBuff *dest) {
 			}
 		}
 		
+		len = 0;
 		seek = avail ? 1 : 0;
 		while(seek && --avail) {
 			if(*++buff == '\n') {
@@ -558,8 +560,12 @@ int getPhredFileBuff(FileBuff *dest) {
 			} else if(94 < *buff) {
 				scale = 64;
 			}
+			++len;
+		}
+		if(maxlen < len) {
+			maxlen = len;
 		}
 	}
 	
-	return scale;
+	return maxlen <= 301 ? scale : 33;
 }

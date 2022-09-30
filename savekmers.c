@@ -5842,8 +5842,9 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 	static KmerAnker **tVF_scores;
 	static SeqmentTree **tSeqments;
 	int i, j, j_u, shifter, prefix_shifter, kmersize, DB_size, pos, start;
-	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, end, len, gaps, template, test;
-	int len_len, mlen, tflag, cPos, iPos, mPos, hLen, seqend, score, *bests;
+	int Wl, W1, U, M, MM, Ms, MMs, Us, W1s, end, len, gaps, template, score;
+	int len_len, mlen, tflag, cPos, iPos, mPos, hLen, seqend, test, VF_start;
+	int *bests;
 	unsigned SU, HIT, cover, hitCounter, ties, ties_len, prefix_len, flag;
 	unsigned *values, *last;
 	short unsigned *values_s;
@@ -6345,6 +6346,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 	}
 	
 	/* prune hits */
+	VF_start = VF_scores ? VF_scores->start : 0;
 	if(!(VF_scores = pruneAnkers(VF_scores, kmersize))) {
 		best_score->score = 0;
 		hitCounter = 0;
@@ -6377,7 +6379,7 @@ int save_kmers_sparse_chain(const HashMapKMA *templates, const Penalties *reward
 		if(ties) {
 			score = best_score->score;
 			V_score = best_score;
-			while((V_score = getTieAnker(start, V_score, best_score))) {
+			while((V_score = getTieAnker(start < VF_start ? VF_start : start, V_score, best_score))) {
 				/*
 				1. tie anker -> tie_len == best_len
 				2. Best match is last on seq -> tie_start < best_start

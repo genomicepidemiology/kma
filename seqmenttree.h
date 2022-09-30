@@ -17,7 +17,6 @@
  * limitations under the License.
 */
 #define _XOPEN_SOURCE 600
-//cc -Wall -O3 -std=c99 -c -o seqmenttree seqmenttree.c
 #ifndef SEQMENTTREE
 #define SEQMENTTREE 1
 typedef struct seqmentTree SeqmentTree;
@@ -31,13 +30,16 @@ struct seqmentTrees {
 	unsigned start;
 	unsigned end;
 	unsigned covered;
+	unsigned overhead; /* not used */
 	struct seqmentTrees *branch[2];
 };
 #endif
 
 SeqmentTree * initializeSeqmentTree(long unsigned size);
 SeqmentTree * initSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end);
-void reallocSeqmentTree(SeqmentTree *src);
+SeqmentTrees * rcpSeqmentTree(SeqmentTree *src, SeqmentTrees *branch);
+void reallocSeqmentTree(SeqmentTree *src, const long unsigned size);
+void resizeSeqmentTree(SeqmentTree *src);
 unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node);
 int growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end);
 unsigned queSeqmentTree(SeqmentTrees *src, const unsigned start, const unsigned end);

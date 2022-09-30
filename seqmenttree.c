@@ -51,12 +51,59 @@ SeqmentTree * initSeqmentTree(SeqmentTree *src, const unsigned start, const unsi
 	return src;
 }
 
-void reallocSeqmentTree(SeqmentTree *src) {
+SeqmentTrees * rcpSeqmentTree(SeqmentTree *src, SeqmentTrees *branch) {
 	
-	src->root = realloc(src->root, (src->size <<= 1) * sizeof(SeqmentTrees));
-	if(!src->root) {
-		ERROR();
+	SeqmentTrees *dest;
+	
+	/* cp branch */
+	dest = (src->root + src->n++);
+	*dest = *branch;
+	
+	/* add subtree of the branch */
+	if(*(branch->branch)) {
+		branch->branch[0] = rcpSeqmentTree(src, branch->branch[0]);
+		branch->branch[1] = rcpSeqmentTree(src, branch->branch[1]);
 	}
+	
+	return dest;
+}
+
+void reallocSeqmentTree(SeqmentTree *src, const long unsigned size) {
+	
+	SeqmentTrees *org;
+	
+	/* save old tree */
+	org = src->root;
+	
+	/* allocate new tree */
+	src->size = size;
+	src->root = smalloc(src->size * sizeof(SeqmentTrees));
+	
+	/* cp old tree into new */
+	src->n = 0;
+	src->root = rcpSeqmentTree(src, org);
+	
+	/* clean up */
+	free(org);
+}
+
+void resizeSeqmentTree(SeqmentTree *src) {
+	
+	SeqmentTrees *org;
+	
+	/* save old tree */
+	org = src->root;
+	
+	/* allocate new tree */
+	src->size <<= 1;
+	src->root = smalloc(src->size * sizeof(SeqmentTrees));
+	
+	/* cp old tree into new */
+	src->n = 0;
+	src->root = rcpSeqmentTree(src, org);
+	
+	/* clean up */
+	free(org);
 }
 
 unsigned addSeqmentTrees(SeqmentTrees *root, SeqmentTrees *node) {
@@ -139,7 +186,7 @@ int growSeqmentTree(SeqmentTree *src, const unsigned start, const unsigned end) 
 	
 	/* make room for new anker */
 	if(src->size <= src->n + 2) {
-		reallocSeqmentTree(src);
+		resizeSeqmentTree(src);
 	} else if(src->n == 0) {
 		initSeqmentTree(src, start, end);
 		return end - start;

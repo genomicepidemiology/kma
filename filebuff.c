@@ -86,7 +86,8 @@ void init_gzFile(FileBuff *inputfile) {
 		inputfile->inBuffer = tmp;
 	} else {
 		inputfile->inBuffer = inputfile->buffer;
-		inputfile->buffer = smalloc(CHUNK);
+		inputfile->buffer = smalloc(inputfile->buffSize + 1);
+		inputfile->buffer[inputfile->buffSize] = 0;
 	}
 	inputfile->next = inputfile->buffer;
 	
