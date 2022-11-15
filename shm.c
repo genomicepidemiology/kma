@@ -209,6 +209,7 @@ void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid >= 0) {
 		shmctl(shmid, IPC_RMID, NULL);
+		sfseek(file, size, SEEK_CUR);
 	}
 	
 	/* values */
@@ -222,6 +223,7 @@ void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid >= 0) {
 		shmctl(shmid, IPC_RMID, NULL);
+		sfseek(file, size, SEEK_CUR);
 	}
 	
 	/* kmers */
@@ -235,6 +237,7 @@ void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid >= 0) {
 		shmctl(shmid, IPC_RMID, NULL);
+		sfseek(file, size, SEEK_CUR);
 	}
 	
 	/* value indexes */
@@ -248,6 +251,7 @@ void hashMapKMA_destroySHM(HashMapKMA *dest, FILE *file, const char *filename) {
 	shmid = shmget(key, size, 0666);
 	if(shmid >= 0) {
 		shmctl(shmid, IPC_RMID, NULL);
+		sfseek(file, size, SEEK_CUR);
 	}
 	
 	if(fread(&dest->kmersize, sizeof(unsigned), 1, file)) {

@@ -1199,7 +1199,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 				
 				if(ID_t <= id && Depth_t <= depth) {
 					/* Output result */
-					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
+					fprintf(res_out, "%s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
 					if(tsv) {
 						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
@@ -1229,7 +1229,7 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 					if(ID_t == 0.0) {
 						depth = aligned_assem->depth;
 						depth /= t_len;
-						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
+						fprintf(res_out, "%s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
 							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, 0.0, 0.0, 0.0, (double) depth, (double) q_value, p_value);
 						if(tsv) {
 							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);

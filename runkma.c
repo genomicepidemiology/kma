@@ -781,8 +781,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 				
 				if(ID_t <= id && 0 < id && Depth_t <= depth) {
 					/* Output result */
-					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
-						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
+					fprintf(res_out, "%s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n", thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
 					if(tsv) {
 						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 					}
@@ -813,8 +812,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 						aln_len = aligned_assem->aln_len;
 						cover = 100.0 * aln_len / t_len;
 						q_cover = 100.0 * t_len / aln_len;
-						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
-							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
+						fprintf(res_out, "%s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n", thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(tsv) {
 							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 						}
@@ -1497,8 +1495,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 				}
 				if(ID_t <= id && Depth_t <= depth) {
 					/* Output result */
-					fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
-						thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
+					fprintf(res_out, "%s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n", thread->template_name, read_score, (unsigned) expected, t_len, id, cover, q_id, q_cover, (double) depth, (double) q_value, p_value);
 					if(tsv) {
 						printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 					}
@@ -1534,8 +1531,7 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 						aln_len = aligned_assem->aln_len;
 						cover = 100.0 * aln_len / t_len;
 						q_cover = 0;
-						fprintf(res_out, "%-12s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n",
-							thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
+						fprintf(res_out, "%s\t%8ld\t%8u\t%8d\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%4.1e\n", thread->template_name, read_score, (unsigned) expected, t_len, 0.0, cover, 0.0, q_cover, (double) depth, (double) q_value, p_value);
 						if(tsv) {
 							printsv(tsv_out, tsv, thread->template_name, aligned_assem, t_len, readCounts[template], read_score, expected, q_value, p_value, alignment_scores[template]);
 						}

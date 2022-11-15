@@ -439,6 +439,10 @@ int hashMapKMA_load(HashMapKMA *dest, FILE *file, const char *filename) {
 		--dest->size;
 	}
 	
+	if(seekSize) {
+		sfseek(file, seekSize, SEEK_CUR);
+		seekSize = 0;
+	}
 	if(fread(&dest->kmersize, sizeof(unsigned), 1, file)) {
 		sfread(&dest->flag, sizeof(unsigned), 1, file);
 		setCmerPointers(dest->flag);
@@ -454,7 +458,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	
 	key_t key;
 	int shmid;
-	long unsigned size;
+	long unsigned size, seekSize;
 	
 	/* load sizes */
 	sfread(&dest->DB_size, sizeof(unsigned), 1, file);
@@ -491,6 +495,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	}
 	key = ftok(filename, 'e');
 	shmid = shmget(key, size, 0666);
+	seekSize = size;
 	if(shmid < 0) {
 		/* not shared */
 		fprintf(stderr, "DB e not shared, see kma_shm\n");
@@ -514,6 +519,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 	}
 	key = ftok(filename, 'v');
 	shmid = shmget(key, size, 0666);
+	seekSize += size;
 	if(shmid < 0) {
 		/* not shared */
 		fprintf(stderr, "DB v not shared, see kma_shm\n");
@@ -540,6 +546,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 		}
 		key = ftok(filename, 'k');
 		shmid = shmget(key, size, 0666);
+		seekSize += size;
 		if(shmid < 0) {
 			/* not shared */
 			fprintf(stderr, "DB k not shared, see kma_shm\n");
@@ -561,6 +568,7 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 		}
 		key = ftok(filename, 'i');
 		shmid = shmget(key, size, 0666);
+		seekSize += size;
 		if(shmid < 0) {
 			/* not shared */
 			fprintf(stderr, "DB i not shared, see kma_shm\n");
@@ -575,6 +583,10 @@ void hashMapKMA_load_shm(HashMapKMA *dest, FILE *file, const char *filename) {
 		--dest->size;
 	}
 	
+	if(seekSize) {
+		sfseek(file, seekSize, SEEK_CUR);
+		seekSize = 0;
+	}
 	if(fread(&dest->kmersize, sizeof(unsigned), 1, file)) {
 		sfread(&dest->flag, sizeof(unsigned), 1, file);
 		setCmerPointers(dest->flag);
