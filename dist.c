@@ -19,6 +19,7 @@
 
 #define _XOPEN_SOURCE 600
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -446,11 +447,11 @@ double kmerJaccardSim(int Ni, int Nj, int D) {
 }
 
 double kmerCosineDist(int Ni, int Nj, int D) {
-	return 1.0 - (double)(D) / (Ni + Nj);
+	return 1.0 - (double)(D) / (sqrt(Ni) * sqrt(Nj));
 }
 
 double kmerCosineSim(int Ni, int Nj, int D) {
-	return (double)(D) / (Ni + Nj);
+	return (double)(D) / (sqrt(Ni) * sqrt(Nj));
 }
 
 double kmerOverlapCoef(int Ni, int Nj, int D) {
@@ -944,7 +945,7 @@ int dist_main(int argc, char *argv[]) {
 				fprintf(stdout, "#%9d\t%s\n", 256, "Cosine distance");
 				fprintf(stdout, "#%9d\t%s\n", 512, "Cosine similarity");
 				fprintf(stdout, "#%9d\t%s\n", 1024, "Szymkiewicz–Simpson similarity");
-				fprintf(stdout, "#%9d\t%s\n", 2048, "Szymkiewicz–Simpson distance");
+				fprintf(stdout, "#%9d\t%s\n", 2048, "Szymkiewicz–Simpson dissimilarity");
 				fprintf(stdout, "#%9d\t%s\n", 4096, "Chi-square distance");
 				fprintf(stdout, "#\n");
 				return 0;
