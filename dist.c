@@ -319,7 +319,8 @@ void kmerSimilarity_thread(HashMapKMA *DB, Matrix *Dist, int *N, int thread_num,
 }
 
 int kmerDist(int Ni, int Nj, int D) {
-	return Ni + Nj - (D << 1);
+	D = Ni + Nj - (D << 1);
+	return (D < 0) ? 0 : D;
 }
 
 int kmerShared(int Ni, int Nj, int D) {
@@ -327,8 +328,9 @@ int kmerShared(int Ni, int Nj, int D) {
 }
 
 int chi2dist(int Ni, int Nj, int D) {
-	D = (Ni + Nj - (D << 1));
-	return D * D / (Ni + Nj);
+	long d = (Ni + Nj - (D << 1));
+	d = d * d / (Ni + Nj);
+	return (d < 0) ? 0 : d;
 }
 
 void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format, int thread_num, volatile int *lock, const char *method, int (*distPtr)(int, int, int)) {
@@ -337,7 +339,7 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	static int next_i, next_j, entrance = 0;
 	static long unsigned row_bias = 0;
 	volatile int *thread_wait;
-	int i, j, j_end, chunk, N_i, *Nj, **D, *Di;
+	int i, j, j_end, d, chunk, N_i, *Nj, **D, *Di;
 	char *outfile_chunk, *name;
 	
 	/* init */
@@ -403,7 +405,8 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 			Di = D[i] + --j;
 			Nj = N + j;
 			while(++j < j_end) {
-				outfile_chunk += sprintf(outfile_chunk, "\t%10d", distPtr(N_i, *++Nj, *++Di));
+				d = distPtr(N_i, *++Nj, *++Di);
+				outfile_chunk += sprintf(outfile_chunk, "\t%10d", (d < 0 ? 0 : d));
 			}
 			/* fix null character */
 			*outfile_chunk = (j == i) ? '\n' : '\t';
@@ -423,43 +426,53 @@ void printIntLtdPhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 }
 
 double kmerQuery(int Ni, int Nj, int D) {
-	return 100.0 * D / Ni;
+	double d = 100.0 * D / Ni;
+	return (d < 0) ? 0.0 : ((100 < d) ? 100.0 : d);
 }
 
 double kmerTemplate(int Ni, int Nj, int D) {
-	return 100.0 * D / Nj;
+	double d = 100.0 * D / Nj;
+	return (d < 0) ? 0.0 : ((100 < d) ? 100.0 : d);
 }
 
 double kmerAvg(int Ni, int Nj, int D) {
-	return 200.0 * D / (Ni + Nj);
+	double d = 200.0 * D / (Ni + Nj);
+	return (d < 0) ? 0.0 : ((100 < d) ? 100.0 : d);
 }
 
 double kmerInvAvg(int Ni, int Nj, int D) {
-	return 100.0 - 200.0 * D / (Ni + Nj);
+	double d = 100.0 - 200.0 * D / (Ni + Nj);
+	return (d < 0) ? 0.0 : ((100 < d) ? 100.0 : d);
 }
 
 double kmerJaccardDist(int Ni, int Nj, int D) {
-	return 1.0 - (double)(D) / (Ni + Nj - D);
+	double d = 1.0 - (double)(D) / (Ni + Nj - D);
+	return (d < 0) ? 0.0 : ((1 < d) ? 1.0 : d);
 }
 
 double kmerJaccardSim(int Ni, int Nj, int D) {
-	return (double)(D) / (Ni + Nj - D);
+	double d = (double)(D) / (Ni + Nj - D);
+	return (d < 0) ? 0.0 : ((1 < d) ? 1.0 : d);
 }
 
 double kmerCosineDist(int Ni, int Nj, int D) {
-	return 1.0 - (double)(D) / (sqrt(Ni) * sqrt(Nj));
+	double d = 1.0 - (double)(D) / (sqrt(Ni) * sqrt(Nj));
+	return (d < 0) ? 0.0 : ((1 < d) ? 1.0 : d);
 }
 
 double kmerCosineSim(int Ni, int Nj, int D) {
-	return (double)(D) / (sqrt(Ni) * sqrt(Nj));
+	double d = (double)(D) / (sqrt(Ni) * sqrt(Nj));
+	return (d < 0) ? 0.0 : ((1 < d) ? 1.0 : d);
 }
 
 double kmerOverlapCoef(int Ni, int Nj, int D) {
-	return (double)(D) / (Ni < Nj ? Ni : Nj);
+	double d = (double)(D) / (Ni < Nj ? Ni : Nj);
+	return (d < 0) ? 0.0 : ((1 < d) ? 1.0 : d);
 }
 
 double kmerInvOverlapCoef(int Ni, int Nj, int D) {
-	return 1.0 - (double)(D) / (Ni < Nj ? Ni : Nj);
+	double d = 1.0 - (double)(D) / (Ni < Nj ? Ni : Nj);
+	return (d < 0) ? 0.0 : ((1 < d) ? 1.0 : d);
 }
 
 void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs *template_name, unsigned format, const char *formatString, int ltd, int thread_num, volatile int *lock, const char *method, double (*distPtr)(int, int, int)) {
@@ -470,6 +483,7 @@ void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 	volatile int *thread_wait;
 	int i, j, j_end, chunk, N_i, *Nj, **D, *Di;
 	char endChar, *outfile_chunk, *name;
+	double d;
 	
 	/* init */
 	D = Dist->mat;
@@ -542,18 +556,22 @@ void printDoublePhy(char *outfile, Matrix *Dist, int *N, FILE *name_file, Qseqs 
 			
 			if(j_end < i) {
 				while(++j < j_end) {
-					outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, *++Di));
+					d = distPtr(N_i, *++Nj, *++Di);
+					outfile_chunk += sprintf(outfile_chunk, formatString, (d < 0 ? 0 : d));
 				}
 			} else if(i < j) {
 				while(++j < j_end) {
-					outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, D[j][i]));
+					d = distPtr(N_i, *++Nj, D[j][i]);
+					outfile_chunk += sprintf(outfile_chunk, formatString, (d < 0 ? 0 : d));
 				}
 			} else {
 				while(++j < j_end) {
 					if(j < i) {
-						outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, *++Di));
+						d = distPtr(N_i, *++Nj, *++Di);
+						outfile_chunk += sprintf(outfile_chunk, formatString, (d < 0 ? 0 : d));
 					} else if(i < j) {
-						outfile_chunk += sprintf(outfile_chunk, formatString, distPtr(N_i, *++Nj, D[j][i]));
+						d = distPtr(N_i, *++Nj, D[j][i]);
+						outfile_chunk += sprintf(outfile_chunk, formatString, (d < 0 ? 0 : d));
 					} else {
 						outfile_chunk += sprintf(outfile_chunk, formatString, 100.0);
 						++Nj;

@@ -659,7 +659,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 	fprintf(stderr, "# Calculating relative indexes.\n");
 	null_index = finalDB->n;
 	v_index = 0;
-	while(templates->values[v_index] != 0) {
+	while(v_index != finalDB->size && templates->values[v_index] != 0) {
 		finalDB->exist[v_index] = v_index;
 		++v_index;
 	}
@@ -673,6 +673,7 @@ HashMapKMA * compressKMA_megaDB(HashMap *templates, FILE *out) {
 			finalDB->exist[i] = null_index;
 		}
 	}
+	
 	/* decrease size of values to what is actually used */
 	templates->values = realloc(templates->values, templates->n * sizeof(unsigned *));
 	if(!templates->values) {
