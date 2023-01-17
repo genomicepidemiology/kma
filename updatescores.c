@@ -200,7 +200,7 @@ void update_Scores_nanoold(unsigned char *qseq, int q_len, double minFrac, int c
 	sfwrite(bestTemplates, sizeof(int), counter, frag_out_raw);
 }
 
-void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, int bestReadScore, double bestScore, int *start, int *end, int *templates, int *Scores, int *Lengths, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+int update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, int bestReadScore, double bestScore, int *start, int *end, int *templates, int *Scores, int *Lengths, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
 	
 	int i, score, buffer[5];
 	int *bestTemplates, *bestStart, *bestEnd;
@@ -251,8 +251,8 @@ void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, 
 			}
 		}
 	} else {
-		minScore = (-minFrac) * bestScore;
-		minFrac = (-minFrac) * bestReadScore;
+		minScore = minFrac * bestScore;
+		minFrac = minFrac * bestReadScore;
 		while(--i) {
 			score = *++Scores;
 			if((*++Lengths * minScore <= score) || minFrac <= score) {
@@ -293,9 +293,11 @@ void update_Scores(unsigned char *qseq, int q_len, double minFrac, int counter, 
 	sfwrite(bestStart, sizeof(int), counter, frag_out_raw);
 	sfwrite(bestEnd, sizeof(int), counter, frag_out_raw);
 	sfwrite(bestTemplates, sizeof(int), counter, frag_out_raw);
+	
+	return counter;
 }
 
-void update_Scores_se(unsigned char *qseq, int q_len, double minFrac, int counter, int bestScore, int *start, int *end, int *templates, int *Scores, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+int update_Scores_se(unsigned char *qseq, int q_len, double minFrac, int counter, int bestScore, int *start, int *end, int *templates, int *Scores, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
 	
 	int i, buffer[5];
 	int *bestTemplates, *bestStart, *bestEnd;
@@ -381,9 +383,11 @@ void update_Scores_se(unsigned char *qseq, int q_len, double minFrac, int counte
 	sfwrite(bestStart, sizeof(int), counter, frag_out_raw);
 	sfwrite(bestEnd, sizeof(int), counter, frag_out_raw);
 	sfwrite(bestTemplates, sizeof(int), counter, frag_out_raw);
+	
+	return counter;
 }
 
-void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int qr_len, double minFrac, int counter, int bestScore, int *start, int *end, int *templates, int *Scores, Qseqs *header, Qseqs *header_r, int flag, int flag_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
+int update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int qr_len, double minFrac, int counter, int bestScore, int *start, int *end, int *templates, int *Scores, Qseqs *header, Qseqs *header_r, int flag, int flag_r, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {
 	
 	int i, score, buffer[5];
 	int *bestTemplates, *bestStart, *bestEnd;
@@ -479,6 +483,8 @@ void update_Scores_pe(unsigned char *qseq, int q_len, unsigned char *qseq_r, int
 	sfwrite(buffer, sizeof(int), 3, frag_out_raw);
 	sfwrite(qseq_r, 1, qr_len, frag_out_raw);
 	sfwrite(header_r->seq, 1, header_r->len, frag_out_raw);
+	
+	return counter;
 }
 
 void update_Scores_old(unsigned char *qseq, int q_len, int counter, int score, int *start, int *end, int *template, Qseqs *header, int flag, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, FILE *frag_out_raw) {

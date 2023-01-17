@@ -1077,7 +1077,6 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 	Wl = -NWmatrices->rewards->Wl;
 	arc = points->len;
 	points->len = 0;
-	
 	for(t_i = 1; t_i <= *matched_templates; ++t_i) {
 		template = matched_templates[t_i];
 		/* check if index DB is loaded */
@@ -1207,8 +1206,8 @@ int alnFragsSE(HashMapCCI **templates_index, int *matched_templates, int *templa
 	
 	if(*best_read_score > kmersize) {
 		lock(excludeOut);
-		//update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestLen, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
-		update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestScore, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+		//*matched_templates = update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestLen, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+		*matched_templates = update_Scores(qseq, q_len, minFrac, bestHits, *best_read_score, bestScore, best_start_pos, best_end_pos, bestTemplates, Scores, Lengths, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 		unlock(excludeOut);
 		return 0;
 	} else {
@@ -1432,7 +1431,7 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 						bestTemplates[t_i] = -bestTemplates[t_i];
 					}
 					lock(excludeOut);
-					update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score + *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+					*matched_templates = update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score + *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 					unlock(excludeOut);
 				} else {
 					if(!rc) {
@@ -1442,7 +1441,7 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 						*flag_r ^= 48;
 					}
 					lock(excludeOut);
-					update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score + *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+					*matched_templates = update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score + *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 					unlock(excludeOut);
 				}
 			} else {
@@ -1511,8 +1510,8 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 				bestLen,
 				Lengths
 				*/
-				update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, matched_templates, bestTemplates, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
-				update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits_r, *best_read_score_r, best_start_pos + end, best_end_pos + end, matched_templates + end, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				*matched_templates = update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, matched_templates, bestTemplates, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				*matched_templates += update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits_r, *best_read_score_r, best_start_pos + end, best_end_pos + end, matched_templates + end, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 				unlock(excludeOut);
 			}
 			return 0;
@@ -1547,7 +1546,7 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 			}
 			
 			lock(excludeOut);
-			update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 			
 			return 2;
@@ -1584,7 +1583,7 @@ int alnFragsUnionPE(HashMapCCI **templates_index, int *matched_templates, int *t
 			bestLen,
 			Lengths
 			*/
-			update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 			
 			return 1;
@@ -1809,7 +1808,7 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 					bestTemplates[t_i] = -bestTemplates[t_i];
 				}
 				lock(excludeOut);
-				update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				*matched_templates = update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 				unlock(excludeOut);
 			} else {
 				if(!rc) {
@@ -1819,7 +1818,7 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 					*flag_r ^= 48;
 				}
 				lock(excludeOut);
-				update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+				*matched_templates = update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 				unlock(excludeOut);
 			}
 			return 0;
@@ -1889,8 +1888,8 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 			bestLen,
 			Lengths
 			*/
-			update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, matched_templates, bestTemplates, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
-			update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits_r, *best_read_score_r, best_start_pos + end, best_end_pos + end, matched_templates + end, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, matched_templates, bestTemplates, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates += update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits_r, *best_read_score_r, best_start_pos + end, best_end_pos + end, matched_templates + end, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 			
 			return 0;
@@ -1925,7 +1924,7 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 			}
 			
 			lock(excludeOut);
-			update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_se(qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 			
 			return 2;
@@ -1962,7 +1961,7 @@ int alnFragsPenaltyPE(HashMapCCI **templates_index, int *matched_templates, int 
 			bestLen,
 			Lengths
 			*/
-			update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_se(qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score_r, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 			
 			return 1;
@@ -2122,7 +2121,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 				bestTemplates[t_i] = -bestTemplates[t_i];
 			}
 			lock(excludeOut);
-			update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_pe(qseq_r, qseq_r_comp->seqlen, qseq, qseq_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header_r, header, *flag_r, *flag, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 		} else {
 			/* get rc flag */
@@ -2139,7 +2138,7 @@ int alnFragsForcePE(HashMapCCI **templates_index, int *matched_templates, int *t
 				*flag_r ^= 48;
 			}
 			lock(excludeOut);
-			update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
+			*matched_templates = update_Scores_pe(qseq, qseq_comp->seqlen, qseq_r, qseq_r_comp->seqlen, minFrac, bestHits, *best_read_score, best_start_pos, best_end_pos, bestTemplates, bestTemplates_r, header, header_r, *flag, *flag_r, alignment_scores, uniq_alignment_scores, frag_out_raw);
 			unlock(excludeOut);
 		}
 		return 0;
