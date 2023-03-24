@@ -38,6 +38,7 @@ int openAndDetermine(FileBuff *inputfile, char *filename) {
 	} else {
 		openFileBuff(inputfile, filename, "rb");
 	}
+	inputfile->buffer[0] = 0;
 	if(buff_FileBuff(inputfile)) {
 		check = (short unsigned *) inputfile->buffer;
 		if(*check == 35615) {
@@ -47,14 +48,13 @@ int openAndDetermine(FileBuff *inputfile, char *filename) {
 		} else {
 			buffFileBuff = &buff_FileBuff;
 		}
-	} else {
-		inputfile->buffer[0] = 0;
 	}
-	
 	if(inputfile->buffer[0] == '@') { //FASTQ
 		FASTQ |= 1;
 	} else if(inputfile->buffer[0] == '>') { //FASTA
 		FASTQ |= 2;
+	} else if(inputfile->buffer[0] == 0) {
+		fprintf(stderr, "Empty file:\t%s\n", filename);
 	} else {
 		fprintf(stderr, "Cannot determine format of file:\t%s\n", filename);
 		errno |= 1;

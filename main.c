@@ -29,6 +29,9 @@
 
 static int helpmessage(FILE *out) {
 	
+	errno = 1;
+	ERROR();
+	
 	fprintf(out, "# KMA enables alignment towards databases, using two k-mer mapping steps and one alignment step.\n");
 	fprintf(out, "# %16s\t%-32s\n", "Options are:", "Desc:");
 	fprintf(out, "# %16s\t%-32s\n", "", "Alignment and mapping");

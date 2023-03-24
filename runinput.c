@@ -185,6 +185,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 		} else {
 			fprintf(stderr, "Inputfiles:\t%s %s\nAre in different format.\n", inputfiles[fileCounter-1], filename);
 			FASTQ = 0;
+			errno = 1;
 		}
 		
 		/* parse the file */
