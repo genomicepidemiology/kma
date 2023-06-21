@@ -1,0 +1,43 @@
+name: conda-osx-release
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+jobs:
+  conda-osx:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v2
+
+      - name: create environment with mamba
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,bioconda,defaults
+          auto-activate-base: false
+          activate-environment: osx-build
+          environment-file: envs/osx-build.yaml
+
+      - name: check solution
+        run: |
+          mamba env export
+
+      - name: build conda package
+        run: |
+          conda mambabuild conda -c conda-forge --output-folder .
+
+      - name: upload conda package
+        run: |
+          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main osx-64/*.tar.bz2
