@@ -28,7 +28,7 @@ jobs:
           channels: conda-forge,bioconda,defaults
           auto-activate-base: false
           activate-environment: osx-build
-          environment-file: envs/osx-build.yaml
+          environment-file: envs/osx-build.yml
 
       - name: check solution
         run: |
