@@ -1,3 +1,4 @@
+[![install with bioconda](https://img.shields.io/badge/install%20with-genomicepidemiology-brightgreen.svg?style=flat)](https://anaconda.org/genomicepidemiology/kma)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/kma/README.html)
 # Getting Started #
 
