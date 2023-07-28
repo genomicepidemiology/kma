@@ -588,13 +588,13 @@ int save_kmers_sparse_batch(char *templatefilename, char *outputfilename, char *
 							score_tot_add += node->key;
 							if(prev == 0) {
 								deConTable = node->next;
-								free(node);
 								free(node->value);
+								free(node);
 								node = deConTable;
 							} else {
 								prev->next = node->next;
-								free(node);
 								free(node->value);
+								free(node);
 								node = prev->next;
 							}
 						} else {
