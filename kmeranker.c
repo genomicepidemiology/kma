@@ -22,7 +22,7 @@
 #include "kmeranker.h"
 #include "penalties.h"
 
-KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, const int*, const int, const int, int*, int*, int*, char*) = &getBestChainTemplates;
+KmerAnker * (*getChainTemplates)(KmerAnker*, const Penalties*, const int*, const int, const int, const int, int*, int*, int*, char*) = &getBestChainTemplates;
 int (*kmerAnkerScore)(KmerAnker*) = &ankerScore;
 const int (*testExtension)(const int, const int, const int) = &testExtensionScore;
 const int (*proxiTestBest)(const double, const int, const int, const int, const int) = &proxiTestBestScore;
@@ -80,7 +80,7 @@ const int mrchain(int *bestTemaples, const int *template_lengths, const int q_le
 	return 1;
 }
 
-KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, int *bests, int *Score, int *extendScore, char *include) {
+KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, const int mlen, int *bests, int *Score, int *extendScore, char *include) {
 	
 	/* get set of best templates and silences the chain, except for the initial anker */
 	int i, j, template, score, tmpScore, bestScore, Wl, W1, U, M, MM, Ms, MMs;
@@ -160,6 +160,8 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 					if(gaps == -kmersize) {
 						/* Perfect match */
 						score += node->weight - (kmersize - 1) * M;
+					} else if(gaps == 0) {
+						score += node->weight + MM;
 					} else if(0 < gaps) {
 						/* mismatch or insersion */
 						if(gaps <= 2) {
@@ -178,9 +180,12 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 						} else {
 							score += node->weight + (W1 + (gaps - 1) * U);
 						}
-					} else {
+					} else if(mlen != kmersize) {
 						/* snp */
-						score += node->weight + (gaps + 1) * M + MM;
+						score += node->weight + gaps * M + MM;
+					} else {
+						/* indel */
+						score += node->weight + gaps * M - (gaps + 1) * U + W1;
 					}
 					
 					/* mark as used */
@@ -227,7 +232,7 @@ KmerAnker * getBestChainTemplates(KmerAnker *src, const Penalties *rewards, cons
 	return j ? prev : 0;
 }
 
-KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, int *bests, int *Score, int *extendScore, char *include) {
+KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, const int *template_lengths, const int q_len, const int kmersize, const int mlen, int *bests, int *Score, int *extendScore, char *include) {
 	
 	/* get set of best templates and silences the chain, except for the initial anker */
 	static long unsigned *softProxi = 0;
@@ -290,6 +295,8 @@ KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, con
 				if(gaps == -kmersize) {
 					/* Perfect match */
 					score += node->weight - (kmersize - 1) * M;
+				} else if(gaps == 0) {
+					score += node->weight + MM;
 				} else if(0 < gaps) {
 					/* mismatch or insersion */
 					if(gaps <= 2) {
@@ -308,9 +315,12 @@ KmerAnker * getProxiChainTemplates(KmerAnker *src, const Penalties *rewards, con
 					} else {
 						score += node->weight + (W1 + (gaps - 1) * U);
 					}
-				} else {
+				} else if(mlen != kmersize) {
 					/* snp */
-					score += node->weight + (gaps + 1) * M + MM;
+					score += node->weight + gaps * M + MM;
+				} else {
+					/* indel */
+					score += node->weight + gaps * M - (gaps + 1) * U + W1;
 				}
 				
 				/* mark as used */

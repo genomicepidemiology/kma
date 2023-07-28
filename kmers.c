@@ -147,7 +147,7 @@ int save_kmers_batch(char *templatefilename, char *exePrev, unsigned shm, int th
 		getF((int *)(&minFrac), (int *)(softProxi), 0, 0, 0);
 		ankerAndClean((int *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 		ankerAndClean_MEM((int *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-		getProxiChainTemplates(0, (const Penalties *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0);
+		getProxiChainTemplates(0, (const Penalties *)(&minFrac), (int *)(softProxi), 0, 0, 0, 0, 0, 0, 0);
 	}
 	template_lengths = 0;
 	if(kmerScan == &save_kmers_HMM || kmerScan == &save_kmers_chain || kmerScan == &save_kmers_sparse_chain) {

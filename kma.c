@@ -192,6 +192,7 @@ static void helpMessage(int exitStatus) {
 	
 	fprintf(out, "#\n# Trimming:\n");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mp", "Minimum phred score", "20");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mi", "Minimum internal phred score", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-eq", "Minimum avg. quality score", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-5p", "Trim 5 prime", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-3p", "Trim 3 prime", "0");
@@ -230,11 +231,11 @@ int kma_main(int argc, char *argv[]) {
 		0.0000000000398107, 0.0000000000316228, 0.0000000000251189, 0.0000000000199526, 0.0000000000158489, 0.0000000000125893, 0.0000000000100000, 0.0000000000079433,
 		0.0000000000063096, 0.0000000000050119, 0.0000000000039811, 0.0000000000031623, 0.0000000000025119, 0.0000000000019953, 0.0000000000015849, 0.0000000000012589,
 		0.0000000000010000, 0.0000000000007943, 0.0000000000006310, 0.0000000000005012, 0.0000000000003981, 0.0000000000003162, 0.0000000000002512, 0.0000000000001995};
-	static int minPhred, minQ, fiveClip, threeClip, ConClave, mem_mode;
-	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, minlen;
+	static int minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen;
+	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, mem_mode;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int sparse_run, ts, maxlen, **d, status = 0;
+	static int ConClave, sparse_run, ts, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static long unsigned tsv;
 	static char *outputfilename, *templatefilename, **templatefilenames;
@@ -271,6 +272,7 @@ int kma_main(int argc, char *argv[]) {
 		spltDB = 0;
 		extendedFeatures = 0;
 		minPhred = 20;
+		minmaskQ = 0;
 		minQ = 0;
 		fiveClip = 0;
 		threeClip = 0;
@@ -577,6 +579,15 @@ int kma_main(int argc, char *argv[]) {
 					minPhred = strtoul(argv[args], &exeBasic, 10);
 					if(*exeBasic != 0) {
 						fprintf(stderr, "# Invalid minimum phred score parsed\n");
+						exit(1);
+					}
+				}
+			} else if(strcmp(argv[args], "-mi") == 0) {
+				++args;
+				if(args < argc) {
+					minmaskQ = strtoul(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0) {
+						fprintf(stderr, "# Invalid internal minimum phred score parsed\n");
 						exit(1);
 					}
 				}
@@ -1430,8 +1441,11 @@ int kma_main(int argc, char *argv[]) {
 				free(inputfiles_INT);
 				fprintf(stderr, "Interleaved information is not considered in Sparse mode.\n");
 			}
+			if(minPhred < minmaskQ) {
+				minPhred = minmaskQ;
+			}
 			
-			run_input_sparse(templates, inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, kmersize, to2Bit, prob, ioStream);
+			run_input_sparse(templates, inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, kmersize, to2Bit, prob, ioStream);
 			hashMapKMA_destroy(templates);
 			free(myTemplatefilename);
 		} else {
@@ -1449,20 +1463,23 @@ int kma_main(int argc, char *argv[]) {
 				myTemplatefilename = 0;
 			}
 			totFrags = 0;
+			if(minPhred < minmaskQ) {
+				minPhred = minmaskQ;
+			}
 			
 			/* SE */
 			if(fileCounter > 0) {
-				totFrags += run_input(inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, ioStream);
+				totFrags += run_input(inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, ioStream);
 			}
 			
 			/* PE */
 			if(fileCounter_PE > 0) {
-				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
+				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
 			
 			/* INT */
 			if(fileCounter_INT > 0) {
-				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
+				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
 			}
 			
 			fprintf(stderr, "#\n# Total number of query fragment after trimming:\t%lu\n", totFrags);

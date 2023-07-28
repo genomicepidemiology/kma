@@ -29,7 +29,29 @@
 void (*printFsa_ptr)(Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
 void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, FILE *out) {
+unsigned hardmaskQ(unsigned char *seq, unsigned char *qual, int len, const int phredScale, int minQ) {
+	
+	unsigned n;
+	
+	if(!len || !minQ) {
+		return 0;
+	}
+	
+	minQ += phredScale;
+	n = 0;
+	--qual;
+	do {
+		if(*++qual < minQ) {
+			*seq = 4;
+			++n;
+		}
+		++seq;
+	} while(--len);
+	
+	return n;
+}
+
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, FILE *out) {
 	
 	int fileCounter, phredScale, phredCut, start, end;
 	unsigned FASTQ;
@@ -89,7 +111,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 					qual->len = end - start;
 					
 					/* print */
-					if(minlen <= qseq->len && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
+					if(minlen <= qseq->len && qseq->len != hardmaskQ(qseq->seq + start, seq + start, qseq->len, phredScale, minmaskQ) && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
 						/* dump seq */
 						qseq->seq += start;
 						qual->seq += start;
@@ -144,7 +166,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minQ
 	return count;
 }
 
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
 	
 	int fileCounter, phredScale, phredCut, start, start2, end;
 	unsigned FASTQ, FASTQ2;
@@ -223,6 +245,10 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				*/
 				qseq->len = end - start;
 				qual->len = end - start;
+				if(qseq->len == hardmaskQ(qseq->seq + start, seq + start, qseq->len, phredScale, minmaskQ)) {
+					qseq->len = 0;
+					qual->len = 0;
+				}
 				eq1 = eQual(seq + start, qseq->len, minQ, prob - phredScale);
 				
 				/* trim reverse */
@@ -246,6 +272,10 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				*/
 				qseq2->len = end - start2;
 				qual2->len = end - start2;
+				if(qseq2->len == hardmaskQ(qseq2->seq + start, seq + start, qseq2->len, phredScale, minmaskQ)) {
+					qseq2->len = 0;
+					qual2->len = 0;
+				}
 				eq2 = eQual(seq + start2, qseq2->len, minQ, prob - phredScale);
 				
 				/* print */
@@ -345,7 +375,7 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 	return count;
 }
 
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, FILE *out) {
 	
 	int fileCounter, phredScale, phredCut, start, start2, end;
 	unsigned FASTQ;
@@ -410,6 +440,10 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				*/
 				qseq->len = end - start;
 				qual->len = end - start;
+				if(qseq->len == hardmaskQ(qseq->seq + start, seq + start, qseq->len, phredScale, minmaskQ)) {
+					qseq->len = 0;
+					qual->len = 0;
+				}
 				eq1 = eQual(seq + start, qseq->len, minQ, prob - phredScale);
 				
 				/* trim reverse */
@@ -432,6 +466,10 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 				*/
 				qseq2->len = end - start2;
 				qual2->len = end - start2;
+				if(qseq2->len == hardmaskQ(qseq2->seq + start, seq + start, qseq2->len, phredScale, minmaskQ)) {
+					qseq2->len = 0;
+					qual2->len = 0;
+				}
 				eq2 = eQual(seq + start2, qseq2->len, minQ, prob - phredScale);
 				
 				/* print */

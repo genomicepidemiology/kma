@@ -20,6 +20,7 @@
 #define MIN(X, Y) ((X < Y) ? X : Y)
 #define MAX(X, Y) ((X < Y) ? Y : X)
 #define murmur(index, kmer) index = (3323198485ul ^ kmer) * 0x5bd1e995; index ^= index >> 15;
+#define murmur3(index, kmer) index = kmer * 0xcc9e2d51; index = (index << 15) | (index >> 17); index *= 0x1b873593; index = (index << 13) | (index >> 19); index ^= index >> 16; index *= 0x85ebca6b; index ^= index >> 13; index *= 0xc2b2ae35; index ^= index >> 16; 
 
 extern int (*cmp)(int, int);
 int cmp_or(int t, int q);

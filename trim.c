@@ -136,6 +136,7 @@ static int helpMessage(FILE *out) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ml", "Minimum length", "16");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-xl", "Maximum length", "2147483647");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mp", "Minimum phred", "20");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mi", "Minimum internal phred score", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-eq", "Minimum average quality", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-5p", "Trim 5 prime", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-3p", "Trim 3 prime", "0");
@@ -163,8 +164,8 @@ int trim_main(int argc, char *argv[]) {
 		0.0000000000398107, 0.0000000000316228, 0.0000000000251189, 0.0000000000199526, 0.0000000000158489, 0.0000000000125893, 0.0000000000100000, 0.0000000000079433,
 		0.0000000000063096, 0.0000000000050119, 0.0000000000039811, 0.0000000000031623, 0.0000000000025119, 0.0000000000019953, 0.0000000000015849, 0.0000000000012589,
 		0.0000000000010000, 0.0000000000007943, 0.0000000000006310, 0.0000000000005012, 0.0000000000003981, 0.0000000000003162, 0.0000000000002512, 0.0000000000001995};
-	int i, args, minPhred, minQ, fiveClip, threeClip, minlen, maxlen;
-	int fileCounter, fileCounter_PE, fileCounter_INT, fileCount;
+	int i, args, fileCounter, fileCounter_PE, fileCounter_INT, fileCount;
+	int minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen;
 	long unsigned totFrags;
 	char **inputfiles, **inputfiles_PE, **inputfiles_INT;
 	char *to2Bit, *outputfilename, *outputfilename_int, *exeBasic;
@@ -172,6 +173,7 @@ int trim_main(int argc, char *argv[]) {
 	
 	/* set defaults */
 	minPhred = 20;
+	minmaskQ = 0;
 	minQ = 0;
 	fiveClip = 0;
 	threeClip = 0;
@@ -291,6 +293,15 @@ int trim_main(int argc, char *argv[]) {
 					exit(1);
 				}
 			}
+		} else if(strcmp(argv[args], "-mi") == 0) {
+			++args;
+			if(args < argc) {
+				minmaskQ = strtoul(argv[args], &exeBasic, 10);
+				if(*exeBasic != 0) {
+					fprintf(stderr, "# Invalid internal minimum phred score parsed\n");
+					exit(1);
+				}
+			}
 		} else if(strcmp(argv[args], "-eq") == 0) {
 			++args;
 			if(args < argc) {
@@ -389,20 +400,23 @@ int trim_main(int argc, char *argv[]) {
 		inputfiles = smalloc(sizeof(char *));
 		*inputfiles = "--";
 	}
+	if(minPhred < minmaskQ) {
+		minPhred = minmaskQ;
+	}
 	
 	/* SE */
 	if(fileCounter > 0) {
-		totFrags += run_input(inputfiles, fileCounter, minPhred, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, out);
+		totFrags += run_input(inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, out);
 	}
 	
 	/* PE */
 	if(fileCounter_PE > 0) {
-		totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, out);
+		totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, out);
 	}
 	
 	/* INT */
 	if(fileCounter_INT > 0) {
-		totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minQ, fiveClip, threeClip, minlen, to2Bit, prob, out);
+		totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, out);
 	}
 	
 	fprintf(stderr, "#\n# Total number of query fragment after trimming:\t%lu\n", totFrags);
