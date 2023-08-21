@@ -739,9 +739,6 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 							--uPtr;
 							--i;
 						} else {
-							if(targetInfo[i] == 0) {
-								*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
-							}
 							*uPtr = get_ankers_spltDB(targetInfo[i], matched_templates, qseq_comp, header, &flag, inputfiles[i]);
 							--uPtr;
 							--i;

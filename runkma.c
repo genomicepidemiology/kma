@@ -152,7 +152,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	AssemInfo *matrix;
 	AlnPoints *points;
 	NWmat *NWmatrices;
-	Assemble_thread *threads, *thread;
+	Assemble_thread *threads, *thread, *next;
 	Aln_thread *alnThreads, *alnThread;
 	HashMapCCI **templates_index;
 	
@@ -650,7 +650,12 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	aligned_assem->q = smalloc(aligned_assem->size);
 	
 	/* allocate matrcies for NW */
-	for(thread = threads; thread != 0; thread = thread->next) {
+	i = 1;
+	thread = threads;
+	threads = 0;
+	while(thread) {
+		next = thread->next;
+		
 		/* get remaining thread info */
 		aligned = smalloc(sizeof(Aln));
 		gap_align = smalloc(sizeof(Aln));
@@ -672,9 +677,36 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 		if((errno = pthread_create(&thread->id, NULL, assembly_KMA_Ptr, thread))) {
 			fprintf(stderr, "Error: %d (%s)\n", errno, strerror(errno));
 			fprintf(stderr, "Will continue with %d threads.\n", i);
-			threads = thread->next;
-			free(thread);
+			
+			/* free tracebacks */
+			free(aligned->t);
+			free(aligned->s);
+			free(aligned->q);
+			free(aligned);
+			free(gap_align->t);
+			free(gap_align->s);
+			free(gap_align->q);
+			free(gap_align);
+			
+			/* free remaining nodes */
+			while(thread) {
+				next = thread->next;
+				NWmatrices = thread->NWmatrices;
+				free(NWmatrices->E);
+				free(NWmatrices->D[0]);
+				free(NWmatrices->P[0]);
+				free(NWmatrices);
+				destroyQseqs(thread->qseq);
+				destroyQseqs(thread->header);
+				seedPoint_free(thread->points);
+				thread = next;
+			}
+		} else {
+			thread->next = threads;
+			threads = thread;
+			++i;
 		}
+		thread = next;
 	}
 	
 	/* start main thread */
@@ -835,7 +867,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	assembly_KMA_Ptr(thread);
 	for(thread = threads; thread != 0; thread = thread->next) {
 		/* join thread */
-		if((errno = pthread_join(thread->id, NULL))) {
+		if(thread->id && (errno = pthread_join(thread->id, NULL))) {
 			ERROR();
 		}
 	}

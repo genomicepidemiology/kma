@@ -80,8 +80,8 @@ HashMapKMA * loadValues(const char *filename) {
 		dest->exist = smalloc(size);
 		check = fread(dest->exist, 1, size, file);
 		if(check != size) {
-			free(dest);
 			free(dest->exist);
+			free(dest);
 			fclose(file);
 			return 0;
 		}
@@ -110,9 +110,9 @@ HashMapKMA * loadValues(const char *filename) {
 	dest->values = smalloc(size);
 	check = fread(dest->values, 1, size, file);
 	if(check != size) {
-		free(dest);
 		free(dest->exist);
 		free(dest->values);
+		free(dest);
 		fclose(file);
 		return 0;
 	}
@@ -141,9 +141,9 @@ HashMapKMA * loadValues(const char *filename) {
 		dest->exist = smalloc(size);
 		check = fread(dest->exist, 1, size, file);
 		if(check != size) {
-			free(dest);
 			free(dest->exist);
 			free(dest->values);
+			free(dest);
 			fclose(file);
 			return 0;
 		}
