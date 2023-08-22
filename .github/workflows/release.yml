@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ osx-latest ]
+        os: [ macos-latest ]
 
     steps:
       - name: checkout repository
