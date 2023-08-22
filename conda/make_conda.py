@@ -27,7 +27,7 @@ identifiers['doi'] = '10.1186/s12859-018-2336-6'
 extra['identifiers'] = identifiers
 
 # Create a dictionary for the entire YAML content
-data = yaml.comments.CommentedMap()
+data = yaml.comments.CommentedMap() 
 data['package'] = package
 data['source'] = source
 data['build'] = build
