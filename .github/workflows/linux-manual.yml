@@ -38,4 +38,4 @@ jobs:
 
       - name: upload conda package
         run: |
-          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main linux-64/*.tar.bz2
+          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main noarch/*.tar.bz2
