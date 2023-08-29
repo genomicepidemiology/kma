@@ -24,7 +24,7 @@ jobs:
         run: |
           pip install PyYAML
           pip install ruamel.yaml
-          python conda/linux_make_conda.py
+          python conda/make_conda.py
           cat conda/meta.yaml
 
       - uses: mamba-org/setup-micromamba@v1
@@ -38,4 +38,4 @@ jobs:
 
       - name: upload conda package
         run: |
-          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main noarch/*.tar.bz2
+          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main linux-64/*.tar.bz2
