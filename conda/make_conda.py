@@ -1,12 +1,17 @@
 import ruamel.yaml as yaml
 
+with open('version.h') as f:
+    for line in f:
+        if line.startswith('#def'):
+            version = line.split()[2].replace("\"", "")
+
 # Create an ordered dictionary for each section
 package = yaml.comments.CommentedMap()
 package['name'] = 'kma'
-package['version'] = '1.4.14'
+package['version'] = version
 
 source = yaml.comments.CommentedMap()
-source['url'] = 'https://bitbucket.org/genomicepidemiology/kma/get/1.4.14.tar.gz'
+source['url'] = 'https://bitbucket.org/genomicepidemiology/kma/get/{}.tar.gz'.format(version)
 
 build = yaml.comments.CommentedMap()
 build['number'] = 0
