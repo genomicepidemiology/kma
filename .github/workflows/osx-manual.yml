@@ -27,14 +27,14 @@ jobs:
           python conda/make_conda.py
           cat conda/meta.yaml
 
-      - uses: mamba-org/setup-micromamba@v1
+      - name: build conda package
+        uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: envs/osx-build.yml
 
-      - name: build conda package
+      - name: build package
         run: |
-          conda install -c anaconda anaconda-client
-          conda mambabuild conda -c conda-forge -c genomicepidemiology -c bioconda -c defaults --output-folder .
+          conda mambabuild conda -c conda-forge --output-folder .
 
       - name: upload conda package
         run: |
