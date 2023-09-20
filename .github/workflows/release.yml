@@ -27,19 +27,20 @@ jobs:
           pip install PyYAML
           pip install ruamel.yaml
           python conda/make_conda.py
+          cat conda/meta.yaml
 
-      - uses: mamba-org/setup-micromamba@v1
+      - name: build conda package
+        uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: envs/osx-build.yml
 
-      - name: build conda package
+      - name: build package
         run: |
-          conda install -c anaconda anaconda-client
-          conda mambabuild conda -c conda-forge -c genomicepidemiology -c bioconda -c defaults --output-folder .
+          conda mambabuild conda -c conda-forge --output-folder .
 
       - name: upload conda package
         run: |
-          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main osx/*.tar.bz2
+          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main osx-64/*.tar.bz2
 
   conda-linux:
     name: ${{ matrix.os }}
@@ -62,6 +63,7 @@ jobs:
           pip install PyYAML
           pip install ruamel.yaml
           python conda/make_conda.py
+          cat conda/meta.yaml
 
       - uses: mamba-org/setup-micromamba@v1
         with:
@@ -69,9 +71,8 @@ jobs:
 
       - name: build conda package
         run: |
-          conda install -c anaconda anaconda-client
-          conda mambabuild conda -c conda-forge -c genomicepidemiology -c bioconda -c defaults --output-folder .
+          conda mambabuild conda -c conda-forge --output-folder .
 
       - name: upload conda package
         run: |
-          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main linux-64/*.tar.bz2
+          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main noarch/*.tar.bz2
