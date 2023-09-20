@@ -14,7 +14,7 @@ source['url'] = 'https://bitbucket.org/genomicepidemiology/{}/get/{}.tar.gz'.for
 
 build = yaml.comments.CommentedMap()
 build['number'] = 0
-build['noarch'] = 'generic'
+#build['noarch'] = 'generic'
 
 requirements = yaml.comments.CommentedMap()
 requirements['build'] = ['make', '{{ compiler(\'c\') }}']
