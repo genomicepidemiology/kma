@@ -2,8 +2,9 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 from io import StringIO
 
-# Create an instance of YAML with the required options
-yaml = YAML(typ='unsafe', pure=True)
+# Create an instance of YAML
+yaml = YAML()
+yaml.default_flow_style = False  # Set the default flow style to block style
 
 # Create an ordered dictionary for each section
 package = CommentedMap()
@@ -23,7 +24,7 @@ build['number'] = 0
 # build['noarch'] = 'generic'
 
 requirements = CommentedMap()
-requirements['build'] = ['make', '{{ compiler(\'c\') }}']
+requirements['build'] = ['make', '{{ compiler("c") }}']
 requirements['host'] = ['zlib']
 requirements['run'] = ['zlib']
 
