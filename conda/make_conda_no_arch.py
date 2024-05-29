@@ -20,8 +20,8 @@ source = CommentedMap()
 source['url'] = 'https://bitbucket.org/genomicepidemiology/{}/get/{}.tar.gz'.format(package['name'], package['version'])
 
 build = CommentedMap()
-build['number'] = 0
-#build['noarch'] = 'generic'
+#build['number'] = 0
+build['noarch'] = 'generic'
 
 requirements = CommentedMap()
 requirements['build'] = ['make', '{{ compiler("c") }}']
