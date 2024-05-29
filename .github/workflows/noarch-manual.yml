@@ -18,7 +18,7 @@ jobs:
         run: |
           pip install PyYAML
           pip install ruamel.yaml
-          python conda/make_conda.py
+          python conda/make_conda_no_arch.py
           cat conda/meta.yaml
 
       - name: Set up micromamba
