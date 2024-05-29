@@ -40,7 +40,7 @@ jobs:
 
       - name: upload conda package
         run: |
-          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main osx-64/*.tar.bz2
+          anaconda -t ${{ secrets.GENOMICEPIDEMIOLOGY_CONDA_AUTH_TOKEN }} upload --label main osx-arm64/*.tar.bz2
 
   conda-linux:
     name: ${{ matrix.os }}
