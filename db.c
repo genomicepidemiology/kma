@@ -68,6 +68,7 @@ void dbInfo(char *filename) {
 	fprintf(stdout, "k:\t%d\n", templates->kmersize);
 	fprintf(stdout, "m:\t%d\n", templates->mlen);
 	fprintf(stdout, "hc:\t%d\n", templates->flag & 1);
+	fflush(stdout);
 	/* get prefix */
 	if(templates->prefix_len) {
 		prefix = templates->prefix;

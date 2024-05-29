@@ -33,6 +33,7 @@
 #include "updateindex.h"
 
 int (*biasPrintPtr)(FILE*, char*, unsigned char*, int) = &biasPrint;
+int (*qualcheck)(CompDNA *, const int) = &lenCheck;
 
 int biasPrint(FILE *name_out, char *format, unsigned char *name, int bias) {
 	return fprintf(name_out, "%s B%d\n", name, bias);
@@ -40,6 +41,127 @@ int biasPrint(FILE *name_out, char *format, unsigned char *name, int bias) {
 
 int biasNoPrint(FILE *name_out, char *format, unsigned char *name, int bias) {
 	return fprintf(name_out, "%s\n", name);
+}
+
+int lenCheck(CompDNA *qseq, const int minlen) {
+	return minlen < qseq->seqlen;
+}
+
+int internalStopCheck1(CompDNA *qseq) {
+	
+	int pos, seqlen;
+	unsigned codon;
+	long unsigned *seq;
+	
+	if(qseq->seqlen % 3) {
+		return 0;
+	}
+	
+	/* valid stop: TAA, TAG and TGA  = 48, 50, 56 */
+	seq = qseq->seq;
+	seqlen = qseq->seqlen - 3;
+	pos = 0;
+	while(pos < seqlen) {
+		/* get codon */
+		if(((pos + 3) & 15) < 3) {
+			codon = (((seq[(pos >> 5)] << ((pos & 31) << 1)) | (seq[(pos >> 5) + 1] >> (64 - ((pos & 31) << 1)))) >> 58);
+		} else {
+			codon = (seq[(pos >> 5)] << ((pos & 31) << 1)) >> 58;
+		}
+		
+		/* check for stop codon */
+		if(codon == 48 || codon == 50 || codon == 56) {
+			return 0;
+		}
+		
+		pos += 3;
+	}
+	
+	return 1;
+}
+
+int internalStopCheck(CompDNA *qseq, const int minlen) {
+	
+	int pos, seqlen;
+	unsigned codon, frames, frames_r;
+	long unsigned *seq;
+	
+	if(qseq->seqlen < minlen) {
+		return 0;
+	}
+	
+	/* valid stop: TAA, TAG and TGA  = 48, 50, 56 */
+	/* rc: TTA, CTA and TCA = 60, 28, 52*/
+	frames = 0;
+	frames_r = 0;
+	seq = qseq->seq;
+	seqlen = qseq->seqlen - 4;
+	pos = 1;
+	while(pos < seqlen) {
+		/* get codon */
+		if(((pos + 3) & 15) < 3) {
+			codon = (((seq[(pos >> 5)] << ((pos & 31) << 1)) | (seq[(pos >> 5) + 1] >> (64 - ((pos & 31) << 1)))) >> 58);
+		} else {
+			codon = (seq[(pos >> 5)] << ((pos & 31) << 1)) >> 58;
+		}
+		
+		/* check for stop codon */
+		if(codon == 48 || codon == 50 || codon == 56) { /* forward */
+			frames |= (1 << (pos % 3));
+		} else if(codon == 60 || codon == 28 || codon == 52) {
+			frames_r |= (1 << (pos % 3));
+		}
+		
+		/* check if all frames has internal stop codons */
+		if(frames == 7 && frames_r == 7) {
+			return 0;
+		}
+		
+		++pos;
+	}
+	
+	/* fit to accepted frame */
+	/*
+	if(frames == 7) {
+		comp_rc(qseq);
+	}
+	*/
+	
+	return 1;
+}
+
+int qualCheck(CompDNA *qseq, const int minlen) {
+	
+	unsigned start, stop, pos;
+	
+	if(qseq->seqlen < minlen || qseq->seqlen % 3) {
+		return 0;
+	}
+	
+	/* valid start: NTG and ATT */
+	/* NTG & 15 = 0X1110 = 14 || ATT = 0x001111 = 15 */
+	/* rc: CAN and AAT */
+	/* CAN >> 2 = 4 || AAT = 3 */
+	start = *(qseq->seq) >> 58;
+	
+	/* valid stop: TAA, TAG and TGA  = 48, 50, 56 */
+	/* rc: TTA, CTA and TCA = 60, 28, 52*/
+	pos = qseq->seqlen - 3;
+	if((qseq->seqlen & 15) < 3) {
+		stop = (((qseq->seq[(pos >> 5)] << ((pos & 31) << 1)) | (qseq->seq[(pos >> 5) + 1] >> (64 - ((pos & 31) << 1)))) >> 58);
+	} else {
+		stop = (qseq->seq[(pos >> 5)] << ((pos & 31) << 1)) >> 58;
+	}
+	
+	/* check valid start and stop codon */
+	if(((start & 15) == 14 || start == 15) && (stop == 48 || stop == 50 || stop == 56)) { /* forward */
+		return internalStopCheck1(qseq);
+	} else if(((stop >> 2) == 4 || stop == 3) && (start == 60 || start == 28 || start == 52)) { /* rc */
+		comp_rc(qseq);
+		return internalStopCheck1(qseq);
+	}
+	
+	return 0;
 }
 
 void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount, char *outputfilename, int appender, char *trans, int MinLen, int MinKlen, double homQ, double homT, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths) {
@@ -100,7 +222,7 @@ void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount,
 				}
 				bias = compDNAref(compressor, qseq->seq, qseq->len);
 				
-				if(compressor->seqlen > MinLen && update_DB(templates, compressor, templates->DB_size, MinKlen, homQ, homT, *template_ulengths, *template_slengths, header)) {
+				if(qualcheck(compressor, MinLen) && update_DB(templates, compressor, templates->DB_size, MinKlen, homQ, homT, *template_ulengths, *template_slengths, header)) {
 					/* Update annots */
 					seq = header->seq + header->len;
 					while(isspace(*--seq)) {

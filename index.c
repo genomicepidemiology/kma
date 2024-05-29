@@ -58,6 +58,8 @@ static void helpMessage(int exeStatus) {
 	fprintf(helpOut, "#\t-k\t\tKmersize\t\t\t\t16\n");
 	fprintf(helpOut, "#\t-m\t\tMinimizer size\t\t\t\t16/False\n");
 	fprintf(helpOut, "#\t-hc\t\tHomopolymer compression\t\t\t\tFalse\n");
+	fprintf(helpOut, "#\t-c\t\tTemplates are open reading frames\n");
+	fprintf(helpOut, "#\t-C\t\tTemplates are CDSs\n");
 	fprintf(helpOut, "#\t-ML\t\tMinimum length of templates\t\tkmersize (16)\n");
 	fprintf(helpOut, "#\t-CS\t\tStart Chain size\t\t\t1 M\n");
 	fprintf(helpOut, "#\t-ME\t\tMega DB\t\t\t\t\tFalse\n");
@@ -306,6 +308,10 @@ int index_main(int argc, char *argv[]) {
 			}
 		} else if(strcmp(argv[args], "-and") == 0) {
 			cmp = &cmp_and;
+		} else if(strcmp(argv[args], "-c") == 0) {
+			qualcheck = &qualCheck;
+		} else if(strcmp(argv[args], "-C") == 0) {
+			qualcheck = &internalStopCheck;
 		} else if(strcmp(argv[args], "-ML") == 0) {
 			++args;
 			if(args < argc) {

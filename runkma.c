@@ -127,7 +127,7 @@ char * nameLoad(Qseqs *name, FILE *infile) {
 	return (char *) name->seq;
 }
 
-int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int maxFrag, int verbose) {
 	
 	int i, file_len, template, t_len, end, aln_len, status, sparse, fileCount;
 	int coverScore, seq_in_no, DB_size, counter;
@@ -586,9 +586,9 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	
 	/* ConClave */
 	if(ConClave == 1) {
-		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
+		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, maxFrag, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
 	} else if(ConClave == 2) {
-		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
+		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, maxFrag, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
 	} else {
 		fileCount = 0;
 	}
@@ -867,7 +867,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	assembly_KMA_Ptr(thread);
 	for(thread = threads; thread != 0; thread = thread->next) {
 		/* join thread */
-		if(thread->id && (errno = pthread_join(thread->id, NULL))) {
+		if((errno = pthread_join(thread->id, NULL))) {
 			ERROR();
 		}
 	}
@@ -907,7 +907,7 @@ int runKMA(char *templatefilename, char *outputfilename, char *exePrev, int ConC
 	return status;
 }
 
-int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double minFrac, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int maxFrag, int verbose) {
 	
 	/* runKMA_MEM is a memory saving version of runKMA,
 	   at the cost it chooses best templates based on kmers
@@ -1254,9 +1254,9 @@ int runKMA_MEM(char *templatefilename, char *outputfilename, char *exePrev, int 
 	
 	/* ConClave */
 	if(ConClave == 1) {
-		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
+		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, maxFrag, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
 	} else if(ConClave == 2) {
-		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
+		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, maxFrag, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
 	} else {
 		fileCount = 0;
 	}

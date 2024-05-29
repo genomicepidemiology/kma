@@ -398,7 +398,7 @@ unsigned get_ankers_spltDB(int *infoSize, int *out_Tem, CompDNA *qseq, Qseqs *he
 	return num;
 }
 
-int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int verbose) {
+int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename, int argc, char **argv, int ConClave, int kmersize, int minlen, Penalties *rewards, int extendedFeatures, double ID_t, double Depth_t, int mq, double scoreT, double mrc, double evalue, double support, int bcd, int ref_fsa, int print_matrix, int print_all, long unsigned tsv, int vcf, int xml, int sam, int nc, int nf, unsigned shm, int thread_num, int maxFrag, int verbose) {
 	
 	/* https://www.youtube.com/watch?v=LtXEMwSG5-8 */
 	
@@ -874,11 +874,10 @@ int runKMA_spltDB(char **templatefilenames, int targetNum, char *outputfilename,
 	}
 	
 	/* ConClave */
-	/* ConClave */
 	if(ConClave == 1) {
-		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
+		fileCount = ConClavePtr(frag_in_raw, &template_fragments, DB_size, maxFrag, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags);
 	} else if(ConClave == 2) {
-		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
+		fileCount = ConClave2Ptr(frag_in_raw, &template_fragments, DB_size, maxFrag, w_scores, fragmentCounts, readCounts, alignment_scores, uniq_alignment_scores, template_lengths, header, qseq, bestTemplates, best_start_pos, best_end_pos, alignFrags, template_tot_ulen, scoreT, evalue);	
 	} else {
 		fileCount = 0;
 	}

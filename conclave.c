@@ -27,8 +27,8 @@
 #include "stdnuc.h"
 #include "stdstat.h"
 
-int (*ConClavePtr)(FILE *, FILE ***, int, long unsigned *, unsigned *, unsigned *, long unsigned *, long unsigned *, int *, Qseqs *, Qseqs *, int *, int *, int *, Frag **) = &runConClave;
-int (*ConClave2Ptr)(FILE *, FILE ***, int, long unsigned *, unsigned *, unsigned *, long unsigned *, long unsigned *, int *, Qseqs *, Qseqs *, int *, int *, int *, Frag **, long unsigned, double, double) = &runConClave2;
+int (*ConClavePtr)(FILE *, FILE ***, int, int, long unsigned *, unsigned *, unsigned *, long unsigned *, long unsigned *, int *, Qseqs *, Qseqs *, int *, int *, int *, Frag **) = &runConClave;
+int (*ConClave2Ptr)(FILE *, FILE ***, int, int, long unsigned *, unsigned *, unsigned *, long unsigned *, long unsigned *, int *, Qseqs *, Qseqs *, int *, int *, int *, Frag **, long unsigned, double, double) = &runConClave2;
 
 unsigned char * ustrdup(unsigned char *src, size_t n) {
 	
@@ -40,10 +40,10 @@ unsigned char * ustrdup(unsigned char *src, size_t n) {
 	return dest;
 }
 
-int runConClave(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags) {
+int runConClave(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, int maxFrag, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags) {
 	
 	int i, fileCount, sparse, bestHits, read_score, flag, start, end, bestNum;
-	int bestTemplate, best_read_score, fragCount, maxFrag, tmp_start, tmp_end;
+	int bestTemplate, best_read_score, fragCount, tmp_start, tmp_end;
 	int tmp_template, tmp_tmp_template, stats[5], *qBoundPtr;
 	double bestScore, tmp_score;
 	FILE **template_fragments;
@@ -52,7 +52,6 @@ int runConClave(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, long
 	/* init */
 	fileCount = 0;
 	fragCount = 0;
-	maxFrag = 1000000;
 	template_fragments = *Template_fragments;
 	
 	while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
@@ -213,10 +212,10 @@ int runConClave(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, long
 	return ++fileCount;
 }
 
-int runConClave_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags) {
+int runConClave_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, int maxFrag, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags) {
 	
 	int i, fileCount, sparse, bestHits, read_score, flag, start, end, bestNum;
-	int bestTemplate, best_read_score, fragCount, maxFrag, tmp_start, tmp_end;
+	int bestTemplate, best_read_score, fragCount, tmp_start, tmp_end;
 	int tmp_template, tmp_tmp_template, stats[5], *qBoundPtr;
 	double bestScore, tmp_score;
 	FILE **template_fragments;
@@ -225,7 +224,6 @@ int runConClave_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, l
 	/* init */
 	fileCount = 0;
 	fragCount = 0;
-	maxFrag = 1000000;
 	template_fragments = *Template_fragments;
 	
 	while(fread(stats, sizeof(int), 5, frag_in_raw) && stats[0] != 0) {
@@ -385,10 +383,10 @@ int runConClave_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, l
 	return ++fileCount;
 }
 
-int runConClave2(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags, long unsigned template_tot_ulen, double scoreT, double evalue) {
+int runConClave2(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, int maxFrag, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags, long unsigned template_tot_ulen, double scoreT, double evalue) {
 	
 	int i, j, fileCount, sparse, bestHits, read_score, flag, start, end, rand;
-	int template, bestTemplate, best_read_score, fragCount, maxFrag, t_len, tot;
+	int template, bestTemplate, best_read_score, fragCount, t_len, tot;
 	int tmp_start, tmp_end, tmp_template, tmp_tmp_template;
 	int stats[5], *qBoundPtr;
 	unsigned randScore;
@@ -401,7 +399,6 @@ int runConClave2(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, lon
 	/* init */
 	fileCount = 0;
 	fragCount = 0;
-	maxFrag = 1000000;
 	template_fragments = *Template_fragments;
 	
 	/* find potential template candidates */
@@ -749,10 +746,10 @@ int runConClave2(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, lon
 	return ++fileCount;
 }
 
-int runConClave2_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags, long unsigned template_tot_ulen, double scoreT, double evalue) {
+int runConClave2_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, int maxFrag, long unsigned *w_scores, unsigned *fragmentCounts, unsigned *readCounts, long unsigned *alignment_scores, long unsigned *uniq_alignment_scores, int *template_lengths, Qseqs *header, Qseqs *qseq, int *bestTemplates, int *best_start_pos, int *best_end_pos, Frag **alignFrags, long unsigned template_tot_ulen, double scoreT, double evalue) {
 	
 	int i, j, fileCount, sparse, bestHits, read_score, flag, start, end, rand;
-	int template, bestTemplate, best_read_score, fragCount, maxFrag, t_len, tot;
+	int template, bestTemplate, best_read_score, fragCount, t_len, tot;
 	int tmp_start, tmp_end, tmp_template, tmp_tmp_template;
 	int stats[5], *qBoundPtr;
 	unsigned randScore;
@@ -765,7 +762,6 @@ int runConClave2_lc(FILE *frag_in_raw, FILE ***Template_fragments, int DB_size, 
 	/* init */
 	fileCount = 0;
 	fragCount = 0;
-	maxFrag = 1000000;
 	template_fragments = *Template_fragments;
 	
 	/* find potential template candidates */

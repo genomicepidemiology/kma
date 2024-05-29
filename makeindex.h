@@ -19,6 +19,11 @@
 #include "hashmap.h"
 
 extern int (*biasPrintPtr)(FILE*, char*, unsigned char*, int);
+extern int (*qualcheck)(CompDNA *, const int);
 int biasPrint(FILE *name_out, char *format, unsigned char *name, int bias);
 int biasNoPrint(FILE *name_out, char *format, unsigned char *name, int bias);
+int lenCheck(CompDNA *qseq, const int minlen);
+int internalStopCheck1(CompDNA *qseq);
+int internalStopCheck(CompDNA *qseq, const int minlen);
+int qualCheck(CompDNA *qseq, const int minlen);
 void makeDB(HashMap *templates, int kmerindex, char **inputfiles, int fileCount, char *outputfilename, int appender, char *trans, int MinLen, int MinKlen, double homQ, double homT, unsigned **template_lengths, unsigned **template_ulengths, unsigned **template_slengths);

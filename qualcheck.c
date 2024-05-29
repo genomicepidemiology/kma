@@ -102,6 +102,7 @@ int queryCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, doub
 	mlen = templates->mlen;
 	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
 	flag = templates->flag;
+	hLen = templates->kmersize;
 	
 	/* realloc */
 	if(!bestTemplates) {
@@ -213,6 +214,7 @@ int templateCheck(HashMap *templates, CompDNA *qseq, int MinKlen, double homQ, d
 	mlen = templates->mlen;
 	mmask = 0xFFFFFFFFFFFFFFFF >> (64 - (mlen << 1));
 	flag = templates->flag;
+	hLen = templates->kmersize;
 	
 	if(DB_size < USHRT_MAX) {
 		updateScoreAndTemplate_ptr = &updateScoreAndTemplateHU;

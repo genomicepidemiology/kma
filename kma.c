@@ -142,6 +142,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-shm", "Use DB in shared memory", "0");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mmap", "Memory map *.comp.b", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-tmp", "Set directory for temporary files", "");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-mf", "Max number of fragments to store in memory", "1000000");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-t", "Number of threads", "1");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-status", "Extra status", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-verbose", "Extra verbose", "False");
@@ -235,7 +236,7 @@ int kma_main(int argc, char *argv[]) {
 	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, mem_mode;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int ConClave, sparse_run, ts, **d, status = 0;
+	static int ConClave, sparse_run, ts, maxFrag, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static long unsigned tsv;
 	static char *outputfilename, *templatefilename, **templatefilenames;
@@ -289,6 +290,7 @@ int kma_main(int argc, char *argv[]) {
 		ts = 0;
 		minlen = 16;
 		maxlen = 2147483647;
+		maxFrag = 1000000;
 		evalue = 0.05;
 		support = 0.0;
 		minFrac = 1.0;
@@ -1010,6 +1012,15 @@ int kma_main(int argc, char *argv[]) {
 						--args;
 					}
 				}
+			} else if(strcmp(argv[args], "-mf") == 0) {
+				++args;
+				if(args < argc) {
+					maxFrag = strtol(argv[args], &exeBasic, 10);
+					if(*exeBasic != 0 || maxFrag < 0) {
+						fprintf(stderr, "Invalid argument at \"-mf\".\n");
+						exit(1);
+					}
+				}
 			} else if(strcmp(argv[args], "-spltDB") == 0) {
 				spltDB = 1;
 			} else if(strcmp(argv[args], "-status") == 0) {
@@ -1521,11 +1532,11 @@ int kma_main(int argc, char *argv[]) {
 		myTemplatefilename = smalloc(strlen(templatefilename) + 64);
 		strcpy(myTemplatefilename, templatefilename);
 		if(spltDB == 0 && targetNum != 1) {
-			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_spltDB(templatefilenames, targetNum, outputfilename, argc, argv, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		} else if(mem_mode) {
-			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

@@ -520,7 +520,7 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 							if(gaps == 0) {
 								/* match */
 								++Ms;
-							} else if(mlen <= gaps && gaps <= kmersize) {
+							} else if(gaps == kmersize) {
 								/* snp */
 								Ms += kmersize;
 								++MMs;
@@ -583,7 +583,7 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 										if(gaps == 0) {
 											/* match */
 											score = M;
-										} else if(mlen <= gaps && gaps <= kmersize) {
+										} else if(gaps == kmersize) {
 											/* snp */
 											score = kmersize * M + MM;
 										} else if(kmersize < gaps) {
@@ -614,7 +614,7 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 											/* indel */
 											score = gaps * M + (kmersize - gaps) * U + W1;
 										}
-										Scores[template] += score;
+										Score[template] += score;
 									} else {
 										Scores[template] = kmersize * M;
 										if(include[template] == 0) {
@@ -627,10 +627,10 @@ int get_kmers_for_pair(const HashMapKMA *templates, const Penalties *rewards, in
 								last = values;
 								values_s = (short unsigned *) values;
 								n = SU ? *values_s : *values;
-								score = kmersize * M;
+								Ms = kmersize * M;
 								for(l = 1; l <= n; ++l) {
 									template = SU ? *++values_s : *++values;
-									Scores[template] = score;
+									Scores[template] = Ms;
 									include[template] = 1;
 									bests[l] = template;
 								}
@@ -2529,7 +2529,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 						if(gaps == 0) {
 							/* match */
 							++Ms;
-						} else if(mlen <= gaps && gaps <= kmersize) {
+						} else if(gaps == kmersize) {
 							/* snp */
 							Ms += kmersize;
 							++MMs;
@@ -2840,7 +2840,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 						if(gaps == 0) {
 							/* match */
 							++Ms;
-						} else if(mlen <= gaps && gaps <= kmersize) {
+						} else if(gaps == kmersize) {
 							/* snp */
 							Ms += kmersize;
 							++MMs;
@@ -2903,7 +2903,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 									if(gaps == 0) {
 										/* match */
 										score = M;
-									} else if(mlen <= gaps && gaps <= kmersize) {
+									} else if(gaps == kmersize) {
 										/* snp */
 										score = kmersize * M + MM;
 									} else if(kmersize < gaps) {
@@ -2970,7 +2970,7 @@ int save_kmers(const HashMapKMA *templates, const Penalties *rewards, int *bestT
 				}
 				++j;
 			}
-			gaps += (qseq_r->N[i] + 1 - j); /* gap over N's */
+			gaps += (qseq->N[i] + 1 - j); /* gap over N's */
 			j = end + 1;
 		}
 		if(last) {
@@ -3447,6 +3447,10 @@ int save_kmers_unionPair(const HashMapKMA *templates, const Penalties *rewards, 
 					flag_r |= 32;
 					comp_rc(qseq_r);
 				}
+				if(regionTemplates[*regionTemplates] < 0) {
+					bestScore = -bestScore;
+					bestScore_r = -bestScore_r;
+				}
 				lock(excludeOut);
 				i = printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore_r, header_r, flag, flag_r, out);
 				unlock(excludeOut);
@@ -3621,6 +3625,10 @@ int save_kmers_penaltyPair(const HashMapKMA *templates, const Penalties *rewards
 						flag |= 16;
 						flag_r |= 32;
 						comp_rc(qseq_r);
+					}
+					if(regionTemplates[*regionTemplates] < 0) {
+						bestScore = -bestScore;
+						bestScore_r = -bestScore_r;
 					}
 					lock(excludeOut);
 					i = printPairPtr(regionTemplates, qseq, bestScore, header, qseq_r, bestScore_r, header_r, flag, flag_r, out);
