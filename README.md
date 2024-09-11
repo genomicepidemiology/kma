@@ -14,10 +14,10 @@ cd kma && make
 # Introduction #
 KMA is a mapping method designed to map raw reads directly against redundant databases, in an 
 ultra-fast manner using seed and extend. KMA is particulary good at aligning 
-high quality reads against highly redundant databases, where unique matches often does 
-not exist. It works for long low quality reads as well, such as those from Nanopore. 
-Non-unique matches are resolved using the "ConClave" sorting scheme, and a consensus sequence are outputtet
-in addition to other common attributes, based on our users demands.
+high-quality reads against highly redundant databases, where unique matches often do 
+not exist. It works for long low-quality reads as well, such as those from Nanopore. 
+Non-unique matches are resolved using the "ConClave" sorting scheme, and a consensus sequence are output
+in addition to other common attributes, based on our users' demands.
 
 If you use KMA for your published research, then please cite:
 Philip T.L.C. Clausen, Frank M. Aarestrup & Ole Lund, 
@@ -52,7 +52,7 @@ kma index -i templates.fsa.gz -o database/name
 ```
 
 ## Mapping ##
-The default settings of KMA is set so that it should work on most cases, 
+The default setting of KMA is set so that it should work on most cases, 
 but it is evident to use the right options for the right problems.
 Some of the most important options:
 
@@ -78,22 +78,22 @@ Some of the most important options:
 
 Examples of running KMA:
 
-Short read mapping, one read maps only to one template:
+Short-read mapping, one read maps only to one template:
 ```
 kma -i singleEndReads.fq.gz -ipe pairedEnd_*.fq.gz -o output/name -t_db database/name -1t1
 ```
 
-Long read mapping against a database of genes:
+Long-read mapping against a database of genes:
 ```
 kma -i someLongReads.fq.gz -o output/name -t_db database/name -bcNano -bc 0.7
 ```
 
-Whole genome mapping with nanopore reads:
+Whole-genome mapping with nanopore reads:
 ```
 kma -i nanoporeReads.fq.gz -o output/name -t_db database/name -mem_mode -mp 20 -mrs 0.0 -bcNano -bc 0.7
 ```
 
-Whole genome mapping against a single genome in the database (still nanopore), specified by template number (here 2).
+Whole-genome mapping against a single genome in the database (still nanopore), specified by template number (here 2).
 This is the same as the line number of the wanted sequences in the \*.name file from the indexing.
 ```
 kma -i nanoporeReads.fq.gz -o output/name -t_db database/name -mp 20 -bcNano -bc 0.7 -Mt1 2
