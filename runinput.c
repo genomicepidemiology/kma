@@ -100,6 +100,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minm
 					while(start < end && seq[start] < phredCut) {
 						++start;
 					}
+					
 					/*
 					for(i = start; i < end; ++i) {
 						if(seq[i] < phredCut) {

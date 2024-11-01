@@ -33,7 +33,7 @@ void (*updateAnnotsPtr)(CompDNA *, int, int, FILE *, unsigned **, unsigned **, u
 int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header) {
 	
 	int i, j, end, shifter, mPos, hLen, seqend;
-	unsigned kmersize, mlen, flag, cPos, iPos;
+	unsigned kmersize, mlen, flag, cPos, iPos, n;
 	long unsigned mask, mmask, kmer, cmer, hmer, *seq;
 	
 	if(qseq->seqlen < templates->kmersize) {
@@ -52,6 +52,7 @@ int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen,
 	flag = templates->flag;
 	seqend = qseq->seqlen - kmersize + 1;
 	hLen = kmersize;
+	n = 0;
 	
 	/* iterate sequence */
 	for(i = 1, j = 0; i <= qseq->N[0] && j < seqend; ++i) {
@@ -66,18 +67,19 @@ int updateDBs(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen,
 			
 			/* update hashMap */
 			hashMap_add(templates, cmer, template);
+			++n;
 		}
 		j = end + 1;
 	}
 	qseq->N[0]--;
 	
-	return 1;
+	return n;
 }
 
 int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int MinKlen, double homQ, double homT, unsigned *template_ulengths, unsigned *template_slengths, Qseqs *header) {
 	
 	int i, j, end, rc, prefix_len, prefix_shifter, mPos, hLen, seqend;
-	unsigned kmersize, shifter, mlen, flag, cPos, iPos;
+	unsigned kmersize, shifter, mlen, flag, cPos, iPos, slen, ulen;
 	long unsigned pmask, mask, mmask, prefix, pmer, kmer, cmer, hmer, *seq;
 	
 	if(qseq->seqlen < templates->kmersize) {
@@ -99,8 +101,8 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 	
 	/* test homology and length */
 	if(QualCheck(templates, qseq, MinKlen, homQ, homT, template_ulengths, header)) {
-		template_slengths[template] = 0;
-		template_ulengths[template] = 0;
+		slen = 0;
+		ulen = 0;
 		for(rc = 0; rc < 2; ++rc) {
 			/* revers complement */
 			if(rc) {
@@ -124,9 +126,9 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 							
 							/* add kmer */
 							if(hashMap_add(templates, cmer, template)) {
-								template_ulengths[template]++;
+								++ulen;
 							}
-							template_slengths[template]++;
+							++slen;
 						}
 					}
 					j = qseq->N[i] + 1;
@@ -144,9 +146,9 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 						
 						/* add kmer */
 						if(hashMap_add(templates, cmer, template)) {
-							template_ulengths[template]++;
+							++ulen;
 						}
-						template_slengths[template]++;
+						++slen;
 					}
 					j = end + 1;
 				}
@@ -156,7 +158,9 @@ int updateDBs_sparse(HashMap *templates, CompDNA *qseq, unsigned template, int M
 		if(prefix_len == 0 && !prefix) {
 			comp_rc(qseq);
 		}
-		return 1;
+		template_slengths[template] = slen;
+		template_ulengths[template] = ulen;
+		return slen;
 	}
 	
 	return 0;
