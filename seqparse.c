@@ -357,14 +357,23 @@ int FileBuffgetFq(FileBuff *src, Qseqs *header, Qseqs *qseq, Qseqs *qual, char *
 		buff += qual->len;
 	} else {
 		seq = qual->seq;
-		memcpy(seq, buff, avail);
-		seq += avail;
-		size = qual->len - avail;
-		if((avail = buffFileBuff(src)) == 0) {
-			return 0;
+		size = qual->len;
+		while(size) {
+			if(size < avail) {
+				memcpy(seq, buff, size);
+				size = 0;
+				avail -= size;
+				buff += size;
+			} else {
+				memcpy(seq, buff, avail);
+				size -= avail;
+				seq += avail;
+				if((avail = buffFileBuff(src)) == 0) {
+					return 0;
+				}
+				buff = src->buffer;
+			}
 		}
-		buff = src->buffer;
-		memcpy(seq, buff, size);
 	}
 	qual->seq[qual->len] = 0;
 	
@@ -496,14 +505,23 @@ int FileBuffgetFqSeq(FileBuff *src, Qseqs *qseq, Qseqs *qual, char *trans) {
 		buff += qual->len;
 	} else {
 		seq = qual->seq;
-		memcpy(seq, buff, avail);
-		seq += avail;
-		size = qual->len - avail;
-		if((avail = buffFileBuff(src)) == 0) {
-			return 0;
+		size = qual->len;
+		while(size) {
+			if(size < avail) {
+				memcpy(seq, buff, size);
+				size = 0;
+				avail -= size;
+				buff += size;
+			} else {
+				memcpy(seq, buff, avail);
+				size -= avail;
+				seq += avail;
+				if((avail = buffFileBuff(src)) == 0) {
+					return 0;
+				}
+				buff = src->buffer;
+			}
 		}
-		buff = src->buffer;
-		memcpy(seq, buff, size);
 	}
 	qual->seq[qual->len] = 0;
 	

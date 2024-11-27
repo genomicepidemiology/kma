@@ -1081,6 +1081,7 @@ int kma_main(int argc, char *argv[]) {
 				vcf = 1;
 				extendedFeatures = 1;
 			} else if(strcmp(argv[args], "-ont") == 0) {
+				/* -bcNano -bc 0.7 -mct 0.1 -bcd 10 -mrs 0.25 -mrc 0.7 -eq 10 -lc -ts 2 */
 				/* -bcNano */
 				if(significantBase == &significantNuc) {
 					significantBase = &significantAnd90Nuc;
