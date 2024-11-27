@@ -4,3 +4,5 @@ kma_shm
 kma_update
 *.o
 *.a
+*~
+
