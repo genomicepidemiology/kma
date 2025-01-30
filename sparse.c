@@ -30,6 +30,8 @@
 #include "kmmap.h"
 #include "pherror.h"
 #include "runinput.h"
+#include "qc.h"
+#include "qseqs.h"
 #include "savekmers.h"
 #include "seqparse.h"
 #include "sparse.h"
@@ -241,11 +243,14 @@ void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, C
 	}
 }
 
-void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int kmersize, char *trans, const double *prob, FILE *out) {
+void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int kmersize, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
 	
-	int FASTQ, fileCounter, phredScale, phredCut, start, end;
+	int fileCounter, phredScale, phredCut, start, end, stat, ns, gc, eq;
+	unsigned FASTQ;
+	long unsigned count, bpcount, org_count, org_bpcount;
 	char *filename;
 	unsigned char *seq;
+	double sp;
 	Qseqs *qseq, *qual;
 	FileBuff *inputfile;
 	CompKmers *Kmers;
@@ -255,6 +260,16 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 	qseq = setQseqs(1024);
 	qual = setQseqs(1024);
 	inputfile = setFileBuff(CHUNK);
+	phredScale = 33;
+	count = 0;
+	bpcount = 0;
+	org_count = 0;
+	org_bpcount = 0;
+	sp = 0;
+	gc = 0;
+	ns = 0;
+	eq = 0;
+	stat = minmaskQ || minQ || qcreport;
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
@@ -274,6 +289,9 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 			
 			/* parse reads */
 			while(FileBuffgetFqSeq(inputfile, qseq, qual, trans)) {
+				++org_count;
+				org_bpcount += qseq->len;
+				
 				/* trim */
 				seq = qual->seq;
 				start = fiveClip;
@@ -288,10 +306,18 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 				}
 				qseq->len = end - start;
 				
+				/* get E(Q), gc and n's */
+				sp = stat ? qcstat(qseq->seq + start, seq + start, qseq->len, prob - phredScale, minmaskQ, &gc, &ns, &eq) : 0;
+				
 				/* print */
-				if(qseq->len > kmersize && qseq->len != hardmaskQ(qseq->seq + start, seq + start, qseq->len, phredScale, minmaskQ) && minQ <= eQual(seq + start, qseq->len, minQ, prob - phredScale)) {
+				if(kmersize <= (qseq->len - ns) && minQ <= eq) {
 					/* translate to kmers */
 					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq + start, qseq->len, templates, out);
+					++count;
+					bpcount += qseq->len;
+					if(qcreport) {
+						update_QCstat(qcreport, qseq->len, gc, ns, eq, sp);
+					}
 				}
 			}
 			if(Kmers->n) {
@@ -300,9 +326,19 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 			}
 		} else if(FASTQ & 2) {
 			while(FileBuffgetFsaSeq(inputfile, qseq, trans)) {
+				++org_count;
+				org_bpcount += qseq->len;
 				if(qseq->len > kmersize) {
+					ns = qcreport ? fsastat(qseq->seq, qseq->len, &gc) : 0;
 					/* translate to kmers */
-					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq, qseq->len, templates, out);
+					if(kmersize <= (qseq->len - ns)) {
+						Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq, qseq->len, templates, out);
+						++count;
+						bpcount += qseq->len;
+						if(qcreport) {
+							update_QCstat(qcreport, qseq->len, gc, ns, 0, 0);
+						}
+					}
 				}
 			}
 			if(Kmers->n) {
@@ -319,6 +355,15 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 		
 	}
 	
+	if(qcreport) {
+		qcreport->fragcount += count;
+		qcreport->org_fragcount += org_count;
+		qcreport->count += count;
+		qcreport->org_count += org_count;
+		qcreport->bpcount += bpcount;
+		qcreport->org_bpcount += org_bpcount;
+		qcreport->phredScale = phredScale;
+	}
 	free(Kmers->kmers);
 	free(Kmers);
 	destroyQseqs(qseq);

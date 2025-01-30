@@ -36,6 +36,7 @@
 #include "mt1.h"
 #include "penalties.h"
 #include "pherror.h"
+#include "qc.h"
 #include "qseqs.h"
 #include "runinput.h"
 #include "runkma.h"
@@ -236,13 +237,15 @@ int kma_main(int argc, char *argv[]) {
 	static int fileCounter, fileCounter_PE, fileCounter_INT, Ts, Tv, mem_mode;
 	static int extendedFeatures, spltDB, thread_num, kmersize, targetNum, mq;
 	static int ref_fsa, print_matrix, print_all, sam, vcf, Mt1, bcd, one2one;
-	static int ConClave, sparse_run, ts, maxFrag, **d, status = 0;
+	static int ConClave, sparse_run, ts, maxFrag, preset, **d, status = 0;
 	static unsigned xml, nc, nf, shm, exhaustive, verbose;
 	static long unsigned tsv;
 	static char *outputfilename, *templatefilename, **templatefilenames;
 	static char **inputfiles, **inputfiles_PE, **inputfiles_INT, ss;
 	static double ID_t, Depth_t, scoreT, coverT, mrc, evalue, minFrac, support;
+	static FILE *out_json;
 	static Penalties *rewards;
+	static QCstat *qcreport;
 	int i, j, args, exe_len, fileCount, size, escape, tmp, step1, step2;
 	long unsigned totFrags;
 	char *to2Bit, *exeBasic, *myTemplatefilename;
@@ -325,6 +328,8 @@ int kma_main(int argc, char *argv[]) {
 		Mt1 = 0;
 		inputfiles = 0;
 		deConPrintPtr = printPtr;
+		out_json = 0;
+		qcreport = 0;
 		
 		/* PARSE COMMAND LINE OPTIONS */
 		args = 1;
@@ -627,6 +632,15 @@ int kma_main(int argc, char *argv[]) {
 					if(*exeBasic != 0) {
 						fprintf(stderr, "Invalid argument at \"-3p\".\n");
 						exit(4);
+					}
+				}
+			} else if(strcmp(argv[args], "-qc") == 0) {
+				if(qcreport) {
+					qcreport->verbose++;
+				} else {
+					qcreport = init_QCstat(0);
+					if(!qcreport) {
+						ERROR();
 					}
 				}
 			} else if(strcmp(argv[args], "-dense") == 0) {
@@ -1037,6 +1051,7 @@ int kma_main(int argc, char *argv[]) {
 					--args;
 				}
 			} else if(strcmp(argv[args], "-mint2") == 0) {
+				preset |= 1;
 				/* equivalent to:
 				-1t1, -mem_mode, -ca, -cge, -mq 1, -ref_fsa 2, -dense, 
 				-bcg, -bcd 10, -bc 0.9 -vcf -ef */
@@ -1062,6 +1077,7 @@ int kma_main(int argc, char *argv[]) {
 				vcf = 1;
 				extendedFeatures = 1;
 			} else if(strcmp(argv[args], "-mint3") == 0) {
+				preset |= 2;
 				/* equivalent to:
 				-1t1, -mem_mode, -ca, -mq 1, -ref_fsa 2, -dense, 
 				-bcNano, -bcd 10, -bc 0.7, -vcf -ef */
@@ -1081,6 +1097,7 @@ int kma_main(int argc, char *argv[]) {
 				vcf = 1;
 				extendedFeatures = 1;
 			} else if(strcmp(argv[args], "-ont") == 0) {
+				preset |= 4;
 				/* -bcNano -bc 0.7 -mct 0.1 -bcd 10 -mrs 0.25 -mrc 0.7 -eq 10 -lc -ts 2 */
 				/* -bcNano */
 				if(significantBase == &significantNuc) {
@@ -1094,7 +1111,7 @@ int kma_main(int argc, char *argv[]) {
 			 	coverT = 0.1; /* -mct 0.1 */
 			 	bcd = 10; /* -bcd 10 */
 			 	/* -proxi -0.9 */
-				minFrac = -0.9;
+			 	minFrac = -0.9;
 			 	getMatch = &getProxiMatch;
 				getMatchSparse = &getProxiMatchSparse;
 				getSecondForce = &getSecondProxiForce;
@@ -1124,6 +1141,7 @@ int kma_main(int argc, char *argv[]) {
 				/* -ts 2 */
 				ts = 2;
 			} else if(strcmp(argv[args], "-ill") == 0) {
+				preset |= 8;
 				/* -1t1 */
 				kmerScan = &save_kmers;
 				one2one = 1;
@@ -1166,6 +1184,37 @@ int kma_main(int argc, char *argv[]) {
 				significantAndSupport(0, 0, support);
 			 	/* -bcd 10 */
 				bcd = 10;
+			} else if(strcmp(argv[args], "-asm") == 0) {
+				preset |= 16;
+				/* -bc 0.5 -p 0.5 -mct 0.1 -bcd 1 -mrs 0.25 -mrc 0.7 -lc -ts 2 */
+				/* -bc 0.5 */
+				significantBase = &significantAndSupport;
+				support = 0.5;
+				evalue = 0.5;
+				significantAndSupport(0, 0, support);
+			 	coverT = 0.1; /* -mct 0.1 */
+			 	bcd = 1; /* -bcd 1 */
+			 	/* -proxi -0.9 */
+			 	minFrac = -0.9;
+			 	getMatch = &getProxiMatch;
+				getMatchSparse = &getProxiMatchSparse;
+				getSecondForce = &getSecondProxiForce;
+				getSecondPen = &getSecondProxiPen;
+				getF = &getF_Proxi;
+				getR = &getR_Proxi;
+				getChainTemplates = &getProxiChainTemplates;
+				scoreT = 0.25; /* -mrs 0.25 */
+				mrc = 0.7; /* -mrc 0.7 */
+				/* -lc */
+				kmerAnkerScore = &ankerScoreLen;
+				testExtension = &testExtensionScoreLen;
+				proxiTestBest = &proxiTestBestScoreLen;
+				getBestAnker = &getBestAnkerScoreLen;
+				getTieAnker = &getTieAnkerScoreLen;
+				ConClavePtr = &runConClave_lc;
+				ConClave2Ptr = &runConClave2_lc;
+				/* -ts 2 */
+				ts = 2;
 			} else if(strcmp(argv[args], "-v") == 0) {
 				fprintf(stdout, "KMA-%s\n", KMA_VERSION);
 				exit(0);
@@ -1225,6 +1274,12 @@ int kma_main(int argc, char *argv[]) {
 		} else if(tmp) {
 			/* set tmp files */
 			tmpF(outputfilename);
+		}
+		if(qcreport) {
+			i = strlen(outputfilename);
+			sprintf(outputfilename + i, ".json");
+			out_json = fopen(outputfilename, "wb");
+			outputfilename[i] = 0;
 		}
 		
 		if(fileCounter == 0 && fileCounter_PE == 0 && fileCounter_INT == 0) {
@@ -1457,7 +1512,12 @@ int kma_main(int argc, char *argv[]) {
 				minPhred = minmaskQ;
 			}
 			
-			run_input_sparse(templates, inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, kmersize, to2Bit, prob, ioStream);
+			run_input_sparse(templates, inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, kmersize, to2Bit, prob, qcreport, ioStream);
+			if(qcreport) {
+				print_QCstat(qcreport, minQ, minPhred, minmaskQ, minlen, maxlen, fiveClip, threeClip, out_json);
+				destroy_QCstat(qcreport);
+				fclose(out_json);
+			}
 			hashMapKMA_destroy(templates);
 			free(myTemplatefilename);
 		} else {
@@ -1481,17 +1541,23 @@ int kma_main(int argc, char *argv[]) {
 			
 			/* SE */
 			if(fileCounter > 0) {
-				totFrags += run_input(inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, ioStream);
+				totFrags += run_input(inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, qcreport, ioStream);
 			}
 			
 			/* PE */
 			if(fileCounter_PE > 0) {
-				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
+				totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, qcreport, ioStream);
 			}
 			
 			/* INT */
 			if(fileCounter_INT > 0) {
-				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, ioStream);
+				totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, qcreport, ioStream);
+			}
+			
+			if(qcreport) {
+				print_QCstat(qcreport, minQ, minPhred, minmaskQ, minlen, maxlen, fiveClip, threeClip, out_json);
+				destroy_QCstat(qcreport);
+				fclose(out_json);
 			}
 			
 			fprintf(stderr, "#\n# Total number of query fragment after trimming:\t%lu\n", totFrags);
@@ -1537,7 +1603,7 @@ int kma_main(int argc, char *argv[]) {
 		} else if(mem_mode) {
 			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, (preset | 16) ? 1.0 : minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");

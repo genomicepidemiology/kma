@@ -21,6 +21,7 @@
 #include "compdna.h"
 #include "pherror.h"
 #include "runinput.h"
+#include "qc.h"
 #include "qseqs.h"
 #include "trim.h"
 
@@ -132,7 +133,7 @@ static int helpMessage(FILE *out) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ipe", "Paired input files", "");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-int", "Inerleaved input file(s)", "");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-o", "Output file", "STDOUT");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-oi", "Interleaved output file", "STDOUT");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-qc", "Report QC, repeat for verbose", "");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ml", "Minimum length", "16");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-xl", "Maximum length", "2147483647");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mp", "Minimum phred", "20");
@@ -168,8 +169,9 @@ int trim_main(int argc, char *argv[]) {
 	int minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen;
 	long unsigned totFrags;
 	char **inputfiles, **inputfiles_PE, **inputfiles_INT;
-	char *to2Bit, *outputfilename, *outputfilename_int, *exeBasic;
-	FILE *out, *out_int;
+	char *to2Bit, *outputfilename, *exeBasic;
+	FILE *out, *out_int, *out_json;
+	QCstat *qcreport; 
 	
 	/* set defaults */
 	minPhred = 20;
@@ -186,9 +188,10 @@ int trim_main(int argc, char *argv[]) {
 	inputfiles_PE = 0;
 	inputfiles_INT = 0;
 	outputfilename = 0;
-	outputfilename_int = 0;
 	out = stdout;
 	out_int = stdout;
+	out_json = stderr;
+	qcreport = 0;
 	
 	/* PARSE COMMAND LINE OPTIONS */
 	args = 1;
@@ -260,11 +263,14 @@ int trim_main(int argc, char *argv[]) {
 				outputfilename = smalloc(strlen(argv[args]) + 64);
 				strcpy(outputfilename, argv[args]);
 			}
-		} else if(strcmp(argv[args], "-oi") == 0) {
-			++args;
-			if(args < argc) {
-				outputfilename_int = smalloc(strlen(argv[args]) + 64);
-				strcpy(outputfilename_int, argv[args]);
+		} else if(strcmp(argv[args], "-qc") == 0) {
+			if(qcreport) {
+				qcreport->verbose++;
+			} else {
+				qcreport = init_QCstat(0);
+				if(!qcreport) {
+					ERROR();
+				}
 			}
 		} else if(strcmp(argv[args], "-ml") == 0) {
 			++args;
@@ -341,13 +347,21 @@ int trim_main(int argc, char *argv[]) {
 	
 	/* set ptrs */
 	if(outputfilename) {
+		i = strlen(outputfilename);
+		sprintf(outputfilename + i, ".fq");
 		out = sfopen(outputfilename, "wb");
+		if(fileCounter_PE + fileCounter_INT) {
+			sprintf(outputfilename + i, "_int.fq");
+			out_int = sfopen(outputfilename, "wb");
+		}
+		if(qcreport) {
+			sprintf(outputfilename + i, ".json");
+			out_json = sfopen(outputfilename, "wb");
+		}
+		outputfilename[i] = 0;
 	}
 	printFsa_ptr = &printTrimFsa;
 	printFsa_ptr(0, 0, 0, 0, out);
-	if(outputfilename_int) {
-		out_int = sfopen(outputfilename_int, "wb");
-	}
 	printFsa_pair_ptr = &printTrimFsa_pair;
 	printFsa_pair_ptr(0, 0, 0, 0, 0, 0, 0, out_int);
 	
@@ -406,17 +420,35 @@ int trim_main(int argc, char *argv[]) {
 	
 	/* SE */
 	if(fileCounter > 0) {
-		totFrags += run_input(inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, out);
+		totFrags += run_input(inputfiles, fileCounter, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, qcreport, out);
 	}
 	
 	/* PE */
 	if(fileCounter_PE > 0) {
-		totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, out);
+		totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, qcreport, out);
 	}
 	
 	/* INT */
 	if(fileCounter_INT > 0) {
-		totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, out);
+		totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, qcreport, out);
+	}
+	
+	/* print QC */
+	if(qcreport) {
+		print_QCstat(qcreport, minQ, minPhred, minmaskQ, minlen, maxlen, fiveClip, threeClip, out_json);
+		destroy_QCstat(qcreport);
+	}
+	
+	/* clean up */
+	free(outputfilename);
+	if(out != stdout) {
+		fclose(out);
+	}
+	if(out_int != stdout) {
+		fclose(out_int);
+	}
+	if(out_json != stderr) {
+		fclose(out_json);
 	}
 	
 	fprintf(stderr, "#\n# Total number of query fragment after trimming:\t%lu\n", totFrags);

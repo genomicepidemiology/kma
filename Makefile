@@ -1,6 +1,6 @@
 CFLAGS ?= -Wall -O3
 CFLAGS += -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o conclave.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o trim.o tmp.o tsv.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o conclave.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qc.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o trim.o tmp.o tsv.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -47,8 +47,8 @@ hashmapkma.o: hashmapkma.h pherror.h stdstat.h
 hashmapkmers.o: hashmapkmers.h pherror.h
 hashtable.o: hashtable.h hashmapkma.h hashmapkmers.h pherror.h
 index.o: index.h compress.h decon.h hashmap.h hashmapkma.h loadupdate.h makeindex.h pherror.h stdstat.h version.h
-kma.o: kma.h ankers.h assembly.h chain.h hashmapkma.h kmers.h mt1.h penalties.h pherror.h qseqs.h runinput.h runkma.h savekmers.h sparse.h spltdb.h tmp.h version.h
-kmapipe.o: kmapipe.h pherror.h
+kma.o: kma.h ankers.h assembly.h chain.h hashmapkma.h kmers.h mt1.h 
+penalties.h pherror.h qc.h qseqs.h runinput.h runkma.h savekmers.h sparse.h spltdb.h tmp.h version.h kmapipe.o: kmapipe.h pherror.h
 kmeranker.o: kmeranker.h penalties.h
 kmers.o: kmers.h ankers.h compdna.h hashmapkma.h kmapipe.h pherror.h qseqs.h savekmers.h spltdb.h
 kmmap.o: kmmap.h hashmapkma.h
@@ -59,6 +59,7 @@ mt1.o: mt1.h assembly.h chain.h filebuff.h hashmapcci.h kmapipe.h nw.h penalties
 nw.o: nw.h pherror.h stdnuc.h penalties.h
 pherror.o: pherror.h
 printconsensus.o: printconsensus.h assembly.h
+qc.o: qc.h pherror.h
 qseqs.o: qseqs.h pherror.h
 qualcheck.o: qualcheck.h compdna.h hashmap.h pherror.h stdnuc.h stdstat.h
 runinput.o: runinput.h compdna.h filebuff.h pherror.h qseqs.h seqparse.h
@@ -69,11 +70,11 @@ seq2fasta.o: seq2fasta.h pherror.h qseqs.h runkma.h stdnuc.h
 seqmenttree.o: seqmenttree.h pherror.h
 seqparse.o: seqparse.h filebuff.h qseqs.h
 shm.o: shm.h pherror.h hashmapkma.h version.h
-sparse.o: sparse.h compkmers.h hashtable.h kmapipe.h pherror.h runinput.h savekmers.h stdnuc.h stdstat.h
+sparse.o: sparse.h compkmers.h hashtable.h kmapipe.h pherror.h qseqs.h qc.h runinput.h savekmers.h stdnuc.h stdstat.h
 spltdb.o: spltdb.h align.h alnfrags.h assembly.h chain.h compdna.h ef.h filebuff.h frags.h hashmapcci.h kmapipe.h nw.h pherror.h printconsensus.h qseqs.h runkma.h stdnuc.h stdstat.h tmp.h tsv.h vcf.h
 stdnuc.o: stdnuc.h
 stdstat.o: stdstat.h
-trim.o: trim.h compdna.h pherror.h runinput.h qseqs.h
+trim.o: trim.h compdna.h pherror.h runinput.h qc.h qseqs.h
 tmp.o: tmp.h pherror.h threader.h
 tsv.o: tsv.h assembly.h
 update.o: update.h hashmapkma.h pherror.h stdnuc.h
