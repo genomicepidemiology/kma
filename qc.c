@@ -82,8 +82,10 @@ unsigned * rescale_ldist_v1(unsigned *ldist, const int size, const int maxlen) {
 	return ldist;
 }
 
-void update_QCstat(QCstat *src, int len, int gc, int ns, int eq, double sp) {
+void update_QCstat(QCstat *src, int len, int gc, int ns, double sp) {
 	
+	src->count++;
+	src->bpcount += len;
 	src->totgc += gc;
 	src->totns += ns;
 	src->Eeq += sp;
@@ -97,7 +99,7 @@ void update_QCstat(QCstat *src, int len, int gc, int ns, int eq, double sp) {
 		}
 		src->maxlen = len;
 	}
-	src->qdist[eq]++;
+	src->qdist[(int)(ceil(-10 * log10(sp / len)))]++;
 	src->ldist[len >> src->qresolution]++;
 }
 

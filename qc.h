@@ -44,5 +44,5 @@ struct qcstat {
 QCstat * init_QCstat(int verbose);
 void destroy_QCstat(QCstat *src);
 int rescale_ldist(unsigned *ldist, const int maskold, const int maxlen);
-void update_QCstat(QCstat *src, int len, int gc, int ns, int eq, double sp);
+void update_QCstat(QCstat *src, int len, int gc, int ns, double sp);
 int print_QCstat(QCstat *src, int minQ, int minPhred, int minmaskQ, int minlen, int maxlen, int fiveClip, int threeClip, FILE *dest);

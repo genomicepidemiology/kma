@@ -31,7 +31,7 @@
 void (*printFsa_ptr)(Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa;
 void (*printFsa_pair_ptr)(Qseqs*, Qseqs*, Qseqs*, Qseqs*, Qseqs*, Qseqs*, CompDNA*, FILE*) = &printFsa_pair;
 
-unsigned hardmaskQ(unsigned char *seq, unsigned char *qual, int len, const int phredScale, int minQ) {
+unsigned hardmask(unsigned char *seq, unsigned char *qual, int len, const int phredScale, int minQ) {
 	
 	unsigned n;
 	
@@ -108,7 +108,7 @@ double qcstat(const unsigned char *seq, const unsigned char *qual, const int len
 	qptr = (unsigned char*)(qual) - 1;
 	while(--i) {
 		eq += prob[*++qptr];
-		if(*++sptr < hardmaskQ || *sptr == 4) {
+		if(*++sptr == 4 || *qptr < hardmaskQ) {
 			*sptr = 4;
 			++ns;
 		} else if(*sptr == 1 || *sptr == 2) {
@@ -124,18 +124,230 @@ double qcstat(const unsigned char *seq, const unsigned char *qual, const int len
 	return eq;
 }
 
-int fsastat(const unsigned char *seq, const int len, int *GC) {
+int phredStat(unsigned char *seq, unsigned char *qual, int len, const double *prob, const int minPhred, const int minQ, const int hardmaskQ, const int fiveClip, const int threeClip, const int minlen, const int maxlen, int *START, int *END, QCstat *qcreport) {
 	
-	unsigned i, ns, gc;
-	unsigned char *sptr;
+	unsigned i, ns, gc, ns5, gc5, ns3, gc3, l5, l3, start, end;
+	unsigned char *sptr5, *qptr5, *sptr3, *qptr3;
+	double minP, sp, sp5, sp3;
+	
+	if(qcreport) {
+		qcreport->org_count++;
+		qcreport->org_bpcount += len;
+	}
+	/* too long */
+	if(maxlen < len) {
+		*START = 0;
+		*END = 0;
+		return 0;
+	}
 	
 	/* init */
+	qptr5 = qual;
+	qptr3 = qptr5 + len - 1;
+	start = 0;
+	end = len;
+	
+	/* end trim */
+	while(start < end && *qptr5 < minPhred) {
+		++start;
+		++qptr5;
+	}
+	sptr5 = seq + start;
+	while(start < end && *qptr3 < minPhred) {
+		--end;
+		--qptr3;
+	}
+	sptr3 = seq + end - 1;
+	len = end - start;
+	
+	if(!minQ && !hardmaskQ && !qcreport) {
+		/* set return values */
+		*START = start;
+		*END = end;
+		return len;
+	}
+	
+	/* minQ trim */
 	ns = 0;
 	gc = 0;
-	
-	/* sum quality scores */
+	sp = 0;
 	i = len + 1;
-	sptr = (unsigned char*)(seq) - 1;
+	--qptr5;
+	--sptr5;
+	while(--i) {
+		sp += prob[*++qptr5];
+		if(*++sptr5 == 4 || *qptr5 < hardmaskQ) {
+			*sptr5 = 4;
+			++ns;
+		} else if(*sptr5 == 1 || *sptr5 == 2) {
+			++gc;
+		}
+	}
+	qptr5 = qual + start;
+	sptr5 = seq + start;
+	
+	/* bi-directional phred trim */
+	minP = pow(10, (-0.1) * minQ);
+	/* set 3' segment, 5' is set when running the algorithm */
+	if(minlen <= (len - ns) && (minP * len) < sp) {
+		ns5 = 0;
+		ns3 = 0;
+		gc5 = 0;
+		gc3 = 0;
+		l5 = 0;
+		l3 = 0;
+		sp5 = 0;
+		sp3 = 0;
+		/* high qual part */
+		while(l3 < len && minPhred <= *qptr3) {
+			sp3 += prob[*qptr3--];
+			++l3;
+			if(*sptr3 == 1 || *sptr3 == 2) {
+				++gc3;
+			} else if(*sptr3 == 4) {
+				++ns3;
+			}
+			--sptr3;
+			
+		}
+		/* low qual part */
+		while(l3 < len && *qptr3 < minPhred) {
+			sp3 += prob[*qptr3--];
+			++l3;
+			if(*sptr3 == 1 || *sptr3 == 2) {
+				++gc3;
+			} else if(*sptr3 == 4) {
+				++ns3;
+			}
+			--sptr3;
+			
+		}
+		/* remove ends */
+		while(minlen <= (len - ns) && (minP * len) < sp) {
+			/* trim lowest quality end */
+			if((sp5 * l3) < (sp3 * l5)) { /* (sp5 / l5) < (sp3 / l3) */
+				/* trim 3' */
+				end -= l3;
+				ns -= ns3;
+				gc -= gc3;
+				len -= l3;
+				sp -= sp3;
+				ns3 = 0;
+				gc3 = 0;
+				l3 = 0;
+				sp3 = 0;
+				/* get next 3' segment */
+				/* high qual part */
+				while(l3 < len && minPhred <= *qptr3) {
+					sp3 += prob[*qptr3--];
+					++l3;
+					if(*sptr3 == 1 || *sptr3 == 2) {
+						++gc3;
+					} else if(*sptr3 == 4) {
+						++ns3;
+					}
+					--sptr3;
+					
+				}
+				/* low qual part */
+				while(l3 < len && *qptr3 < minPhred) {
+					sp3 += prob[*qptr3--];
+					++l3;
+					if(*sptr3 == 1 || *sptr3 == 2) {
+						++gc3;
+					} else if(*sptr3 == 4) {
+						++ns3;
+					}
+					--sptr3;
+					
+				}
+			} else {
+				/* trim 5' */
+				start += l5;
+				len -= l5;
+				ns -= ns5;
+				gc -= gc5;
+				sp -= sp5;
+				ns5 = 0;
+				gc5 = 0;
+				l5 = 0;
+				sp5 = 0;
+				/* get next 5' segment */
+				/* high qual part */
+				while(l5 < len && minPhred <= *qptr5) {
+					sp5 += prob[*qptr5++];
+					++l5;
+					if(*sptr5 == 1 || *sptr5 == 2) {
+						++gc5;
+					} else if(*sptr5 == 4) {
+						++ns5;
+					}
+					++sptr5;
+					
+				}
+				/* low qual part */
+				while(l5 < len && *qptr5 < minPhred) {
+					sp5 += prob[*qptr5++];
+					++l5;
+					if(*sptr5 == 1 || *sptr5 == 2) {
+						++gc5;
+					} else if(*sptr5 == 4) {
+						++ns5;
+					}
+					++sptr5;
+				}
+			}
+		}
+	}
+	
+	/* update QC report */
+	if(qcreport && minlen <= (len - ns)) {
+		update_QCstat(qcreport, len, gc, ns, sp);
+	}
+	
+	/* set return values */
+	*START = start;
+	*END = end;
+	
+	return len - ns;
+}
+
+int fsastat(unsigned char *seq, int len, const int minlen, const int maxlen, int *START, int *END, QCstat *qcreport) {
+	
+	unsigned i, start, end, ns, gc;
+	unsigned char *sptr;
+	
+	if(qcreport) {
+		qcreport->org_count++;
+		qcreport->org_bpcount += len;
+	}
+	if(maxlen < len) {
+		*START = 0;
+		*END = 0;
+		return 0;
+	}
+	
+	/* init */
+	start = 0;
+	end = len;
+	
+	/* end trim */
+	sptr = seq + end - 1;
+	while(start <= end && *sptr == 4) {
+		--end;
+		--sptr;
+	}
+	sptr = seq;
+	while(start < end && *sptr == 4) {
+		++start;
+		++sptr;
+	}
+	len = end - start;
+	
+	/* gc- and n- content */
+	ns = 0;
+	gc = (*sptr == 1 || *sptr == 2) ? 1 : 0;
+	i = len;
 	while(--i) {
 		if(*++sptr == 4) {
 			++ns;
@@ -144,23 +356,30 @@ int fsastat(const unsigned char *seq, const int len, int *GC) {
 		}
 	}
 	
-	*GC = gc;
+	if(qcreport && minlen <= len) {
+		update_QCstat(qcreport, len, gc, ns, 0);
+	}
 	
-	return ns;
+	/* set return values */
+	*START = 0;
+	*END = 0;
+	
+	return len - ns;
 }
 
-long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
+long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int hardmaskQ, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
 	
-	int fileCounter, phredScale, phredCut, start, end, stat, ns, gc, eq;
+	int fileCounter, phredScale, start, end, len;
 	unsigned FASTQ;
-	long unsigned count, bpcount, org_count, org_bpcount;
-	double sp;
+	long unsigned count, org_count;
 	char *filename;
-	unsigned char *seq;
 	Qseqs *header, *qseq, *qual;
 	FileBuff *inputfile;
 	CompDNA *compressor;
 	
+	if(minPhred < minQ) {
+		minPhred = minQ;
+	}
 	compressor = smalloc(sizeof(CompDNA));
 	allocComp(compressor, 1024);
 	header = setQseqs(256);
@@ -169,14 +388,7 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minm
 	inputfile = setFileBuff(CHUNK);
 	phredScale = 33;
 	count = 0;
-	bpcount = 0;
 	org_count = 0;
-	org_bpcount = 0;
-	sp = 0;
-	gc = 0;
-	ns = 0;
-	eq = 0;
-	stat = minmaskQ || minQ || qcreport;
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
@@ -191,79 +403,37 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minm
 			/* get phred scale */
 			phredScale = getPhredFileBuff(inputfile);
 			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
-			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			while(FileBuffgetFq(inputfile, header, qseq, qual, trans)) {
 				++org_count;
-				org_bpcount += qseq->len;
-				if(qseq->len <= maxlen) {
-					/* trim */
-					seq = qual->seq;
-					end = qseq->len - 1 - threeClip;
-					end = end < 0 ? 0 : end;
-					start = end < fiveClip ? end : fiveClip;
-					while(end >= start && seq[end] < phredCut) {
-						--end;
-					}
-					++end;
-					while(start < end && seq[start] < phredCut) {
-						++start;
-					}
+				len = phredStat(qseq->seq, qual->seq, qseq->len, prob - phredScale, phredScale + minPhred, minQ, hardmaskQ, fiveClip, threeClip, minlen, maxlen, &start, &end, qcreport);
+				
+				/* print */
+				if(minlen <= len) {
+					/* dump seq */
+					qseq->seq += start;
+					qual->seq += start;
 					qseq->len = end - start;
 					qual->len = end - start;
-					
-					/* get E(Q), gc and n's */
-					sp = stat ? qcstat(qseq->seq + start, seq + start, qseq->len, prob - phredScale, minmaskQ, &gc, &ns, &eq) : 0;
-					
-					/* print */
-					if(minlen <= (qseq->len - ns) && minQ <= eq) {
-						/* dump seq */
-						qseq->seq += start;
-						qual->seq += start;
-						printFsa_ptr(header, qseq, qual, compressor, out);
-						++count;
-						bpcount += qseq->len;
-						if(qcreport) {
-							update_QCstat(qcreport, qseq->len, gc, ns, eq, sp);
-						}
-						qseq->seq -= start;
-						qual->seq -= start;
-					}
+					printFsa_ptr(header, qseq, qual, compressor, out);
+					qseq->seq -= start;
+					qual->seq -= start;
+					++count;
 				}
 			}
 		} else if(FASTQ & 2) {
 			while(FileBuffgetFsa(inputfile, header, qseq, trans)) {
 				++org_count;
-				org_bpcount += qseq->len;
-				if(qseq->len <= maxlen) {
-					/* remove leading and trailing N's */
-					seq = qseq->seq;
-					end = qseq->len - 1 - threeClip;
-					end = end < 0 ? 0 : end;
-					start = end < fiveClip ? end : fiveClip;
-					while(end >= start && seq[end] == 4) {
-						--end;
-					}
-					++end;
-					while(start < end && seq[start] == 4) {
-						++start;
-					}
+				len = fsastat(qseq->seq, qseq->len, minlen, maxlen, &start, &end, qcreport);
+				
+				if(minlen <= len) {
+					/* dump seq */
+					qseq->seq += start;
 					qseq->len = end - start;
-					
-					ns = qcreport ? fsastat(seq, qseq->len, &gc) : 0;
-					
-					if(qseq->len > minlen) {
-						/* dump seq */
-						qseq->seq += start;
-						printFsa_ptr(header, qseq, 0, compressor, out);
-						++count;
-						bpcount += qseq->len;
-						if(qcreport) {
-							update_QCstat(qcreport, qseq->len, gc, ns, 0, 0);
-						}
-						qseq->seq -= start;
-					}
+					printFsa_ptr(header, qseq, 0, compressor, out);
+					qseq->seq -= start;
+					++count;
 				}
 			}
 		}
@@ -278,10 +448,6 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minm
 	if(qcreport) {
 		qcreport->fragcount += count;
 		qcreport->org_fragcount += org_count;
-		qcreport->count += count;
-		qcreport->org_count += org_count;
-		qcreport->bpcount += bpcount;
-		qcreport->org_bpcount += org_bpcount;
 		qcreport->phredScale = phredScale;
 	}
 	freeComp(compressor);
@@ -294,25 +460,20 @@ long unsigned run_input(char **inputfiles, int fileCount, int minPhred, int minm
 	return count;
 }
 
-long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
+long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int hardmaskQ, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
 	
-	int fileCounter, phredScale, phredCut, start, start2, end;
-	int stat, ns1, ns2, gc1, gc2, eq1, eq2;
+	int fileCounter, phredScale, start, start2, end, end2, len, len2;
 	unsigned FASTQ, FASTQ2;
-	long unsigned count, bpcount, fragcount;
-	long unsigned org_count, org_bpcount, org_fragcount;
+	long unsigned count, org_count;
 	char *filename;
-	unsigned char *seq;
-	double sp1, sp2;
 	Qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	FileBuff *inputfile, *inputfile2;
 	CompDNA *compressor;
 	
-	
-	compressor = malloc(sizeof(CompDNA));
-	if(!compressor) {
-		ERROR();
+	if(minPhred < minQ) {
+		minPhred = minQ;
 	}
+	compressor = smalloc(sizeof(CompDNA));
 	allocComp(compressor, 1024);
 	header = setQseqs(256);
 	qseq = setQseqs(1024);
@@ -324,23 +485,9 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 	inputfile2 = setFileBuff(CHUNK);
 	phredScale = 33;
 	count = 0;
-	bpcount = 0;
-	fragcount = 0;
 	org_count = 0;
-	org_bpcount = 0;
-	org_fragcount = 0;
-	sp1 = 0;
-	sp2 = 0;
-	gc1 = 0;
-	gc2 = 0;
-	ns1 = 0;
-	ns2 = 0;
-	eq1 = 0;
-	eq2 = 0;
-	stat = minmaskQ || minQ || qcreport;
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
-		
 		filename = inputfiles[fileCounter];
 		/* determine filetype and open it */
 		FASTQ = openAndDetermine(inputfile, filename);
@@ -363,82 +510,33 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 				phredScale = getPhredFileBuff(inputfile2);
 			}
 			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
-			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			//while(FileBuffgetFq(inputfile, header, qseq, qual) && FileBuffgetFq(inputfile2, header2, qseq2, qual2)) {
 			/* this ensures reading of truncated files */
 			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile2, header2, qseq2, qual2, trans))) {
-				org_count += (qseq->len != 0) + (qseq2->len != 0);
-				++org_fragcount;
-				org_bpcount += qseq->len + qseq2->len;
-				
-				/* trim forward */
-				seq = qual->seq;
-				end = qseq->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start = end < fiveClip ? end : fiveClip;
-				while(end >= start && seq[end] < phredCut) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] < phredCut) {
-					++start;
-				}
-				qseq->len = end - start;
-				qual->len = end - start;
-				
-				/* get E(Q), gc and n's */
-				sp1 = stat ? qcstat(qseq->seq + start, seq + start, qseq->len, prob - phredScale, minmaskQ, &gc1, &ns1, &eq1) : 0;
-				
-				/* trim reverse */
-				seq = qual2->seq;
-				end = qseq2->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start2 = end < fiveClip ? end : fiveClip;
-				while(end >= start2 && seq[end] < phredCut) {
-					--end;
-				}
-				++end;
-				while(start2 < end && seq[start2] < phredCut) {
-					++start2;
-				}
-				qseq2->len = end - start2;
-				qual2->len = end - start2;
-				
-				/* get E(Q), gc and n's */
-				sp2 = stat ? qcstat(qseq2->seq + start2, seq + start2, qseq2->len, prob - phredScale, minmaskQ, &gc2, &ns2, &eq2) : 0;
+				++org_count;
+				len = phredStat(qseq->seq, qual->seq, qseq->len, prob - phredScale, phredScale + minPhred, minQ, hardmaskQ, fiveClip, threeClip, minlen, maxlen, &start, &end, qcreport);
+				len2 = phredStat(qseq2->seq, qual2->seq, qseq2->len, prob - phredScale, phredScale + minPhred, minQ, hardmaskQ, fiveClip, threeClip, minlen, maxlen, &start2, &end2, qcreport);
 				
 				/* print */
 				qseq->seq += start;
 				qual->seq += start;
+				qseq->len = end - start;
+				qual->len = end - start;
 				qseq2->seq += start2;
 				qual2->seq += start2;
-				if(minlen <= (qseq->len - ns1) && minlen <= (qseq2->len - ns2) && minQ <= eq1 && minQ <= eq2) {
+				qseq2->len = end2 - start2;
+				qual2->len = end2 - start2;
+				if(minlen <= len && minlen <= len2) {
 					printFsa_pair_ptr(header, qseq, qual, header2, qseq2, qual2, compressor, out);
-					++fragcount;
-					count += 2;
-					bpcount += qseq->len + qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, eq1, sp1);
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, eq2, sp2);
-					}
-				} else if(minlen <= (qseq->len - ns1) && minQ <= eq1) {
+					++count;
+				} else if(minlen <= len) {
 					printFsa_ptr(header, qseq, qual, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, eq1, sp1);
-					}
-				} else if(minlen <=  (qseq2->len - ns2) && minQ <= eq2) {
+				} else if(minlen <= len2) {
 					printFsa_ptr(header2, qseq2, qual2, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, eq2, sp2);
-					}
 				}
 				qseq->seq -= start;
 				qual->seq -= start;
@@ -447,70 +545,24 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 			}
 		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile2, header2, qseq2, trans))) {
-				org_count += (qseq->len != 0) + (qseq2->len != 0);
-				++org_fragcount;
-				org_bpcount += qseq->len + qseq2->len;
-				
-				/* remove leading and trailing N's */
-				seq = qseq->seq;
-				end = qseq->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start = end < fiveClip ? end : fiveClip;
-				while(end >= start && seq[end] == 4) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] == 4) {
-					++start;
-				}
-				qseq->len = end - start;
-				
-				ns1 = qcreport ? fsastat(seq, qseq->len, &gc1) : 0;
-				
-				/* trim reverse */
-				seq = qseq2->seq;
-				end = qseq2->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start2 = end < fiveClip ? end : fiveClip;
-				while(end >= start2 && seq[end] == 4) {
-					--end;
-				}
-				++end;
-				while(start2 < end && seq[start2] == 4) {
-					++start2;
-				}
-				qseq2->len = end - start2;
-				
-				ns2 = qcreport ? fsastat(seq, qseq2->len, &gc2) : 0;
+				++org_count;
+				len = fsastat(qseq->seq, qseq->len, minlen, maxlen, &start, &end, qcreport);
+				len2 = fsastat(qseq2->seq, qseq2->len, minlen, maxlen, &start2, &end2, qcreport);
 				
 				/* print */
 				qseq->seq += start;
+				qseq->len = end - start;
 				qseq2->seq += start2;
-				if(minlen <= qseq->len && minlen <= qseq2->len) {
+				qseq2->len = end - start;
+				if(minlen <= len && minlen <= len2) {
 					printFsa_pair_ptr(header, qseq, 0, header2, qseq2, 0, compressor, out);
-					++fragcount;
-					count += 2;
-					bpcount += qseq->len + qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, 0, 0);
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, 0, 0);
-					}
-				} else if(minlen <= qseq->len) {
+					++count;
+				} else if(minlen <= len) {
 					printFsa_ptr(header, qseq, 0, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, 0, 0);
-					}
-				} else if(minlen <= qseq2->len) {
+				} else if(minlen <= len2) {
 					printFsa_ptr(header2, qseq2, 0, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, 0, 0);
-					}
 				}
 				qseq->seq -= start;
 				qseq2->seq -= start2;
@@ -533,12 +585,8 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 	}
 	
 	if(qcreport) {
-		qcreport->fragcount += fragcount;
-		qcreport->org_fragcount += org_fragcount;
-		qcreport->count += count;
-		qcreport->org_count += org_count;
-		qcreport->bpcount += bpcount;
-		qcreport->org_bpcount += org_bpcount;
+		qcreport->fragcount += count;
+		qcreport->org_fragcount += org_count;
 		if(qcreport->Eeq) {
 			qcreport->phredScale = phredScale;
 		}
@@ -554,28 +602,23 @@ long unsigned run_input_PE(char **inputfiles, int fileCount, int minPhred, int m
 	destroyFileBuff(inputfile);
 	destroyFileBuff(inputfile2);
 	
-	return fragcount;
+	return count;
 }
 
-long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int minlen, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
+long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int hardmaskQ, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
 	
-	int fileCounter, phredScale, phredCut, start, start2, end;
-	int stat, ns1, ns2, gc1, gc2, eq1, eq2;
+	int fileCounter, phredScale, start, start2, end, end2, len, len2;
 	unsigned FASTQ;
-	long unsigned count, bpcount, fragcount;
-	long unsigned org_count, org_bpcount, org_fragcount;
+	long unsigned count, org_count;
 	char *filename;
-	unsigned char *seq;
-	double sp1, sp2;
 	Qseqs *header, *qseq, *qual, *header2, *qseq2, *qual2;
 	FileBuff *inputfile;
 	CompDNA *compressor;
 	
-	
-	compressor = malloc(sizeof(CompDNA));
-	if(!compressor) {
-		ERROR();
+	if(minPhred < minQ) {
+		minPhred = minQ;
 	}
+	compressor = smalloc(sizeof(CompDNA));
 	allocComp(compressor, 1024);
 	header = setQseqs(256);
 	qseq = setQseqs(1024);
@@ -586,20 +629,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 	inputfile = setFileBuff(CHUNK);
 	phredScale = 33;
 	count = 0;
-	bpcount = 0;
-	fragcount = 0;
 	org_count = 0;
-	org_bpcount = 0;
-	org_fragcount = 0;
-	sp1 = 0;
-	sp2 = 0;
-	gc1 = 0;
-	gc2 = 0;
-	ns1 = 0;
-	ns2 = 0;
-	eq1 = 0;
-	eq2 = 0;
-	stat = minmaskQ || minQ || qcreport;
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
@@ -614,78 +644,31 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 			/* get phred scale */
 			phredScale = getPhredFileBuff(inputfile);
 			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
-			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			while((FileBuffgetFq(inputfile, header, qseq, qual, trans) | FileBuffgetFq(inputfile, header2, qseq2, qual2, trans))) {
-				org_count += (qseq->len != 0) + (qseq2->len != 0);
-				++org_fragcount;
-				org_bpcount += qseq->len + qseq2->len;
-				
-				/* trim forward */
-				seq = qual->seq;
-				end = qseq->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start = end < fiveClip ? end : fiveClip;
-				while(end >= start && seq[end] < phredCut) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] < phredCut) {
-					++start;
-				}
-				qseq->len = end - start;
-				qual->len = end - start;
-				/* get E(Q), gc and n's */
-				sp1 = stat ? qcstat(qseq->seq + start, seq + start, qseq->len, prob - phredScale, minmaskQ, &gc1, &ns1, &eq1) : 0;
-				
-				/* trim reverse */
-				seq = qual2->seq;
-				end = qseq2->len - 1 - threeClip;
-				start2 = end < fiveClip ? end : fiveClip;
-				while(end >= start2 && seq[end] < phredCut) {
-					--end;
-				}
-				++end;
-				while(start2 < end && seq[start2] < phredCut) {
-					++start2;
-				}
-				qseq2->len = end - start2;
-				qual2->len = end - start2;
-				
-				/* get E(Q), gc and n's */
-				sp2 = stat ? qcstat(qseq2->seq + start2, seq + start2, qseq2->len, prob - phredScale, minmaskQ, &gc2, &ns2, &eq2) : 0;
+				org_count++;
+				len = phredStat(qseq->seq, qual->seq, qseq->len, prob - phredScale, phredScale + minPhred, minQ, hardmaskQ, fiveClip, threeClip, minlen, maxlen, &start, &end, qcreport);
+				len2 = phredStat(qseq2->seq, qual2->seq, qseq2->len, prob - phredScale, phredScale + minPhred, minQ, hardmaskQ, fiveClip, threeClip, minlen, maxlen, &start2, &end2, qcreport);
 				
 				/* print */
 				qseq->seq += start;
 				qual->seq += start;
+				qseq->len = end - start;
+				qual->len = end - start;
 				qseq2->seq += start2;
 				qual2->seq += start2;
-				if(minlen <= qseq->len && minlen <= qseq2->len && minQ <= eq1 && minQ <= eq2) {
+				qseq2->len = end2 - start2;
+				qual2->len = end2 - start2;
+				if(minlen <= len && minlen <= len2) {
 					printFsa_pair_ptr(header, qseq, qual, header2, qseq2, qual2, compressor, out);
-					++fragcount;
-					count += 2;
-					bpcount += qseq->len + qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, eq1, sp1);
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, eq2, sp2);
-					}
-				} else if(minlen <= qseq->len && minQ <= eq1) {
+					++count;
+				} else if(minlen <= len) {
 					printFsa_ptr(header, qseq, qual, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, eq1, sp1);
-					}
-				} else if(minlen <= qseq2->len && minQ <= eq2) {
+				} else if(minlen <= len2) {
 					printFsa_ptr(header2, qseq2, qual2, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, eq2, sp2);
-					}
 				}
 				qseq->seq -= start;
 				qual->seq -= start;
@@ -694,70 +677,24 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 			}
 		} else if(FASTQ & 2) {
 			while((FileBuffgetFsa(inputfile, header, qseq, trans) | FileBuffgetFsa(inputfile, header2, qseq2, trans))) {
-				org_count += (qseq->len != 0) + (qseq2->len != 0);
-				++org_fragcount;
-				org_bpcount += qseq->len + qseq2->len;
-				
-				/* remove leading and trailing N's */
-				seq = qseq->seq;
-				end = qseq->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start = end < fiveClip ? end : fiveClip;
-				while(end >= start && seq[end] == 4) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] == 4) {
-					++start;
-				}
-				qseq->len = end - start;
-				
-				ns1 = qcreport ? fsastat(seq, qseq->len, &gc1) : 0;
-				
-				/* trim reverse */
-				seq = qseq2->seq;
-				end = qseq2->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				start2 = end < fiveClip ? end : fiveClip;
-				while(end >= start2 && seq[end] == 4) {
-					--end;
-				}
-				++end;
-				while(start2 < end && seq[start2] == 4) {
-					++start2;
-				}
-				qseq2->len = end - start2;
-				
-				ns2 = qcreport ? fsastat(seq, qseq2->len, &gc2) : 0;
+				++org_count;
+				len = fsastat(qseq->seq, qseq->len, minlen, maxlen, &start, &end, qcreport);
+				len2 = fsastat(qseq2->seq, qseq2->len, minlen, maxlen, &start2, &end2, qcreport);
 				
 				/* print */
 				qseq->seq += start;
+				qseq->len = end - start;
 				qseq2->seq += start2;
-				if(minlen <= qseq->len && minlen <= qseq2->len) {
+				qseq2->len = end - start;
+				if(minlen <= len && minlen <= len2) {
 					printFsa_pair_ptr(header, qseq, 0, header2, qseq2, 0, compressor, out);
-					++fragcount;
-					count += 2;
-					bpcount += qseq->len + qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, 0, 0);
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, 0, 0);
-					}
-				} else if(minlen <= qseq->len) {
+					++count;
+				} else if(minlen <= len) {
 					printFsa_ptr(header, qseq, 0, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc1, ns1, 0, 0);
-					}
-				} else if(minlen <= qseq2->len) {
+				} else if(minlen <= len2) {
 					printFsa_ptr(header2, qseq2, 0, compressor, out);
-					++fragcount;
 					++count;
-					bpcount += qseq2->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq2->len, gc2, ns2, 0, 0);
-					}
 				}
 				qseq->seq -= start;
 				qseq2->seq -= start2;
@@ -773,12 +710,8 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 	}
 	
 	if(qcreport) {
-		qcreport->fragcount += fragcount;
-		qcreport->org_fragcount += org_fragcount;
-		qcreport->count += count;
-		qcreport->org_count += org_count;
-		qcreport->bpcount += bpcount;
-		qcreport->org_bpcount += org_bpcount;
+		qcreport->fragcount += count;
+		qcreport->org_fragcount += org_count;
 		if(qcreport->Eeq) {
 			qcreport->phredScale = phredScale;
 		}
@@ -793,7 +726,7 @@ long unsigned run_input_INT(char **inputfiles, int fileCount, int minPhred, int 
 	destroyQseqs(qual2);
 	destroyFileBuff(inputfile);
 	
-	return fragcount;
+	return count;
 }
 
 void bootFsa(Qseqs *header, Qseqs *qseq, Qseqs *qual, CompDNA *compressor, FILE *out) {

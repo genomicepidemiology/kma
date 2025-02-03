@@ -425,12 +425,12 @@ int trim_main(int argc, char *argv[]) {
 	
 	/* PE */
 	if(fileCounter_PE > 0) {
-		totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, qcreport, out);
+		totFrags += run_input_PE(inputfiles_PE, fileCounter_PE, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, qcreport, out);
 	}
 	
 	/* INT */
 	if(fileCounter_INT > 0) {
-		totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, to2Bit, prob, qcreport, out);
+		totFrags += run_input_INT(inputfiles_INT, fileCounter_INT, minPhred, minmaskQ, minQ, fiveClip, threeClip, minlen, maxlen, to2Bit, prob, qcreport, out);
 	}
 	
 	/* print QC */

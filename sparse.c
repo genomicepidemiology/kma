@@ -243,18 +243,19 @@ void save_kmers_sparse(const HashMapKMA *templates, HashMap_kmers *foundKmers, C
 	}
 }
 
-void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int minmaskQ, int minQ, int fiveClip, int threeClip, int kmersize, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
+void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCount, int minPhred, int hardmaskQ, int minQ, int fiveClip, int threeClip, int minlen, int maxlen, int kmersize, char *trans, const double *prob, QCstat *qcreport, FILE *out) {
 	
-	int fileCounter, phredScale, phredCut, start, end, stat, ns, gc, eq;
+	int fileCounter, phredScale, start, end, len;
 	unsigned FASTQ;
-	long unsigned count, bpcount, org_count, org_bpcount;
+	long unsigned count, org_count;
 	char *filename;
-	unsigned char *seq;
-	double sp;
 	Qseqs *qseq, *qual;
 	FileBuff *inputfile;
 	CompKmers *Kmers;
 	
+	if(minPhred < minQ) {
+		minPhred = minQ;
+	}
 	Kmers = smalloc(sizeof(CompKmers));
 	allocCompKmers(Kmers, 1024);
 	qseq = setQseqs(1024);
@@ -262,14 +263,7 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 	inputfile = setFileBuff(CHUNK);
 	phredScale = 33;
 	count = 0;
-	bpcount = 0;
 	org_count = 0;
-	org_bpcount = 0;
-	sp = 0;
-	gc = 0;
-	ns = 0;
-	eq = 0;
-	stat = minmaskQ || minQ || qcreport;
 	
 	for(fileCounter = 0; fileCounter < fileCount; ++fileCounter) {
 		filename = (char*)(inputfiles[fileCounter]);
@@ -285,39 +279,19 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 			/* get phred scale */
 			phredScale = getPhredFileBuff(inputfile);
 			fprintf(stderr, "# Phred scale:\t%d\n", phredScale);
-			phredCut = phredScale + minPhred;
 			
 			/* parse reads */
 			while(FileBuffgetFqSeq(inputfile, qseq, qual, trans)) {
 				++org_count;
-				org_bpcount += qseq->len;
-				
-				/* trim */
-				seq = qual->seq;
-				start = fiveClip;
-				end = qseq->len - 1 - threeClip;
-				end = end < 0 ? 0 : end;
-				while(end >= 0 && seq[end] < phredCut) {
-					--end;
-				}
-				++end;
-				while(start < end && seq[start] < phredCut) {
-					++start;
-				}
-				qseq->len = end - start;
-				
-				/* get E(Q), gc and n's */
-				sp = stat ? qcstat(qseq->seq + start, seq + start, qseq->len, prob - phredScale, minmaskQ, &gc, &ns, &eq) : 0;
+				len = phredStat(qseq->seq, qual->seq, qseq->len, prob - phredScale, phredScale + minPhred, minQ, hardmaskQ, fiveClip, threeClip, minlen, maxlen, &start, &end, qcreport);
 				
 				/* print */
-				if(kmersize <= (qseq->len - ns) && minQ <= eq) {
+				if(minlen <= len) {
 					/* translate to kmers */
+					qseq->len = end - start;
 					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq + start, qseq->len, templates, out);
 					++count;
-					bpcount += qseq->len;
-					if(qcreport) {
-						update_QCstat(qcreport, qseq->len, gc, ns, eq, sp);
-					}
+					
 				}
 			}
 			if(Kmers->n) {
@@ -327,18 +301,12 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 		} else if(FASTQ & 2) {
 			while(FileBuffgetFsaSeq(inputfile, qseq, trans)) {
 				++org_count;
-				org_bpcount += qseq->len;
-				if(qseq->len > kmersize) {
-					ns = qcreport ? fsastat(qseq->seq, qseq->len, &gc) : 0;
-					/* translate to kmers */
-					if(kmersize <= (qseq->len - ns)) {
-						Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq, qseq->len, templates, out);
-						++count;
-						bpcount += qseq->len;
-						if(qcreport) {
-							update_QCstat(qcreport, qseq->len, gc, ns, 0, 0);
-						}
-					}
+				len = fsastat(qseq->seq, qseq->len, minlen, maxlen, &start, &end, qcreport);
+				
+				/* translate to kmers */
+				if(minlen <= len) {
+					Kmers->n = translateToKmersAndDump(Kmers->kmers, Kmers->n, Kmers->size, qseq->seq + start, end - start, templates, out);
+					++count;
 				}
 			}
 			if(Kmers->n) {
@@ -358,10 +326,6 @@ void run_input_sparse(const HashMapKMA *templates, char **inputfiles, int fileCo
 	if(qcreport) {
 		qcreport->fragcount += count;
 		qcreport->org_fragcount += org_count;
-		qcreport->count += count;
-		qcreport->org_count += org_count;
-		qcreport->bpcount += bpcount;
-		qcreport->org_bpcount += org_bpcount;
 		qcreport->phredScale = phredScale;
 	}
 	free(Kmers->kmers);
