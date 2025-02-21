@@ -56,9 +56,9 @@ char * makeCigar(Qseqs *Cigar, const Aln *aligned) {
 	rep = 1;
 	if(*s == '|') {
 		pop = '=';
-	} else if(*t == '-') {
+	} else if(*t == 5) {
 		pop = 'I';
-	} else if(*q == '-') {
+	} else if(*q == 5) {
 		pop = 'D';
 	} else {
 		pop = 'X';
