@@ -517,7 +517,7 @@ void * assemble_KMA_threaded(void *arg) {
 										for(j = 0; j < 6; ++j) {
 											myBias += assembly[pos].counts[j];
 										}
-										if(myBias > 0) {
+										if(myBias > 0) { /* here */ /* not here */ /* why subtract one */ /* and check prior to insertion, for which -- is appropiate */
 											--myBias;
 										}
 										/* find position of insertion */
@@ -1320,7 +1320,8 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 	
 	static volatile int Lock = 0;
 	volatile int *excludeMatrix = &Lock;
-	int i, j, pos, aln_len, start, read_score, myBias, gaps;
+	int i, pos, aln_len, start, read_score, myBias, gaps;
+	short unsigned *counts;
 	Assembly *assembly;
 	
 	/* init */
@@ -1351,24 +1352,29 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 				++i;
 				pos = assembly[pos].next;
 			} else {
-				/* get estimate for non insertions */
-				myBias = 0;
-				for(j = 0; j < 6; ++j) {
-					myBias += assembly[pos].counts[j];
-				}
-				if(myBias > 0) {
-					--myBias;
-				}
-				/* find position of insertion */
+				/* check if insertion already present at pos */
 				gaps = pos;
-				if(pos != 0) {
-					--pos;
-				} else {
-					pos = t_len - 1;
-				}
+				pos = pos ? (pos - 1) : (t_len - 1);
+				
+				/* find position of insertion, it it already exists */
 				while(assembly[pos].next != gaps) {
 					pos = assembly[pos].next;
 				}
+				
+				/* get number of bases not supporting the insertion */
+				counts = assembly[pos].counts;
+				myBias = counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5] - 1;
+				
+				/* get minimum of bases sorrounding new insertion */
+				counts = assembly[gaps].counts;
+				if((counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5]) < myBias) {
+					myBias = counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5];
+				}
+				if(USHRT_MAX < myBias) {
+					myBias = USHRT_MAX;
+				}
+				
+				/* update new insertion */
 				while(i < aln_len && aligned->t[i] == 5) {
 					assembly[pos].next = matrix->len++;
 					if(matrix->len == matrix->size) {
@@ -1386,13 +1392,14 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 					}
 					pos = assembly[pos].next;
 					assembly[pos].next = gaps;
-					assembly[pos].counts[0] = 0;
-					assembly[pos].counts[1] = 0;
-					assembly[pos].counts[2] = 0;
-					assembly[pos].counts[3] = 0;
-					assembly[pos].counts[4] = 0;
-					assembly[pos].counts[5] = myBias < USHRT_MAX ? myBias : USHRT_MAX;
-					assembly[pos].counts[aligned->q[i]] = 1;
+					counts = assembly[pos].counts;
+					counts[0] = 0;
+					counts[1] = 0;
+					counts[2] = 0;
+					counts[3] = 0;
+					counts[4] = 0;
+					counts[5] = myBias;
+					counts[aligned->q[i]] = 1;
 					
 					++i;
 				}

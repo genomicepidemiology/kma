@@ -361,8 +361,8 @@ int fsastat(unsigned char *seq, int len, const int minlen, const int maxlen, int
 	}
 	
 	/* set return values */
-	*START = 0;
-	*END = 0;
+	*START = start;
+	*END = end;
 	
 	return len - ns;
 }

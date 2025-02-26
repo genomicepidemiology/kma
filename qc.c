@@ -103,6 +103,67 @@ void update_QCstat(QCstat *src, int len, int gc, int ns, double sp) {
 	src->ldist[len >> src->qresolution]++;
 }
 
+/* adapter trim */
+/*
+SE, both ends (unless sr)
+PE, 3' and only if overlapping.
+
+
+Build directed de bruijn graph from the end of the sequence where the 
+adaptors are expected, from the reads in the first buffer.
+Trim the ends of the graph for low frequency k-mers, to get rid of non-adaptor 
+sequences. There shouled be a frequency peak somewhere in the "middle", as 
+the start of the adaptors are more frequent. I.e. do not trim nodes that are 
+not pointed to.
+	a. If known adaptors are given, mark terminating nodes and skip low-freq trimming.
+
+Check for adaptors by searching from the end and towards the center of the read.
+	a. Mismatches are handles by substituting the next nuc by the graph nuc.
+	b. Insertion in seq, omit next nuc in k-mer
+	c. Deletion in seq, add nuc from next in graph
+
+Errors in fist n-k seeds can be handled as in BLAST.
+
+For this we need:
+	k: k-mer size.
+	len: len of area in ends to build graph over.
+	size: buffer size.
+	edit: max edit dist.
+	freq: low frequency threshold, to avoid removing already remoived adaptors.
+	(fsa): known adaptor sequences.
+	(sensitive): Add BLAST error correction.
+	(sensitive): Divide k-mers in two, and space k-mers. So that each k-mer has four representations, allowing at least one error.
+
+*/
+
+/* primer trim */
+/*
+SE, both ends have primers
+PE, start have primer, end if they overlap
+
+Direction is known, but is rc at the 3'.
+
+Must be given in advance, where graph can be terminated on ends (as with 
+adaptors).
+Trimming them is the same as for adaptors, but with rc too.
+
+*/
+
+/* merge PE */
+/*
+need:
+	k: k-mer size
+	len: minimum overlap.
+	edit: max edit dist, expect low distance.
+
+Sample k-mers (only unique?) on forward read according to the pigeon hole principle.
+Seed-extend in reverse read, and check with max edit distance.
+
+Adaptor trim if insert is less than merged size.
+
+*/
+
+
 int print_QCstat(QCstat *src, int minQ, int minPhred, int minmaskQ, int minlen, int maxlen, int fiveClip, int threeClip, FILE *dest) {
 	
 	int i, n, end, n50, scale;
