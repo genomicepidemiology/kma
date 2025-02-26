@@ -115,7 +115,7 @@ AlnScore leadTailAln(Aln *aligned, Aln *Frag_align, const long unsigned *tseq, c
 				memcpy(aligned->s, Frag_align->s + bias, NWstat.len);
 				memcpy(aligned->q, Frag_align->q + bias, NWstat.len);
 				aligned->start = q_s + Frag_align->start;
-			}	
+			}
 			Stat.pos -= (NWstat.len - NWstat.tGaps);
 			Stat.score = NWstat.score;
 			Stat.len = NWstat.len;
