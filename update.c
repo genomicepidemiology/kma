@@ -238,7 +238,7 @@ static void helpMessage(int exeStatus) {
 	} else {
 		helpOut = stderr;
 	}
-	fprintf(helpOut, "# KMA_update syncronises kma-indexes to the needed version.\n");
+	fprintf(helpOut, "# KMA_update synchronises kma-indexes to the needed version.\n");
 	fprintf(helpOut, "# Options are:\t\tDesc:\t\t\t\t\tRequirements:\n");
 	fprintf(helpOut, "#\n");
 	fprintf(helpOut, "#\t-t_db\t\tTemplate DB\t\t\t\tREQUIRED\n");

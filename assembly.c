@@ -1320,7 +1320,7 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 	
 	static volatile int Lock = 0;
 	volatile int *excludeMatrix = &Lock;
-	int i, pos, aln_len, start, read_score, myBias, gaps;
+	int i, pos, aln_len, start, read_score, myBias, tmp, gaps;
 	short unsigned *counts;
 	Assembly *assembly;
 	
@@ -1356,19 +1356,32 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 				gaps = pos;
 				pos = pos ? (pos - 1) : (t_len - 1);
 				
-				/* find position of insertion, it it already exists */
+				/* find position of insertion, if it already exists */
 				while(assembly[pos].next != gaps) {
 					pos = assembly[pos].next;
 				}
 				
 				/* get number of bases not supporting the insertion */
 				counts = assembly[pos].counts;
-				myBias = counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5] - 1;
+				myBias = *counts;
+				myBias += *++counts;
+				myBias += *++counts;
+				myBias += *++counts;
+				myBias += *++counts;
+				myBias += *++counts;
 				
 				/* get minimum of bases sorrounding new insertion */
 				counts = assembly[gaps].counts;
-				if((counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5]) < myBias) {
-					myBias = counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5];
+				tmp = *counts;
+				tmp += *++counts;
+				tmp += *++counts;
+				tmp += *++counts;
+				tmp += *++counts;
+				tmp += *++counts;
+				if(tmp < myBias) {
+					myBias = tmp;
+				} else if(i && myBias) {
+					--myBias;
 				}
 				if(USHRT_MAX < myBias) {
 					myBias = USHRT_MAX;

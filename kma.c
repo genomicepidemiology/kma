@@ -164,7 +164,7 @@ static void helpMessage(int exitStatus) {
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-1t1", "One query to one template", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-hmm", "Use a HMM to assign template(s)", "False");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-ck", "Count k-mers over pseudo alignment", "False");
-	fprintf(out, "# %16s\t%-32s\t%s\n", "-localopen", "Penalty for openning a local chain", "6");
+	fprintf(out, "# %16s\t%-32s\t%s\n", "-localopen", "Penalty for opening a local chain", "6");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-mct", "Max overlap between templates", "0.1");
 	fprintf(out, "# %16s\t%-32s\t%s\n", "-lc", "Length corrected template chaining", "False");
 	

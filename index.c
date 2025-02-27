@@ -676,7 +676,7 @@ int index_main(int argc, char *argv[]) {
 	/* decontaminate */
 	if(deconcount != 0) {
 		/* open values */
-		fprintf(stderr, "# Openning values\n");
+		fprintf(stderr, "# Opening values\n");
 		if(!finalDB) {
 			strcat(outputfilename, ".comp.b");
 			out = sfopen(outputfilename, "rb");
