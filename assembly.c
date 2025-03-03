@@ -517,9 +517,7 @@ void * assemble_KMA_threaded(void *arg) {
 										for(j = 0; j < 6; ++j) {
 											myBias += assembly[pos].counts[j];
 										}
-										if(myBias > 0) { /* here */ /* not here */ /* why subtract one */ /* and check prior to insertion, for which -- is appropiate */
-											--myBias;
-										}
+										
 										/* find position of insertion */
 										gaps = pos;
 										if(pos != 0) {
@@ -1339,8 +1337,23 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 	}
 	++aligned_assem->readCountAln;
 	
-	/* diff */
+	/* trim trailing gaps */
+	i = aln_len - 1;
+	while(i && (aligned->t[i] == 5 || aligned->q[i] == 5)) {
+		--i;
+	}
+	aln_len = i + 1;
+	
+	/* trim leading gaps */
 	i = 0;
+	while(i < aln_len && (aligned->t[i] == 5 || aligned->q[i] == 5)) {
+		if(aligned->q[i] == 5) {
+			++start;
+		}
+		++i;
+	}
+	
+	/* diff */
 	pos = start;
 	assembly = matrix->assmb;
 	while(i < aln_len) {
@@ -1378,11 +1391,7 @@ void alnToMat(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnScore al
 				tmp += *++counts;
 				tmp += *++counts;
 				tmp += *++counts;
-				if(tmp < myBias) {
-					myBias = tmp;
-				} else if(i && myBias) {
-					--myBias;
-				}
+				myBias = (tmp < myBias) ? tmp : (myBias - 1);
 				if(USHRT_MAX < myBias) {
 					myBias = USHRT_MAX;
 				}
@@ -1456,15 +1465,33 @@ void alnToMatDense(AssemInfo *matrix, Assem *aligned_assem, Aln *aligned, AlnSco
 	}
 	++aligned_assem->readCountAln;
 	
+	/* trim trailing gaps */
+	i = aln_len - 1;
+	while(i < aln_len && (aligned->t[i] == 5 || aligned->q[i] == 5)) {
+		--i;
+	}
+	aln_len = i + 1;
+	
+	/* trim leading gaps */
+	i = 0;
+	while(i && (aligned->t[i] == 5 || aligned->q[i] == 5)) {
+		if(aligned->q[i] == 5) {
+			++start;
+		}
+		++i;
+	}
+	
 	/* diff */
+	pos = start;
 	assembly = matrix->assmb;
-	for(i = 0, pos = start; i < aln_len; ++i) {
+	while(i < aln_len) {
 		if(aligned->t[i] != 5) {
 			if(!++assembly[pos].counts[aligned->q[i]]) {
 				assembly[pos].counts[aligned->q[i]] = USHRT_MAX;	
 			}
 			pos = assembly[pos].next;
 		}
+		++i;
 	}
 	unlock(excludeMatrix);
 }
