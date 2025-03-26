@@ -91,7 +91,7 @@ int index_main(int argc, char *argv[]) {
 	HashMap *templates;
 	HashMapKMA *finalDB;
 	
-	if (argc == 1) {
+	if(argc == 1) {
 		fprintf(stderr, "# Too few arguments handed.\n");
 		helpMessage(-1);
 	} else if(sizeof(long unsigned) != 8) {

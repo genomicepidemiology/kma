@@ -199,8 +199,6 @@ void hashMapKMA_munmap(HashMapKMA *dest) {
 			size += 2 * sizeof(unsigned);
 		}
 		
-		fprintf(stderr, "%lu\n", size);
-		
 		if(data && dest->shmFlag & 1 && munmap(data, size) < 0) {
 			ERROR();
 		}

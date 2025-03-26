@@ -22,6 +22,7 @@
 #include "dist.h"
 #include "kma.h"
 #include "index.h"
+#include "merge.h"
 #include "shm.h"
 #include "seq2fasta.h"
 #include "trim.h"
@@ -37,6 +38,7 @@ static int helpmessage(FILE *out) {
 	fprintf(out, "# %16s\t%-32s\n", "seq2fasta", "Conversion of database to fasta");
 	fprintf(out, "# %16s\t%-32s\n", "dist", "Calculate distance measures between templates");
 	fprintf(out, "# %16s\t%-32s\n", "db", "Make statistics on KMA db");
+	//fprintf(out, "# %16s\t%-32s\n", "merge", "Merge two indexed kma databases");
 	fprintf(out, "# %16s\t%-32s\n", "update", "Update database to current version");
 	fprintf(out, "# %16s\t%-32s\n", "trim", "trim sequences");
 	fprintf(out, "# %16s\t%-32s\n", "-c", "Citation");
@@ -60,6 +62,8 @@ int main(int argc, char *argv[]) {
 			status = seq2fasta_main(argc, argv);
 		} else if(strcmp(*argv, "dist") == 0) {
 			status = dist_main(argc, argv);
+		} else if(strcmp(*argv, "merge") == 0) {
+			status = merge_main(argc, argv);
 		} else if(strcmp(*argv, "update") == 0) {
 			status = update_main(argc, argv);
 		} else if(strcmp(*argv, "db") == 0) {

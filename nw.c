@@ -95,8 +95,8 @@ AlnScore NW(const long unsigned *template, const unsigned char *queryOrg, int k,
 		matrices->D[1] = matrices->D[0] + matrices->NW_q;
 		matrices->P[1] = matrices->P[0] + matrices->NW_q;
 	}
-	if(matrices->NW_s <= ((q_len + 1) * (t_len + 1))) {
-		matrices->NW_s = ((q_len + 2) * (t_len + 2));
+	if(matrices->NW_s <= ((long unsigned)(q_len + 1) * (long unsigned)(t_len + 1))) {
+		matrices->NW_s = ((long unsigned)(q_len + 2) * (long unsigned)(t_len + 2));
 		free(matrices->E);
 		matrices->E = smalloc(matrices->NW_s);
 	}
@@ -386,8 +386,8 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 		matrices->D[1] = matrices->D[0] + matrices->NW_q;
 		matrices->P[1] = matrices->P[0] + matrices->NW_q;
 	}
-	if(matrices->NW_s <= ((band + 2) * (t_len + 1))) {
-		matrices->NW_s = ((band + 3) * (t_len + 2));
+	if(matrices->NW_s <= ((long unsigned)(band + 2) * (long unsigned)(t_len + 1))) {
+		matrices->NW_s = ((long unsigned)(band + 3) * (long unsigned)(t_len + 2));
 		free(matrices->E);
 		matrices->E = smalloc(matrices->NW_s);
 	}
@@ -401,9 +401,8 @@ AlnScore NW_band(const long unsigned *template, const unsigned char *queryOrg, i
 	E = matrices->E;
 	thisScore = (t_len + q_len) * (MM + U + W1);
 	Stat.score = thisScore;
-	E_ptr = E + (t_len * (bq_len + 1));
+	E_ptr = E + ((long unsigned)(t_len) * (long unsigned)(bq_len + 1));
 	c_pos = (t_len + q_len) >> 1;
-	
 	sn = q_len - 1 - (c_pos - halfBand);
 	if(k != 2) {
 		for(n = sn - 1; n >= 0; --n) {

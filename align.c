@@ -480,7 +480,7 @@ AlnScore KMA(const HashMapCCI *template_index, const unsigned char *qseq, int q_
 					NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
 				} else {
 					NWstat = NW_band(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, band, matrices, t_len);
-					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices);
+					//NWstat = NW(template_index->seq, qseq, 0, t_s, t_e, q_s, q_e, Frag_align, matrices, t_len);
 				}
 				
 				memcpy(aligned->t + Stat.len, Frag_align->t, NWstat.len);

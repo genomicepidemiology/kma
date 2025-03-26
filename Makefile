@@ -1,6 +1,6 @@
 CFLAGS ?= -Wall -O3
 CFLAGS += -std=c99
-LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o conclave.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o mt1.o nw.o pherror.o printconsensus.o qc.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o trim.o tmp.o tsv.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
+LIBS = align.o alnfrags.o ankers.o assembly.o chain.o compdna.o compkmers.o compress.o conclave.o db.o decon.o dist.o ef.o filebuff.o frags.o hashmap.o hashmapcci.o hashmapkma.o hashmapkmers.o hashtable.o index.o kma.o kmapipe.o kmeranker.o kmers.o kmmap.o loadupdate.o makeindex.o matrix.o merge.o middlelayer.o mt1.o nw.o pherror.o printconsensus.o qc.o qseqs.o qualcheck.o runinput.o runkma.o sam.o savekmers.o seq2fasta.o seqmenttree.o seqparse.o shm.o sparse.o spltdb.o stdnuc.o stdstat.o trim.o tmp.o tsv.o update.o updateindex.o updatescores.o valueshash.o vcf.o xml.o
 PROGS = kma kma_index kma_shm kma_update
 
 .c .o:
@@ -55,6 +55,8 @@ kmmap.o: kmmap.h hashmapkma.h
 loadupdate.o: loadupdate.h pherror.h hashmap.h hashmapkma.h updateindex.h
 makeindex.o: makeindex.h compdna.h filebuff.h hashmap.h pherror.h qseqs.h seqparse.h updateindex.h
 matrix.o: matrix.h pherror.h
+merge.o: merge.h hashmapkma.h kmmap.h middlelayer.h pherror.h stdstat.h tmp.h
+middlelayer.o: middlelayer.h hashmapkma.h pherror.h
 mt1.o: mt1.h assembly.h chain.h filebuff.h hashmapcci.h kmapipe.h nw.h penalties.h pherror.h printconsensus.h qseqs.h runkma.h stdstat.h tsv.h vcf.h
 nw.o: nw.h pherror.h stdnuc.h penalties.h
 pherror.o: pherror.h
