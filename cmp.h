@@ -1,7 +1,7 @@
-/* Philip T.L.C. Clausen Jan 2017 plan@dtu.dk */
+/* Philip T.L.C. Clausen Mar 2025 plan@dtu.dk */
 
 /*
- * Copyright (c) 2017, Philip Clausen, Technical University of Denmark
+ * Copyright (c) 2025, Philip Clausen, Technical University of Denmark
  * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,4 +17,7 @@
  * limitations under the License.
 */
 
-#define KMA_VERSION "1.5.0"
+#include "hashmapkma.h"
+
+int hashMapKMA_cmp(HashMapKMA *t1, HashMapKMA *t2);
+int cmp_main(int argc, char *argv[]);

@@ -43,6 +43,6 @@ MiddleLayer * MiddleLayer_resize(MiddleLayer *dest);
 MiddleLayer * AlternativeLayer_resize(MiddleLayer *dest);
 MiddleLayer * MiddleLayer_readjust(MiddleLayer *dest);
 MiddleLayer * AlternativeLayer_readjust(MiddleLayer *dest);
-long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src);
+long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src, const long unsigned offset);
 long unsigned MiddleLayer_search(MiddleLayer *src, long unsigned v_index);
 long unsigned AlternativeLayer_add(MiddleLayer *src, long unsigned v_index, long unsigned v_index1, long unsigned v_index2);

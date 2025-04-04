@@ -122,8 +122,9 @@ MiddleLayer * MiddleLayer_readjust(MiddleLayer *dest) {
 	
 	/* reallocate layer */
 	layer = realloc(dest->layer, (dest->n << 1) * sizeof(long unsigned));
-	if(!layer) {
-		ERROR();
+	if(layer) {
+		dest->size = dest->n;
+		dest->layer = layer;
 	}
 	
 	return dest;
@@ -139,14 +140,15 @@ MiddleLayer * AlternativeLayer_readjust(MiddleLayer *dest) {
 	
 	/* reallocate layer */
 	layer = realloc(dest->layer, (dest->n + (dest->n << 1)) * sizeof(long unsigned));
-	if(!layer) {
-		ERROR();
+	if(layer) {
+		dest->size = dest->n;
+		dest->layer = layer;
 	}
 	
 	return dest;
 }
 
-long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src) {
+long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src, const long unsigned offset) {
 	
 	unsigned *values;
 	short unsigned *values_s;
@@ -154,7 +156,7 @@ long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src) {
 	
 	n = dest->n;
 	size = dest->size;
-	layer = dest->layer + n;
+	layer = dest->layer + (n << 1);
 	if(src->DB_size < USHRT_MAX) {
 		values = 0;
 		values_s = src->values_s;
@@ -162,14 +164,14 @@ long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src) {
 		values = src->values;
 		values_s = 0;
 	}
-	index = n ? *(layer - 1) : 0;
-	vindex = src->v_index;
+	index = offset;
+	vindex = index + src->v_index;
 	while(index < vindex) {
 		/* resize */
 		if(n == size) {
 			MiddleLayer_resize(dest);
 			size = dest->size;
-			layer = dest->layer + n;
+			layer = dest->layer + (n << 1);
 		}
 		
 		/* update layer */
@@ -179,10 +181,10 @@ long unsigned MiddleLayer_populate(MiddleLayer *dest, HashMapKMA *src) {
 		
 		/* go to next signature */
 		if(values) {
-			index += *values;
+			index += (*values + 1);
 			values += (*values + 1);
 		} else {
-			index += *values_s;
+			index += (*values_s + 1);
 			values_s += (*values_s + 1);
 		}
 	}
@@ -221,15 +223,15 @@ long unsigned AlternativeLayer_add(MiddleLayer *src, long unsigned v_index, long
 	long unsigned index, *layer;
 	
 	/* check if combination is unique */
-	if((index = v_index)) {
-		while(index) {
+	if((index = v_index) != src->n) {
+		do {
 			layer = src->layer + (index + (index << 1)); /* remember layer contains three elements per index */
 			if(layer[0] == v_index1 && layer[1] == v_index2) {
 				return index;
 			} else {
 				index = layer[2];
 			}
-		}
+		} while(index);
 		
 		/* add index to new combination */
 		layer[2] = src->n;

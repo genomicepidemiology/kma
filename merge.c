@@ -39,46 +39,66 @@
 long unsigned bucket_insertionsort(unsigned *key_index, unsigned *value_index, long unsigned *value_index_l, long unsigned mask_new, long unsigned mask_org, unsigned flag) {
 	
 	unsigned *start, *end;
-	long unsigned n, min, ks, ke, pos, index;
+	long unsigned n, min, mink, kmer, ks, ke, pos, index;
 	
 	/* find end of bucket */
 	n = 0;
+	pos = 0;
 	start = key_index;
 	end = start;
-	ks = *start;
+	mink = *start;
+	ks = mink;
 	if(flag) {
 		murmur(ks, ks);
 	}
+	min = ks & mask_new;
 	ks &= mask_org;
 	ke = ks;
 	while(ks == ke) {
-		ke = *++end;
+		kmer = *++end;
+		ke = kmer;
 		if(flag) {
 			murmur(ke, ke);
 		}
+		index = ke & mask_new;
 		ke &= mask_org;
+		if((ks != ke) || (min <= index && (min < index || mink < kmer))) { /* check if sorted */
+			if(ks == ke) {
+				min = index;
+				mink = kmer;
+			}
+			++pos;
+		}
 		++n;
 	}
-	--end;
+	
+	/* already sorted */
+	if(pos == n) {
+		return n;
+	}
 	
 	/* run insertion sort */
-	while(start != end) {
+	while(start < end) {
 		/* find min */
-		ks = *start;
+		kmer = *start;
+		ks = kmer;
 		if(flag) {
 			murmur(ks, ks);
 		}
 		min = ks & mask_new;
+		mink = kmer;
 		pos = 0;
 		index = 1;
-		while(++start <= end) {
-			ks = *start;
+		while(++start < end) {
+			kmer = *start;
+			ks = kmer;
 			if(flag) {
 				murmur(ks, ks);
 			}
 			ks &= mask_new;
-			if(ks < min) {
+			if(ks <= min && (ks < min || kmer < mink)) { /* secondary sort on kmer */
 				min = ks;
+				mink = kmer;
 				pos = index;
 			}
 			++index;
@@ -107,46 +127,66 @@ long unsigned bucket_insertionsort(unsigned *key_index, unsigned *value_index, l
 
 long unsigned bucket_insertionsort_l(long unsigned *key_index, unsigned *value_index, long unsigned *value_index_l, long unsigned mask_new, long unsigned mask_org, unsigned flag) {
 	
-	long unsigned n, min, ks, ke, pos, index, *start, *end;
+	long unsigned n, min, mink, kmer, ks, ke, pos, index, *start, *end;
 	
 	/* find end of bucket */
 	n = 0;
+	pos = 0;
 	start = key_index;
 	end = start;
-	ks = *start;
+	mink = *start;
+	ks = mink;
 	if(flag) {
 		murmur(ks, ks);
 	}
+	min = ks & mask_new;
 	ks &= mask_org;
 	ke = ks;
 	while(ks == ke) {
-		ke = *++end;
+		kmer = *++end;
+		ke = kmer;
 		if(flag) {
 			murmur(ke, ke);
 		}
+		index = ke & mask_new;
 		ke &= mask_org;
+		if((ks != ke) || (min <= index && (min < index || mink < kmer))) { /* check if sorted */
+			if(ks == ke) {
+				min = index;
+				mink = kmer;
+			}
+			++pos;
+		}
 		++n;
 	}
-	--end;
+	
+	/* already sorted */
+	if(pos == n) {
+		return n;
+	}
 	
 	/* run insertion sort */
-	while(start != end) {
+	while(start < end) {
 		/* find min */
-		ks = *start;
+		kmer = *start;
+		ks = kmer;
 		if(flag) {
 			murmur(ks, ks);
 		}
 		min = ks & mask_new;
+		mink = kmer;
 		pos = 0;
 		index = 1;
-		while(++start <= end) {
-			ks = *start;
+		while(++start < end) {
+			kmer = *start;
+			ks = kmer;
 			if(flag) {
 				murmur(ks, ks);
 			}
 			ks &= mask_new;
-			if(ks < min) {
+			if(ks <= min && (ks < min || kmer < mink)) { /* secondary sort on kmer */
 				min = ks;
+				mink = kmer;
 				pos = index;
 			}
 			++index;
@@ -180,7 +220,7 @@ void hashMapKMA_sortbuckets(HashMapKMA *dest, HashMapKMA *src) {
 	long unsigned *exist_l, *key_index_l, *value_index_l;
 	
 	/* load value_indexes */
-	if(src->v_index <= UINT_MAX) {
+	if(src->v_index < UINT_MAX) {
 		memcpy(dest->value_index, src->value_index, src->n * sizeof(unsigned));
 		value_index = dest->value_index;
 		value_index_l = 0;
@@ -201,23 +241,21 @@ void hashMapKMA_sortbuckets(HashMapKMA *dest, HashMapKMA *src) {
 	flag = dest->flag;
 	mask = dest->size;
 	mask_src = src->size;
-	if(mask != mask_src) {
-		size = src->n + 1;
-		while(size) {
-			if(key_index) {
-				n = bucket_insertionsort(key_index, value_index, value_index_l, mask, mask_src, flag);
-				key_index += n;
-			} else {
-				n = bucket_insertionsort_l(key_index_l, value_index, value_index_l, mask, mask_src, flag);
-				key_index_l += n;
-			}
-			if(value_index) {
-				value_index += n;
-			} else {
-				value_index_l += n;
-			}
-			size -= n;
+	size = src->n + 1;
+	while(size) {
+		if(key_index) {
+			n = bucket_insertionsort(key_index, value_index, value_index_l, mask, mask_src, flag);
+			key_index += n;
+		} else {
+			n = bucket_insertionsort_l(key_index_l, value_index, value_index_l, mask, mask_src, flag);
+			key_index_l += n;
 		}
+		if(value_index) {
+			value_index += n;
+		} else {
+			value_index_l += n;
+		}
+		size -= n;
 	}
 	
 	/* reset exist */
@@ -296,7 +334,7 @@ FILE * hashMapKMA_dumpbuckets(HashMapKMA *src) {
 		key_index = 0;
 		key_index_l = src->key_index_l;
 	}
-	if(src->v_index <= UINT_MAX) {
+	if(src->v_index < UINT_MAX) {
 		value_index = src->value_index;
 		value_index_l = 0;
 	} else {
@@ -340,9 +378,10 @@ FILE * hashMapKMA_dumpbuckets(HashMapKMA *src) {
 
 long unsigned getV_index(long unsigned *exist, long unsigned size, long unsigned null_index, long unsigned v_indexes, MiddleLayer *middle, MiddleLayer *alternative) {
 	
-	long unsigned index, v_index, *layer;
+	long unsigned n, index, v_index, *layer, *altlayer;
 	
 	/* get v_index */
+	n = 0;
 	v_index = 0;
 	--exist;
 	++size;
@@ -352,27 +391,38 @@ long unsigned getV_index(long unsigned *exist, long unsigned size, long unsigned
 			if(index < middle->n) {
 				layer = middle->layer + (index << 1);
 				if(layer[1] != null_index) {
-					layer[1] = null_index;
+					/* get signature */
 					if(index != (middle->n - 1)) {
-						v_index += *layer - layer[2];
+						v_index += layer[2] - *layer;
 					} else {
 						v_index += v_indexes - *layer;
 					}
+					/* mark as visited */
+					layer[1] = null_index;
 				}
 			} else {
-				layer = alternative->layer + ((index - middle->n) << 1);
-				if(layer[2] != null_index) {
-					layer[2] = null_index;
-					v_index += middle->layer[(*layer + 1) << 1] - middle->layer[*layer << 1] - 1;
-					index = layer[1];
-					layer = middle->layer + (index << 1);
-					if(layer[1] != (middle->n - 1)) {
-						v_index += *layer - layer[2];
+				index -= middle->n;
+				altlayer = alternative->layer + ((index << 1) + index);
+				if(altlayer[2] != null_index) {
+					/* get first signature */
+					layer = middle->layer + (*altlayer << 1);
+					v_index += layer[2] - *layer - 1;
+					*altlayer = *layer;
+					
+					/* get second signature */
+					layer = middle->layer + (altlayer[1] << 1);
+					if(altlayer[1] != (middle->n - 1)) {
+						v_index += layer[2] - *layer;
 					} else {
 						v_index += v_indexes - *layer;
 					}
+					altlayer[1] = *layer;
+					
+					/* mark as visited */
+					altlayer[2] = null_index;
 				}
 			}
+			++n;
 		}
 	}
 	
@@ -382,17 +432,19 @@ long unsigned getV_index(long unsigned *exist, long unsigned size, long unsigned
 unsigned * adjustV_index(long unsigned *exist_l, long unsigned size, long unsigned v_index) {
 	
 	unsigned *exist;
+	long unsigned n, *eptr;
 	
-	exist = (unsigned *)(exist_l--);
-	if(v_index < UINT_MAX) {
+	exist = (unsigned *)(exist_l);
+	if(v_index <= UINT_MAX) {
 		--exist;
-		++size;
-		while(--size) {
-			*++exist = *++exist_l;
+		eptr = exist_l - 1;
+		n = size + 1;
+		while(--n) {
+			*++exist = *++eptr;
 		}
 		exist = realloc(exist_l, size * sizeof(unsigned));
 		if(!exist) {
-			ERROR();
+			exist = (unsigned *)(exist_l);
 		} else {
 			exist_l = (long unsigned *)(exist);
 		}
@@ -441,13 +493,10 @@ long unsigned add_pairs(long unsigned *exist, long unsigned size, long unsigned 
 			exist[index] = MiddleLayer_search(middle, v_indexes + v_index);
 			++n;
 		} else { /* get combo of signatures */ 
+			/* search (new) combo */
 			layer = middle->layer + (exist[index] << 1);
-			if(layer[1]) { /* search combo */
-				exist[index] = middle->n + AlternativeLayer_add(alternative, layer[1] - middle->n, *layer, v_indexes + v_index);
-			} else { /* new combo */
-				layer[1] = middle->n + AlternativeLayer_add(alternative, 0, *layer, v_indexes + v_index);
-				exist[index] = layer[1];
-			}
+			layer[1] = layer[1] ? layer[1] : (middle->n + alternative->n);
+			exist[index] = middle->n + AlternativeLayer_add(alternative, layer[1] - middle->n, exist[index], MiddleLayer_search(middle, v_indexes + v_index));
 		}
 	}
 	
@@ -457,7 +506,7 @@ long unsigned add_pairs(long unsigned *exist, long unsigned size, long unsigned 
 void hashMapKMA_merge(HashMapKMA *dest, MiddleLayer *middle, MiddleLayer *alternative, FILE *tmp_1, FILE *tmp_2, long unsigned v_indexes) {
 	
 	unsigned flag, *exist, *key_index;
-	long unsigned n, size, v_index, null_index, index, value, check;
+	long unsigned n, size, v_index, null_index, index, value;
 	long unsigned kmer, kmer1, kmer2, buff1[2], buff2[2];
 	long unsigned *layer, *exist_l, *key_index_l, *value_index_l;
 	
@@ -483,96 +532,195 @@ void hashMapKMA_merge(HashMapKMA *dest, MiddleLayer *middle, MiddleLayer *altern
 	}
 	value_index_l = dest->value_index_l - 1;
 	
-	check = fread(buff1, sizeof(long unsigned), 2, tmp_1);
-	check += fread(buff2, sizeof(long unsigned), 2, tmp_2);
-	kmer1 = buff1[0];
-	kmer2 = buff2[0];
-	if(flag) {
-		murmur(kmer1, buff1[0]);
-		murmur(kmer2, buff2[0]);
+	index = 0;
+	if(fread(buff1, sizeof(long unsigned), 2, tmp_1)) {
+		if(flag) {
+			murmur(kmer1, buff1[0]);
+			kmer1 &= size;
+		} else {
+			kmer1 = buff1[0] & size;
+		}
+	} else {
+		/* no more k-mers */
+		buff1[0] = index - 1;
+		kmer1 = index - 1;
 	}
-	kmer1 &= size;
-	kmer2 &= size;
+	if(fread(buff2, sizeof(long unsigned), 2, tmp_2)) {
+		if(flag) {
+			murmur(kmer2, buff2[0]);
+			kmer2 &= size;
+		} else {
+			kmer2 = buff2[0] & size;
+		}
+	} else {
+		/* no more k-mers */
+		buff2[0] = index - 1;
+		kmer2 = index - 1;
+	}
+	kmer = 0;
 	
 	/* iterate pairs */
 	index = 0;
-	while(index != size) {
+	while(index <= size) {
 		if(index == kmer1 || index == kmer2) { /* occupied */
-			if(kmer1 == kmer2) { /* new combo */
-				/* get position in middle layer */
-				value = MiddleLayer_search(middle, buff1[1]);
-				layer = middle->layer + (value << 1);
-				/* get combo */
-				kmer = buff1[0];
-				value = middle->n + AlternativeLayer_add(alternative, (layer[1] ? (layer[1] - middle->n) : 0), buff1[1], v_index + buff2[1]);
-				
-				/* load next pairs */
-				check += fread(buff1, sizeof(long unsigned), 2, tmp_1);
-				check += fread(buff2, sizeof(long unsigned), 2, tmp_2);
-				if(flag) {
-					murmur(kmer1, buff1[0]);
-					murmur(kmer2, buff2[0]);
-					kmer1 &= size;
-					kmer2 &= size;
-				} else {
-					kmer1 = buff1[0] & size;
-					kmer2 = buff2[0] & size;
-				}
-			} else if(kmer1 == index) { /* add k-mer from t1 */
-				kmer = buff1[0];
-				value = MiddleLayer_search(middle, buff1[1]);
-				/* load next pair */
-				check += fread(buff1, sizeof(long unsigned), 2, tmp_1);
-				if(flag) {
-					murmur(kmer1, buff1[0]);
-					kmer1 &= size;
-				} else {
-					kmer1 = buff1[0] & size;
-				}
-			} else { /* add k-mer from t2 */
-				kmer = buff2[0];
-				value = MiddleLayer_search(middle, buff2[1]);
-				/* load next pair */
-				check += fread(buff2, sizeof(long unsigned), 2, tmp_2);
-				if(flag) {
-					murmur(kmer2, buff2[0]);
-					kmer2 &= size;
-				} else {
-					kmer2 = buff2[0] & size;
-				}
-			}
 			/* update hashmap */
-			if(key_index) {
-				*++key_index = kmer;
-			} else {
-				*++key_index_l = kmer;
-			}
-			*++value_index_l = value;
 			if(exist) {
-				*++exist = n++;
+				*++exist = n;
 			} else {
-				*++exist_l = n++;
+				*++exist_l = n;
+			}
+			
+			/* add key-value pairs of bucket */
+			while(index == kmer1 || index == kmer2) {
+				if(buff1[0] == buff2[0]) { /* new combo */
+					/* get position in middle layer */
+					value = MiddleLayer_search(middle, buff1[1]);
+					layer = middle->layer + (value << 1);
+					/* get combo */
+					kmer = buff1[0];
+					layer[1] = layer[1] ? layer[1] : (middle->n + alternative->n);
+					value = middle->n + AlternativeLayer_add(alternative, layer[1] - middle->n, value, MiddleLayer_search(middle, v_index + buff2[1]));
+					
+					/* load next pairs */
+					if(fread(buff1, sizeof(long unsigned), 2, tmp_1)) {
+						if(flag) {
+							murmur(kmer1, buff1[0]);
+							kmer1 &= size;
+						} else {
+							kmer1 = buff1[0] & size;
+						}
+					} else {
+						/* no more k-mers */
+						buff1[0] = kmer1 - 1;
+						kmer1 = index - 1;
+					}
+					if(fread(buff2, sizeof(long unsigned), 2, tmp_2)) {
+						if(flag) {
+							murmur(kmer2, buff2[0]);
+							kmer2 &= size;
+						} else {
+							kmer2 = buff2[0] & size;
+						}
+					} else {
+						/* no more k-mers */
+						buff2[0] = kmer2 - 1;
+						kmer2 = index - 1;
+					}
+				} else if(kmer1 == kmer2) { /* sync k-mers */
+					if(buff1[0] < buff2[0]) { /* add k-mer from t1 */
+						kmer = buff1[0];
+						value = MiddleLayer_search(middle, buff1[1]);
+						/* load next pair */
+						if(fread(buff1, sizeof(long unsigned), 2, tmp_1)) {
+							if(flag) {
+								murmur(kmer1, buff1[0]);
+								kmer1 &= size;
+							} else {
+								kmer1 = buff1[0] & size;
+							}
+						} else {
+							/* no more k-mers */
+							buff1[0] = kmer1 - 1;
+							kmer1 = index - 1;
+						}
+					} else { /* add k-mer from t2 */
+						kmer = buff2[0];
+						value = MiddleLayer_search(middle, v_index + buff2[1]);
+						/* load next pair */
+						if(fread(buff2, sizeof(long unsigned), 2, tmp_2)) {
+							if(flag) {
+								murmur(kmer2, buff2[0]);
+								kmer2 &= size;
+							} else {
+								kmer2 = buff2[0] & size;
+							}
+						} else {
+							/* no more k-mers */
+							buff2[0] = kmer2 - 1;
+							kmer2 = index - 1;
+						}
+					}
+				} else if(kmer1 == index) { /* add k-mer from t1 */
+					kmer = buff1[0];
+					value = MiddleLayer_search(middle, buff1[1]);
+					/* load next pair */
+					if(fread(buff1, sizeof(long unsigned), 2, tmp_1)) {
+						if(flag) {
+							murmur(kmer1, buff1[0]);
+							kmer1 &= size;
+						} else {
+							kmer1 = buff1[0] & size;
+						}
+					} else {
+						/* no more k-mers */
+						buff1[0] = kmer1 - 1;
+						kmer1 = index - 1;
+					}
+				} else { /* add k-mer from t2 */
+					kmer = buff2[0];
+					value = MiddleLayer_search(middle, v_index + buff2[1]);
+					/* load next pair */
+					if(fread(buff2, sizeof(long unsigned), 2, tmp_2)) {
+						if(flag) {
+							murmur(kmer2, buff2[0]);
+							kmer2 &= size;
+						} else {
+							kmer2 = buff2[0] & size;
+						}
+					} else {
+						/* no more k-mers */
+						buff2[0] = kmer2 - 1;
+						kmer2 = index - 1;
+					}
+				}
+				
+				/* update key-value indexes */
+				if(key_index) {
+					*++key_index = kmer;
+				} else {
+					*++key_index_l = kmer;
+				}
+				*++value_index_l = value;
+				++n;
 			}
 		} else {
 			if(exist) {
-				*++exist = null_index;
+				*++exist = dest->n;
 			} else {
-				*++exist_l = null_index;
+				*++exist_l = dest->n;
 			}
 		}
 		++index;
 	}
+	
 	/* terminate pairs */
-	if(key_index) {
-		*++key_index = 0;
+	if(flag) {
+		murmur(kmer1, kmer);
+		kmer1 &= size;
+		++kmer;
+		murmur(kmer2, kmer);
+		kmer2 &= size;
+		while(kmer1 == kmer2) {
+			++kmer;
+			murmur(kmer2, kmer);
+			kmer2 &= size;
+		}
 	} else {
-		*++key_index_l = 0;
+		kmer1 = kmer & size;
+		kmer2 = ++kmer & size;
+		while(kmer1 == kmer2) {
+			kmer2 = ++kmer & size;
+		}
 	}
-	dest->n = n;
+	if(key_index) {
+		*++key_index = kmer;
+	} else {
+		*++key_index_l = kmer;
+	}
 	
 	/* test if everything was read */
-	if(check != (n * sizeof(long unsigned))) {
-		fprintf(stderr, "Did not get the expected pairs.\n");
+	if(dest->n != n) {
+		fprintf(stderr, "Did not get the expected pairs., %lu, %lu\n", dest->n, n);
 		exit(1);
 	}
 	
@@ -580,7 +728,8 @@ void hashMapKMA_merge(HashMapKMA *dest, MiddleLayer *middle, MiddleLayer *altern
 	AlternativeLayer_readjust(alternative);
 	
 	/* get v_index */
-	v_index = getV_index(value_index_l, n, n + 1, v_indexes, middle, alternative);
+	fprintf(stderr, "# Getting new v_index.\n");
+	v_index = getV_index(dest->value_index_l, n, null_index, v_indexes, middle, alternative);
 	dest->v_index = v_index;
 	
 	/* adjust size of value_index */
@@ -592,6 +741,7 @@ unsigned loadValues1(unsigned *values, short unsigned *values_s, unsigned *value
 	
 	unsigned n, size;
 	
+	/* get signature */
 	if(values1) {
 		values1 += index;
 		n = *values1;
@@ -599,6 +749,8 @@ unsigned loadValues1(unsigned *values, short unsigned *values_s, unsigned *value
 		values1_s += index;
 		n = *values1_s;
 	}
+	
+	/* cp signature */
 	size = n + 1;
 	if(values1) {
 		*values = n;
@@ -624,6 +776,7 @@ unsigned loadValues2(unsigned *values, short unsigned *values_s, unsigned *value
 	
 	unsigned n, size;
 	
+	/* get signature */
 	if(values2) {
 		values2 += index;
 		n = *values2;
@@ -631,6 +784,8 @@ unsigned loadValues2(unsigned *values, short unsigned *values_s, unsigned *value
 		values2_s += index;
 		n = *values2_s;
 	}
+	
+	/* cp signature */
 	size = n + 1;
 	if(values2) {
 		*values = n;
@@ -657,7 +812,7 @@ unsigned loadValues12(unsigned *values, short unsigned *values_s, unsigned *valu
 	unsigned n, size, *values_ptr;
 	short unsigned *values_sptr;
 	
-	/* get values from t1 */
+	/* get signature from t1 */
 	if(values1) {
 		values1 += index1;
 		n = *values1;
@@ -666,6 +821,7 @@ unsigned loadValues12(unsigned *values, short unsigned *values_s, unsigned *valu
 		n = *values1_s;
 	}
 	
+	/* cp signature from t1 */
 	size = n + 1;
 	values_ptr = values;
 	values_sptr = values_s;
@@ -686,15 +842,16 @@ unsigned loadValues12(unsigned *values, short unsigned *values_s, unsigned *valu
 		}
 	}
 	
-	/* append values from t2 */
+	/* get signature from t2 */
 	if(values2) {
 		values2 += index2;
-		n = *values1;
+		n = *values2;
 	} else {
 		values2_s += index2;
-		n = *values1_s;
+		n = *values2_s;
 	}
 	
+	/* append signature from t2 */
 	size = n + 1;
 	if(values2) {
 		n += *values;
@@ -722,15 +879,17 @@ unsigned loadValues12(unsigned *values, short unsigned *values_s, unsigned *valu
 void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *middle, MiddleLayer *alternative, FILE *out) {
 	
 	unsigned offset, *values, *values1, *values2, *exist;
-	long unsigned size, mn, index, null_index, v_index, v_index1;
+	long unsigned size, n, mn, index, null_index, v_index, v_index1;
 	long unsigned *layer, *exist_l;
 	short unsigned *values_s, *values1_s, *values2_s;
 	
 	/* init */
-	offset = t1->DB_size;
+	offset = t1->DB_size - 1;
+	n = 0;
 	mn = middle->n;
 	v_index1 = t1->v_index;
 	null_index = src->null_index;
+	src->null_index = (src->size != (src->mask + 1)) ? src->n : 1;
 	
 	/* dump sizes */
 	cfwrite(&src->DB_size, sizeof(unsigned), 1, out);
@@ -743,7 +902,6 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 	cfwrite(&src->null_index, sizeof(long unsigned), 1, out);
 	
 	if(src->size != (src->mask + 1)) { /* hashmap */
-		src->size++;
 		size = (src->n <= UINT_MAX) ? sizeof(unsigned) : sizeof(long unsigned);
 		cfwrite(src->exist, size, src->size, out);
 		free(src->exist);
@@ -780,25 +938,26 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 	}
 	
 	/* dump new values */
+	fprintf(stderr, "# Creating new signatures.\n");
 	v_index = 0;
 	if(src->exist) { /* direct */
 		size = src->size + 1;
 		src->null_index = 1;
 		if(src->v_index <= UINT_MAX) {
-			exist = src->exist;
+			exist = src->exist - 1;
 			exist_l = 0;
 		} else {
 			exist = 0;
-			exist_l = src->exist_l;
+			exist_l = src->exist_l - 1;
 		}
 	} else { /* hashmap */
 		size = src->n + 1;
-		if(src->v_index <= UINT_MAX) {
-			exist = src->value_index;
+		if(src->v_index < UINT_MAX) {
+			exist = src->value_index - 1;
 			exist_l = 0;
 		} else {
 			exist = 0;
-			exist_l = src->value_index_l;
+			exist_l = src->value_index_l - 1;
 		}
 	}
 	while(--size) {
@@ -807,17 +966,15 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 			/* get signature */
 			if(index < mn) { /* old signature */
 				layer = middle->layer + (index << 1);
-				if(*layer != null_index) { /* not dumped */
-					/* mark layer as dumped */
-					index = *layer;
-					*layer = null_index;
-					layer[1] = v_index;
+				if(layer[1]) { /* not dumped */
+					/* get index */
+					index = v_index;
 					
 					/* load signature */
-					if(index < v_index1) {
-						v_index += loadValues1(values, values_s, values1, values1_s, index);
+					if(*layer < v_index1) {
+						v_index += loadValues1(values, values_s, values1, values1_s, *layer);
 					} else {
-						v_index += loadValues2(values, values_s, values2, values2_s, index - v_index1, offset);
+						v_index += loadValues2(values, values_s, values2, values2_s, *layer - v_index1, offset);
 					}
 					
 					/* dump signature */
@@ -826,12 +983,22 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 					} else {
 						cfwrite(values_s, sizeof(short unsigned), *values_s + 1, out);
 					}
+					
+					/* mark layer as dumped */
+					*layer = index;
+					layer[1] = 0;
+				} else {
+					/* get index */
+					index = *layer;
 				}
 			} else { /* new signature */
-				layer = alternative->layer + ((index - mn) << 1);
-				if(*layer != null_index) { /* not dumped */
-					/* load signatures */
+				index -= mn;
+				layer = alternative->layer + ((index << 1) + index);
+				if(layer[2]) { /* not dumped */
+					/* get index */
 					index = v_index;
+					
+					/* load signatures */
 					v_index += loadValues12(values, values_s, values1, values1_s, values2, values2_s, *layer, layer[1] - v_index1, offset);
 					
 					/* dump signature */
@@ -842,16 +1009,20 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 					}
 					
 					/* mark layer as dumped */
-					*layer = null_index;
-					layer[1] = index;
+					*layer = index;
+					layer[1] = 0;
+					layer[2] = 0;
+				} else {
+					/* get index */
+					index = *layer;
 				}
 			}
-			index = layer[1];
 			if(exist) {
 				*exist = index;
 			} else {
 				*exist_l = index;
 			}
+			++n;
 		} else { /* not entered if hashmap */
 			if(exist) {
 				*exist = 1;
@@ -859,6 +1030,11 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 				*exist_l = 1;
 			}
 		}
+	}
+	
+	if(v_index != src->v_index) {
+		fprintf(stderr, "New signatures does not match expected v_index\n");
+		
 	}
 	
 	/* clean */
@@ -902,7 +1078,6 @@ void hashMapKMA_dumpmerge(HashMapKMA *src, HashMapKMA *t1, HashMapKMA *t2, Middl
 	}
 	fflush(out);
 	free(src);
-	
 }
 
 HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *middle, MiddleLayer *alternative) {
@@ -927,7 +1102,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 	dest->kmersize = t1->kmersize;
 	dest->prefix_len = t1->prefix_len;
 	dest->prefix = t1->prefix;
-	dest->DB_size = t1->DB_size + t2->DB_size;
+	dest->DB_size = t1->DB_size + t2->DB_size - 1;
 	dest->shmFlag = t1->shmFlag;
 	dest->mlen = t1->mlen;
 	dest->flag = t1->flag;
@@ -947,6 +1122,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 		dest->exist_l = exist_l--;
 		
 		/* populate new exist with t1 */
+		fprintf(stderr, "# Getting middlelayer signatures from first index.\n");
 		if(t1->v_index < UINT_MAX) {
 			exist_t = t1->exist - 1;
 			exist_lt = 0;
@@ -968,8 +1144,9 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 		}
 		
 		/* merge with t2 */
+		fprintf(stderr, "# Merging middlelayer signatures with second index.\n");
 		if(t2->size == (t2->mask + 1)) { /* direct on t2 */
-			if(t2->v_index < UINT_MAX) {
+			if(t2->v_index <= UINT_MAX) {
 				exist_t = t2->exist - 1;
 				exist_lt = 0;
 			} else {
@@ -986,13 +1163,10 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 						*exist_l = MiddleLayer_search(middle, t1->v_index + index);
 						dest->n++;
 					} else { /* get combo of signatures */
+						/* search (new) combo */
 						layer = middle->layer + (*exist_l << 1);
-						if(layer[1]) { /* search combo */
-							*exist_l = middle->n + AlternativeLayer_add(alternative, layer[1] - middle->n, *layer, t1->v_index + index);
-						} else { /* new combo */
-							*exist_l = middle->n + AlternativeLayer_add(alternative, 0, *layer, t1->v_index + index);
-							layer[1] = *exist_l;
-						}
+						layer[1] = layer[1] ? layer[1] : (middle->n + alternative->n);
+						*exist_l = middle->n + AlternativeLayer_add(alternative, layer[1] - middle->n, *exist_l, MiddleLayer_search(middle, t1->v_index + index));
 					}
 				}
 				++exist_l;
@@ -1005,6 +1179,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 		AlternativeLayer_readjust(alternative);
 		
 		/* get v_index */
+		fprintf(stderr, "# Getting new v_index.\n");
 		v_index = getV_index(dest->exist_l, dest->size, null_index, t1->v_index + t2->v_index, middle, alternative);
 		dest->v_index = v_index;
 		
@@ -1013,7 +1188,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 		dest->exist_l = (long unsigned *)(dest->exist_l);
 	} else { /* hashmap on both */
 		/* load exist and k-mers */
-		if(t1->n < UINT_MAX) {
+		if(t1->n <= UINT_MAX) {
 			dest->exist = smalloc((t1->size + 1) * sizeof(unsigned));
 			memcpy(dest->exist, t1->exist, (t1->size + 1) * sizeof(unsigned));
 			exist = dest->exist;
@@ -1041,6 +1216,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 		}
 		
 		/* get new n */
+		fprintf(stderr, "# Identifying unique k-mers.\n");
 		size = t2->n + 1;
 		mask = t2->size;
 		n = dest->n;
@@ -1054,7 +1230,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 			}
 			
 			index = exist ? exist[kpos] : exist_l[kpos];
-			if(index != null_index) {
+			if(index != t1->null_index) {
 				kmer = key_index ? key_index[index] : key_index_l[index];
 				while(key != kmer) {
 					if(flag) {
@@ -1064,7 +1240,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 						/* new k-mer */
 						++n;
 						/* break loop */
-						kmer = kpos;
+						kmer = key;
 					} else {
 						kmer = key_index ? key_index[++index] : key_index_l[++index];
 					}
@@ -1076,6 +1252,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 		}
 		
 		/* adjust dest to new size */
+		fprintf(stderr, "# Adjusting size of new index.\n");
 		dest->size++;
 		if(dest->size <= n && (dest->mask + 1) <= (dest->size << 2)) { /* direct */
 			dest->size = dest->mask + 1;
@@ -1093,7 +1270,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 				free(dest->exist_l);
 				dest->exist_l = 0;
 			}
-			exist_l = smalloc(t1->size * sizeof(long unsigned));
+			exist_l = smalloc(dest->size * sizeof(long unsigned));
 			dest->exist_l = exist_l--;
 			
 			/* init new exist */
@@ -1103,6 +1280,7 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 			}
 			
 			/* populate new exist with t1 */
+			fprintf(stderr, "# Getting middlelayer signatures from first index.\n");
 			if(t1->kmersize <= 16) {
 				exist_t = t1->key_index - 1;
 				exist_lt = 0;
@@ -1111,11 +1289,11 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 				exist_lt = t1->key_index_l - 1;
 			}
 			if(t1->v_index < UINT_MAX) {
-				value_index = t1->value_index;
+				value_index = t1->value_index - 1;
 				value_index_l = 0;
 			} else {
 				value_index = 0;
-				value_index_l = t1->value_index_l;
+				value_index_l = t1->value_index_l - 1;
 			}
 			size = t1->n + 1;
 			exist_l = dest->exist_l;
@@ -1126,12 +1304,14 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 			}
 			
 			/* merge with t2 */
+			fprintf(stderr, "# Merging middlelayer signatures with second index.\n");
 			dest->n += add_pairs(exist_l, t2->n, null_index, t1->v_index, middle, alternative, t2);
 			
 			/* adjust new alternative layer */
 			AlternativeLayer_readjust(alternative);
 			
 			/* get v_index */
+			fprintf(stderr, "# Getting new v_index.\n");
 			v_index = getV_index(dest->exist_l, dest->size, null_index, t1->v_index + t2->v_index, middle, alternative);
 			dest->v_index = v_index;
 			
@@ -1175,28 +1355,31 @@ HashMapKMA * merge_kmersignatures(HashMapKMA *t1, HashMapKMA *t2, MiddleLayer *m
 			}
 			
 			/* sort k-mer buckets from t1 based on dest, and dump on tmp */
+			fprintf(stderr, "# Sorting buckets of first index w.r.t. new index.\n");
+			dest->null_index = t1->null_index;
 			dest->size--;
-			if(dest->size != t1->size) {
-				hashMapKMA_sortbuckets(dest, t1);
-			} else {
-				dest->n = t1->n;
-			}
+			hashMapKMA_sortbuckets(dest, t1);
 			tmp_1 = hashMapKMA_dumpbuckets(dest);
 			
 			/* load k-mer from t2 */
+			fprintf(stderr, "# Sorting buckets of second index w.r.t. new index.\n");
 			if(dest->key_index) {
 				memcpy(dest->key_index, t2->key_index, (t2->n + 1) * sizeof(unsigned));
 			} else {
 				memcpy(dest->key_index_l, t2->key_index_l, (t2->n + 1) * sizeof(long unsigned));
 			}
 			/* sort k-mer buckets from t2 based on dest, and dump on tmp */
+			dest->null_index = t2->null_index;
 			hashMapKMA_sortbuckets(dest, t2);
 			tmp_2 = hashMapKMA_dumpbuckets(dest);
 			
 			/* merge in key- and value_indexes */
+			fprintf(stderr, "# Merging signatures between indexes.\n");
 			dest->n = n;
 			dest->v_index = t1->v_index;
+			dest->null_index = null_index;
 			hashMapKMA_merge(dest, middle, alternative, tmp_1, tmp_2, t1->v_index + t2->v_index);
+			dest->size++;
 			fclose(tmp_1);
 			fclose(tmp_2);
 		}
@@ -1218,7 +1401,6 @@ int merge(char *templatefilename, char *templatefilename1, char *templatefilenam
 	templatefile = sfopen(templatefilename, "wb");
 	templatefile1 = sfopen(templatefilename1, "rb");
 	templatefile2 = sfopen(templatefilename2, "rb");
-	
 	
 	/* check compatability */
 	t1 = smalloc(sizeof(HashMapKMA));
@@ -1251,25 +1433,29 @@ int merge(char *templatefilename, char *templatefilename1, char *templatefilenam
 	}
 	
 	/* create middlelayer with unique ids for each signature */
+	fprintf(stderr, "# Adding middle layer.\n");
 	middle = MiddleLayer_init(1048576);
-	org_split = MiddleLayer_populate(middle, t1);
+	org_split = MiddleLayer_populate(middle, t1, 0);
 	if(org_split != t1->v_index) {
-		fprintf(stderr, "middle t1 does not match v_index1\n");
+		fprintf(stderr, "middle t1 (%lu) does not match v_index1 (%lu)\n", t1->v_index, org_split);
 	}
-	alt_split = MiddleLayer_populate(middle, t2);
+	alt_split = MiddleLayer_populate(middle, t2, t1->v_index);
 	if(alt_split != (t1->v_index + t2->v_index)) {
-		fprintf(stderr, "middle t2 does not match v_index2\n");
+		fprintf(stderr, "middle t2 (%lu) does not match v_index2 (%lu)\n", t1->v_index + t2->v_index, alt_split);
 	}
 	MiddleLayer_readjust(middle); /* free up unused space */
 	alternative = AlternativeLayer_init(1024);
 	
 	/* merge hashmaps */
+	fprintf(stderr, "# Merging signatures.\n");
 	t = merge_kmersignatures(t1, t2, middle, alternative);
 	
 	/* dump and free new hashmap */
+	fprintf(stderr, "# Dumping new index.\n");
 	hashMapKMA_dumpmerge(t, t1, t2, middle, alternative, templatefile);
 	
 	/* clean up */
+	fprintf(stderr, "# Clean up new index.\n");
 	hashMapKMA_munmap(t1);
 	hashMapKMA_munmap(t2);
 	MiddleLayer_free(middle);
@@ -1283,6 +1469,7 @@ int merge(char *templatefilename, char *templatefilename1, char *templatefilenam
 
 int merge_lengths(char *outname, char *inname1, char *inname2) {
 	
+	int check;
 	unsigned DB_size, n1, n2, *lengths;
 	FILE *out, *in1, *in2;
 	size_t size;
@@ -1295,26 +1482,29 @@ int merge_lengths(char *outname, char *inname1, char *inname2) {
 	/* get DB_size */
 	sfread(&n1, sizeof(unsigned), 1, in1);
 	sfread(&n2, sizeof(unsigned), 1, in2);
-	DB_size = n1 + n2;
+	DB_size = n1 + --n2;
 	sfwrite(&DB_size, sizeof(unsigned), 1, out);
 	
 	/* merge lengths */
 	lengths = smalloc(DB_size * sizeof(unsigned));
 	sfread(lengths, sizeof(unsigned), n1, in1);
+	sfseek(in2, sizeof(unsigned), SEEK_CUR); /* skip template zero */
 	sfread(lengths + n1, sizeof(unsigned), n2, in2);
 	sfwrite(lengths, sizeof(unsigned), DB_size, out);
 	
 	/* merge slengths */
 	size = fread(lengths, sizeof(unsigned), n1, in1);
+	check = fseek(in2, sizeof(unsigned), SEEK_CUR); /* skip template zero */
 	size += fread(lengths + n1, sizeof(unsigned), n2, in2);
-	if(size == DB_size) {
+	if(!check && size == DB_size) {
 		sfwrite(lengths, sizeof(unsigned), DB_size, out);
 	}
 	
 	/* merge ulengths */
 	size = fread(lengths, sizeof(unsigned), n1, in1);
+	check = fseek(in2, sizeof(unsigned), SEEK_CUR); /* skip template zero */
 	size += fread(lengths + n1, sizeof(unsigned), n2, in2);
-	if(size == DB_size) {
+	if(!check && size == DB_size) {
 		sfwrite(lengths, sizeof(unsigned), DB_size, out);
 	}
 	
@@ -1439,8 +1629,13 @@ int merge_main(int argc, char *argv[]) {
 		fprintf(stderr, "Insufficient number of agruments parsed.\n");
 		helpMessage(1);
 	}
+	if(strcmp(templatefilename, secondfilename) == 0) {
+		fprintf(stderr, "Indexes to merge cannot be the same.\n");
+		return 1;
+	}
 	
 	/* merge *.comp.b */
+	fprintf(stderr, "# Merging *.comp.b\n");
 	strcpy(outfilename + o_len, ".comp.b");
 	strcpy(templatefilename + t_len, ".comp.b");
 	strcpy(secondfilename + s_len, ".comp.b");
@@ -1455,18 +1650,21 @@ int merge_main(int argc, char *argv[]) {
 	}
 	
 	/* merge *.length.b */
+	fprintf(stderr, "# Merging *.length.b\n");
 	strcpy(outfilename + o_len, ".length.b");
 	strcpy(templatefilename + t_len, ".length.b");
 	strcpy(secondfilename + s_len, ".length.b");
 	merge_lengths(outfilename, templatefilename, secondfilename);
 	
 	/* merge *.seq.b */
+	fprintf(stderr, "# Merging *.seq.b\n");
 	strcpy(outfilename + o_len, ".seq.b");
 	strcpy(templatefilename + t_len, ".seq.b");
 	strcpy(secondfilename + s_len, ".seq.b");
 	cat(outfilename, templatefilename, secondfilename);
 	
 	/* merge *.name */
+	fprintf(stderr, "# Merging *.name\n");
 	strcpy(outfilename + o_len, ".name");
 	strcpy(templatefilename + t_len, ".name");
 	strcpy(secondfilename + s_len, ".name");
