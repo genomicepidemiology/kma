@@ -345,6 +345,7 @@ int kma_main(int argc, char *argv[]) {
 		deConPrintPtr = printPtr;
 		out_json = 0;
 		qcreport = 0;
+		preset = 0;
 		
 		/* PARSE COMMAND LINE OPTIONS */
 		args = 1;
@@ -1618,7 +1619,7 @@ int kma_main(int argc, char *argv[]) {
 		} else if(mem_mode) {
 			status |= runKMA_MEM(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		} else {
-			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, (preset | 16) ? 1.0 : minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
+			status |= runKMA(myTemplatefilename, outputfilename, exeBasic, ConClave, kmersize, minlen, rewards, extendedFeatures, ID_t, Depth_t, mq, scoreT, mrc, (preset & 16) ? 1.0 : minFrac, evalue, support, bcd, ref_fsa, print_matrix, print_all, tsv, vcf, xml, sam, nc, nf, shm, thread_num, maxFrag, verbose);
 		}
 		free(myTemplatefilename);
 		fprintf(stderr, "# Closing files\n");
